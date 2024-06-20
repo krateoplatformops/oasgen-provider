@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .resource }}-{{ .apiVersion }}-controller
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .name }}
+    app.kubernetes.io/instance: {{ .resource }}-{{ .apiVersion }}
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: krateoplatformops
+    app.kubernetes.io/managed-by: krateo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .name }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      name: {{ .name }}
+      namespace: {{ .namespace }}
+      labels:
+        app.kubernetes.io/name: {{ .name }}
+    spec:
+      imagePullSecrets:
+      - name: dockerconfigjson-github-com
+      containers:
+      - name: {{ .resource }}-{{ .apiVersion }}-controller
+        image: ghcr.io/matteogastaldello/composition-dynamic-controller:{{ or .tag "latest" }}
+        imagePullPolicy: IfNotPresent
+        args:
+          - -debug
+          - -group={{ .apiGroup }}
+          - -version={{ .apiVersion }}
+          - -resource={{ .resource }}
+          - -namespace={{ .namespace }}
+          - -client={{ .clientType }}
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsGroup: 2000
+          runAsNonRoot: true
+          runAsUser: 2000
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 2000
+      terminationGracePeriodSeconds: 30

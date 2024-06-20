@@ -1,0 +1,30 @@
+kind: Definition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: definition-environments
+  namespace: default
+spec:
+  deletionPolicy: Orphan 
+  swaggerPath: https://raw.githubusercontent.com/matteogastaldello/fromRepo/main/oas-def/taskAgent.yaml
+  resourceGroup: azure.devops.com
+  resources: 
+    - kind: EnvironmentInstance
+      identifier: id
+      verbsDescription:
+        - action: get
+          method: GET
+          path: /{organization}/{project}/_apis/distributedtask/environments/{environmentId}
+          altFieldMapping:  # Optional: with the format <newField>: <oldField>
+            id: environmentId
+        - action: create
+          method: POST
+          path: /{organization}/{project}/_apis/distributedtask/environments
+        - action: delete
+          method: DELETE
+          path: /{organization}/{project}/_apis/distributedtask/environments/{environmentId}
+          altFieldMapping:  # Optional: with the format <newField>: <oldField>
+            id: environmentId
+
+
+
+  

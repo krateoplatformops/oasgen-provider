@@ -1,0 +1,22 @@
+kind: Definition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: definition-environments
+  namespace: default
+spec:
+  deletionPolicy: Orphan 
+  swaggerPath: https://raw.githubusercontent.com/matteogastaldello/fromRepo/main/gitlab-openapi.yaml
+  resourceGroup: gitlab.com
+  resources: 
+    - kind: APIEntitiesBranch
+      verbsDescription:
+        - action: get
+          method: GET
+          path: /api/v4/projects/{id}/repository/branches/{branch}
+        - action: create
+          method: POST
+          path: /api/v4/projects/{id}/repository/branches
+      
+
+
+  

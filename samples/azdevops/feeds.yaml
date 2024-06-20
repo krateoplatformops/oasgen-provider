@@ -1,0 +1,46 @@
+kind: Definition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: definition-feeds
+  namespace: default
+spec:
+  deletionPolicy: Orphan 
+  swaggerPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/a51e393577bd6e51f81097e0c8840c73d7aafa42/artifacts/feeds.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: Feed
+    # compareList: ["name", "description"]
+    identifiers: [id, name]
+    verbsDescription:
+    - action: get
+      method: GET
+      path: /{organization}/{project}/_apis/packaging/feeds/{feedId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: feedId
+        project.name: project
+    - action: findby
+      method: GET
+      path: /{organization}/{project}/_apis/packaging/feeds
+      altFieldMapping:
+        project.name: project
+    - action: create
+      method: POST
+      path: /{organization}/{project}/_apis/packaging/feeds
+      altFieldMapping:
+        project.name: project
+    - action: update
+      method: PATCH
+      path: /{organization}/{project}/_apis/packaging/feeds/{feedId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: feedId
+        project.name: project
+    - action: delete
+      method: DELETE
+      path: /{organization}/{project}/_apis/packaging/feeds/{feedId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: feedId
+        project.name: project
+
+
+
+  

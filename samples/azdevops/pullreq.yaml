@@ -1,0 +1,22 @@
+kind: Definition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: definition-pr
+  namespace: default
+spec:
+  deletionPolicy: Orphan 
+  swaggerPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/git/git.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: PullRequest
+    # compareList: ["name", "description"]
+    identifiers: [artifactId]
+    verbsDescription:
+    - action: create
+      method: POST
+      path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}/pullrequests
+
+
+
+
+  
