@@ -1,6 +1,6 @@
 # Build environment
 # -----------------
-FROM golang:1.19.5-bullseye as builder
+FROM golang:1.22.3-bullseye as builder
 LABEL stage=builder
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 GO111MODULE=on go build -a -o /bin/manager cmd/main.go && \
 # ----------------------
 FROM gcr.io/distroless/static:nonroot
 
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+# COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 COPY --from=builder /bin/manager /bin/manager
