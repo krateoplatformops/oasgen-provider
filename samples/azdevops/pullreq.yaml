@@ -1,11 +1,11 @@
-kind: Definition
+kind: RestDefinition
 apiVersion: swaggergen.krateo.io/v1alpha1
 metadata:
   name: definition-pr
   namespace: default
 spec:
   deletionPolicy: Orphan 
-  swaggerPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/git/git.yaml
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/git/git.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: PullRequest

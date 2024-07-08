@@ -1,4 +1,4 @@
-kind: Definition
+kind: RestDefinition
 apiVersion: swaggergen.krateo.io/v1alpha1
 metadata:
   name: def-endpoints
@@ -7,7 +7,7 @@ metadata:
     krateo.io/crd-group: azure.devops.com
 spec:
   deletionPolicy: Orphan 
-  swaggerPath: "https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/serviceEndpoint/endpoints.yaml"
+  oasPath: "https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/serviceEndpoint/endpoints.yaml"
   resourceGroup: azure.devops.com
   resource: 
     ownerRefs: 

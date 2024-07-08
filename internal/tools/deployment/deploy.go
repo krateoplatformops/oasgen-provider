@@ -3,8 +3,13 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"strings"
 
-	definitionsv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/definitions/v1alpha1"
+	"github.com/gobuffalo/flect"
+	definitionsv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/restdefinitions/v1alpha1"
+	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
+	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/orderedmap"
 	"gopkg.in/yaml.v2"
 	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -13,10 +18,11 @@ import (
 )
 
 type UndeployOptions struct {
-	KubeClient     client.Client
-	NamespacedName types.NamespacedName
-	GVR            schema.GroupVersionResource
-	Log            func(msg string, keysAndValues ...any)
+	KubeClient      client.Client
+	NamespacedName  types.NamespacedName
+	GVR             schema.GroupVersionResource
+	Log             func(msg string, keysAndValues ...any)
+	SecuritySchemes *orderedmap.Map[string, *v3.SecurityScheme]
 }
 
 func Undeploy(ctx context.Context, opts UndeployOptions) error {
@@ -32,24 +38,6 @@ func Undeploy(ctx context.Context, opts UndeployOptions) error {
 		return err
 	}
 
-	// err = UninstallClusterRoleBinding(ctx, UninstallOptions{
-	// 	KubeClient:     opts.KubeClient,
-	// 	NamespacedName: opts.NamespacedName,
-	// 	Log:            opts.Log,
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-
-	// err = UninstallClusterRole(ctx, UninstallOptions{
-	// 	KubeClient:     opts.KubeClient,
-	// 	NamespacedName: opts.NamespacedName,
-	// 	Log:            opts.Log,
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-
 	err = UninstallRoleBinding(ctx, UninstallOptions{
 		KubeClient:     opts.KubeClient,
 		NamespacedName: opts.NamespacedName,
@@ -57,6 +45,9 @@ func Undeploy(ctx context.Context, opts UndeployOptions) error {
 	})
 	if err != nil {
 		return err
+	}
+	if opts.Log != nil {
+		opts.Log("RoleBinding successfully uninstalled", "name", opts.NamespacedName.String())
 	}
 
 	err = UninstallRole(ctx, UninstallOptions{
@@ -67,6 +58,9 @@ func Undeploy(ctx context.Context, opts UndeployOptions) error {
 	if err != nil {
 		return err
 	}
+	if opts.Log != nil {
+		opts.Log("Role successfully uninstalled", "name", opts.NamespacedName.String())
+	}
 
 	err = UninstallServiceAccount(ctx, UninstallOptions{
 		KubeClient:     opts.KubeClient,
@@ -76,6 +70,9 @@ func Undeploy(ctx context.Context, opts UndeployOptions) error {
 	if err != nil {
 		return err
 	}
+	if opts.Log != nil {
+		opts.Log("ServiceAccount successfully uninstalled", "name", opts.NamespacedName.String())
+	}
 
 	err = UninstallCRD(ctx, opts.KubeClient, opts.GVR.GroupResource())
 	if err == nil {
@@ -83,13 +80,45 @@ func Undeploy(ctx context.Context, opts UndeployOptions) error {
 			opts.Log("CRD successfully uninstalled", "name", opts.GVR.GroupResource().String())
 		}
 	}
+	if err != nil {
+		if opts.Log != nil {
+			opts.Log("failed to uninstall CRD", "name", opts.GVR.GroupResource().String(), "error", err)
+		}
+	}
+
+	for secSchemaPair := opts.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
+		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
+		if err != nil {
+			continue
+		}
+
+		if opts.Log != nil {
+			opts.Log("uninstalling CRD", "name", authSchemaName, "Group", opts.GVR.Group)
+		}
+
+		err = UninstallCRD(ctx, opts.KubeClient, schema.GroupResource{
+			Group:    opts.GVR.Group,
+			Resource: flect.Pluralize(strings.ToLower(authSchemaName)),
+		})
+		if err != nil {
+			if opts.Log != nil {
+				opts.Log("failed to uninstall CRD", "name", authSchemaName, "error", err)
+			}
+		}
+		if err == nil {
+			if opts.Log != nil {
+				opts.Log("CRD successfully uninstalled", "name", opts.GVR.GroupResource().String())
+			}
+		}
+	}
+
 	return err
 }
 
 type DeployOptions struct {
 	KubeClient      client.Client
 	NamespacedName  types.NamespacedName
-	Spec            *definitionsv1alpha1.DefinitionSpec
+	Spec            *definitionsv1alpha1.RestDefinitionSpec
 	ResourceVersion string
 	Role            v1.Role
 	Log             func(msg string, keysAndValues ...any)

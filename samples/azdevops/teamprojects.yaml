@@ -1,0 +1,37 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-teamprojects
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/26be8c45d4dd4f3e0a6bbcc5ccee0e91b7ebb62c/core/projects.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: TeamProjectReference
+    # compareList: ["name", "description"]
+    identifiers:
+      - id # This is the field that will be used as the identifier
+      - name # This is the field that will be used as the identifier when the id is not present in the status
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /{organization}/_apis/projects
+    - action: findby
+      method: GET
+      path: /{organization}/_apis/projects
+    - action: delete
+      method: DELETE
+      path: /{organization}/_apis/projects/{projectId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: projectId
+    - action: get
+      method: GET
+      path: /{organization}/_apis/projects/{projectId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: projectId
+    - action: update
+      method: PATCH
+      path: /{organization}/_apis/projects/{projectId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: projectId

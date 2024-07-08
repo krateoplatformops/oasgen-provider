@@ -93,9 +93,14 @@ func InitRole(opts types.NamespacedName) (rbacv1.Role, error) {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"core.krateo.io"},
-				Resources: []string{"compositiondefinitions", "compositiondefinitions/status"},
+				APIGroups: []string{"swaggergen.krateo.io"},
+				Resources: []string{"restdefinitions", "restdefinitions/status"},
 				Verbs:     []string{"*"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get"},
 			},
 		},
 	}

@@ -69,11 +69,11 @@ type Resource struct {
 	CompareList []string `json:"compareList,omitempty"`
 }
 
-// DefinitionSpec is the specification of a Definition.
-type DefinitionSpec struct {
+// RestDefinitionSpec is the specification of a RestDefinition.
+type RestDefinitionSpec struct {
 	rtv1.ManagedSpec `json:",inline"`
-	// Represent the path to the swagger file
-	SwaggerPath string `json:"swaggerPath"`
+	// Represent the path to the OAS Specification file
+	OASPath string `json:"oasPath"`
 	// Group: the group of the resource to manage
 	// +immutable
 	ResourceGroup string `json:"resourceGroup"`
@@ -82,10 +82,11 @@ type DefinitionSpec struct {
 	Resource Resource `json:"resource"`
 }
 
-// DefinitionStatus is the status of a Definition.
-type DefinitionStatus struct {
+// RestDefinitionStatus is the status of a RestDefinition.
+type RestDefinitionStatus struct {
 	rtv1.ManagedStatus `json:",inline"`
 
+	OASPath string `json:"oasPath"`
 	// Created bool `json:"created"`
 	// // Resource: the generated custom resource
 	// // +optional
@@ -98,26 +99,25 @@ type DefinitionStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Namespaced,categories={krateo,definition,core}
-//+kubebuilder:printcolumn:name="RESOURCE",type="string",JSONPath=".status.resource"
+//+kubebuilder:resource:scope=Namespaced,categories={krateo,restdefinition,core}
+//+kubebuilder:printcolumn:name="RESOURCE",type="string",JSONPath=".status.oasPath"
 //+kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-//+kubebuilder:printcolumn:name="PACKAGE URL",type="string",JSONPath=".status.packageUrl"
 //+kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp",priority=10
 
-// Definition is a definition type with a spec and a status.
-type Definition struct {
+// RestDefinition is a RestDefinition type with a spec and a status.
+type RestDefinition struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DefinitionSpec   `json:"spec,omitempty"`
-	Status DefinitionStatus `json:"status,omitempty"`
+	Spec   RestDefinitionSpec   `json:"spec,omitempty"`
+	Status RestDefinitionStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
-// DefinitionList is a list of Definition objects.
-type DefinitionList struct {
+// RestDefinitionList is a list of RestDefinition objects.
+type RestDefinitionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 
-	Items []Definition `json:"items"`
+	Items []RestDefinition `json:"items"`
 }
