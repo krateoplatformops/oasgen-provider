@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/definitions/v1alpha1"
+	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/restdefinitions/v1alpha1"
 
 	"github.com/krateoplatformops/crdgen"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
@@ -56,18 +56,31 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			if bodySchema == nil {
 				return fmt.Errorf("body schema not found for %s", verb.Path), errors
 			}
-
-			// Add auth schema references to the spec schema
 			schema, err = bodySchema.BuildSchema()
 			if err != nil {
 				return fmt.Errorf("building schema for %s: %w", verb.Path, err), errors
 			}
+
+			for _, proxy := range schema.AllOf {
+				propSchema, err := proxy.BuildSchema()
+				if err != nil {
+					return fmt.Errorf("building schema for %s: %w", verb.Path, err), errors
+				}
+				// Iterate over the properties of the schema with First() and Next()
+				for prop := propSchema.Properties.First(); prop != nil; prop = prop.Next() {
+					// Add the property to the schema
+					schema.Properties.Set(prop.Key(), prop.Value())
+				}
+			}
+
+			// Add auth schema references to the spec schema
+
 			schema.Properties.Set("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
 				Type:        []string{"object"},
 				Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
 			schema.Required = append(schema.Required, []string{"authenticationRefs"}...)
 
-			for key, _ := range secByteSchema {
+			for key := range secByteSchema {
 				authSchemaProxy := schema.Properties.Value("authenticationRefs")
 				if authSchemaProxy == nil {
 					return fmt.Errorf("authenticationRefs schema not found for %s", verb.Path), errors
@@ -116,6 +129,10 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 						schemaParam.Description = fmt.Sprintf("PARAMETER: %s, VERB: %s - %s", param.In, text.CapitaliseFirstLetter(op.Key()), param.Description)
 					}
 				}
+			}
+
+			if schema == nil {
+				return fmt.Errorf("schema is nil for %s", verb.Path), errors
 			}
 
 			byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
@@ -203,7 +220,6 @@ type oasAuthJsonSchemaGetter struct {
 }
 
 func (a *oasAuthJsonSchemaGetter) Get() ([]byte, error) {
-
 	return g.secByteSchema[a.secSchemaName], nil
 }
 

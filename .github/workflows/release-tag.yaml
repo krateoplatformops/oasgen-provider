@@ -109,6 +109,9 @@ jobs:
     needs:
       - package-amd64
       - package-arm64
+    permissions:
+      packages: write
+      contents: read
     steps:
       - name: Download digests
         uses: actions/download-artifact@v3

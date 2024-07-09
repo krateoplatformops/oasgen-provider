@@ -69,10 +69,10 @@ func Generate(ctx context.Context, opts Options) (res Result) {
 	}
 	res.WorkDir = cfg.Workdir
 
-	// clean := len(os.Getenv("CRDGEN_CLEAN_WORKDIR")) == 0
-	// if clean {
-	// 	defer os.RemoveAll(cfg.Workdir)
-	// }
+	clean := len(os.Getenv("CRDGEN_CLEAN_WORKDIR")) == 0
+	if clean {
+		defer os.RemoveAll(cfg.Workdir)
+	}
 
 	if err := coder.Do(&nfo, cfg); err != nil {
 		res.Err = err

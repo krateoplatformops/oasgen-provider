@@ -1,4 +1,4 @@
-// Package v1alpha1 contains API Schema definitions v1alpha1 API group
+// Package v1alpha1 contains API Schema RestDefinitions v1alpha1 API group
 // +kubebuilder:object:generate=true
 // +groupName=swaggergen.krateo.io
 // +versionName=v1alpha1
@@ -26,12 +26,12 @@ var (
 )
 
 var (
-	DefinitionKind             = reflect.TypeOf(Definition{}).Name()
-	DefinitionGroupKind        = schema.GroupKind{Group: Group, Kind: DefinitionKind}.String()
-	DefinitionKindAPIVersion   = DefinitionKind + "." + SchemeGroupVersion.String()
-	DefinitionGroupVersionKind = SchemeGroupVersion.WithKind(DefinitionKind)
+	RestDefinitionKind             = reflect.TypeOf(RestDefinition{}).Name()
+	RestDefinitionGroupKind        = schema.GroupKind{Group: Group, Kind: RestDefinitionKind}.String()
+	RestDefinitionKindAPIVersion   = RestDefinitionKind + "." + SchemeGroupVersion.String()
+	RestDefinitionGroupVersionKind = SchemeGroupVersion.WithKind(RestDefinitionKind)
 )
 
 func init() {
-	SchemeBuilder.Register(&Definition{}, &DefinitionList{})
+	SchemeBuilder.Register(&RestDefinition{}, &RestDefinitionList{})
 }

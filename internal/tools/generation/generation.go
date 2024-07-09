@@ -2,8 +2,9 @@ package generation
 
 import (
 	"fmt"
+	"reflect"
 
-	"github.com/invopop/jsonschema"
+	rtv1 "github.com/krateoplatformops/provider-runtime/apis/common/v1"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"sigs.k8s.io/yaml"
@@ -30,11 +31,12 @@ func GenerateJsonSchemaFromSchemaProxy(schema *base.SchemaProxy) ([]byte, error)
 }
 
 type BasicAuth struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username    string                 `json:"username"`
+	PasswordRef rtv1.SecretKeySelector `json:"passwordRef"`
 }
+
 type BearerAuth struct {
-	Token string `json:"token"`
+	TokenRef rtv1.SecretKeySelector `json:"tokenRef"`
 }
 
 func IsValidAuthSchema(doc *v3.SecurityScheme) bool {
@@ -55,13 +57,9 @@ func GenerateAuthSchemaName(doc *v3.SecurityScheme) (string, error) {
 
 func GenerateAuthSchemaFromSecuritySchema(doc *v3.SecurityScheme) (byteSchema []byte, err error) {
 	if doc.Type == "http" && doc.Scheme == "basic" {
-		authSchema := jsonschema.Reflect(&BasicAuth{})
-		byteSchema, err = authSchema.Definitions["BasicAuth"].MarshalJSON()
-		return byteSchema, err
+		return ReflectBytes(reflect.TypeOf(BasicAuth{}))
 	} else if doc.Type == "http" && doc.Scheme == "bearer" {
-		authSchema := jsonschema.Reflect(&BearerAuth{})
-		byteSchema, err = authSchema.Definitions["BearerAuth"].MarshalJSON()
-		return byteSchema, err
+		return ReflectBytes(reflect.TypeOf(BearerAuth{}))
 	}
 
 	return nil, fmt.Errorf(ErrInvalidSecuritySchema)

@@ -30,7 +30,7 @@ spec:
       - name: dockerconfigjson-github-com
       containers:
       - name: {{ .resource }}-{{ .apiVersion }}-controller
-        image: ghcr.io/matteogastaldello/composition-dynamic-controller:{{ or .tag "latest" }}
+        image: ghcr.io/krateoplatformops/composition-dynamic-controller-v2:{{ or .tag "latest" }}
         imagePullPolicy: IfNotPresent
         args:
           - -debug
@@ -60,3 +60,5 @@ spec:
         runAsNonRoot: true
         runAsUser: 2000
       terminationGracePeriodSeconds: 30
+      serviceAccount: {{ .name }}
+      serviceAccountName: {{ .name }}

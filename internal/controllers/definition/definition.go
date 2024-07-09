@@ -20,7 +20,7 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/meta"
 	"github.com/krateoplatformops/provider-runtime/pkg/ratelimiter"
-	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/definitions/v1alpha1"
+	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/pb33f/libopenapi"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	corev1 "k8s.io/api/core/v1"
@@ -44,21 +44,21 @@ import (
 )
 
 const (
-	errNotDefinition = "managed resource is not a Definition"
-	labelKeyGroup    = "krateo.io/crd-group"
-	labelKeyVersion  = "krateo.io/crd-version"
-	labelKeyResource = "krateo.io/crd-resource"
+	errNotRestDefinition = "managed resource is not a RestDefinition"
+	labelKeyGroup        = "krateo.io/crd-group"
+	labelKeyVersion      = "krateo.io/crd-version"
+	labelKeyResource     = "krateo.io/crd-resource"
 )
 
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := reconciler.ControllerName(definitionv1alpha1.DefinitionGroupKind)
+	name := reconciler.ControllerName(definitionv1alpha1.RestDefinitionGroupKind)
 
 	log := o.Logger.WithValues("controller", name)
 
 	recorder := mgr.GetEventRecorderFor(name)
 
 	r := reconciler.NewReconciler(mgr,
-		resource.ManagedKind(definitionv1alpha1.DefinitionGroupVersionKind),
+		resource.ManagedKind(definitionv1alpha1.RestDefinitionGroupVersionKind),
 		reconciler.WithExternalConnecter(&connector{
 			kube:     mgr.GetClient(),
 			log:      log,
@@ -70,7 +70,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
-		For(&definitionv1alpha1.Definition{}).
+		For(&definitionv1alpha1.RestDefinition{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
@@ -81,12 +81,12 @@ type connector struct {
 }
 
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconciler.ExternalClient, error) {
-	cr, ok := mg.(*definitionv1alpha1.Definition)
+	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
 	if !ok {
-		return nil, errors.New(errNotDefinition)
+		return nil, errors.New(errNotRestDefinition)
 	}
 	var err error
-	swaggerPath := cr.Spec.SwaggerPath
+	swaggerPath := cr.Spec.OASPath
 
 	basePath := "/tmp/swaggergen-provider"
 	err = os.MkdirAll(basePath, os.ModePerm)
@@ -150,9 +150,9 @@ type external struct {
 }
 
 // func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler.ExternalObservation, error) {
-// 	cr, ok := mg.(*definitionv1alpha1.Definition)
+// 	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
 // 	if !ok {
-// 		return reconciler.ExternalObservation{}, errors.New(errNotDefinition)
+// 		return reconciler.ExternalObservation{}, errors.New(errNotRestDefinition)
 // 	}
 
 // 	if cr.Status.Created {
@@ -168,9 +168,9 @@ type external struct {
 // }
 
 func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler.ExternalObservation, error) {
-	cr, ok := mg.(*definitionv1alpha1.Definition)
+	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
 	if !ok {
-		return reconciler.ExternalObservation{}, errors.New(errNotDefinition)
+		return reconciler.ExternalObservation{}, errors.New(errNotRestDefinition)
 	}
 
 	// pkg, err := chartfs.ForSpec(ctx, e.kube, cr.Spec.Chart)
@@ -263,9 +263,9 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 }
 
 func (e *external) Create(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*definitionv1alpha1.Definition)
+	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
 	if !ok {
-		return errors.New(errNotDefinition)
+		return errors.New(errNotRestDefinition)
 	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionCreate) {
@@ -273,7 +273,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	e.log.Debug("Creating Definition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.log.Debug("Creating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
 	err, errors := generator.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
 	if err != nil {
@@ -327,6 +327,20 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			e.log.Debug("Generating Auth Schema Name", "Error:", err)
 			continue
 		}
+
+		crdOk, err := deployment.LookupCRD(ctx, e.kube, schema.GroupVersionResource{
+			Group:    cr.Spec.ResourceGroup,
+			Version:  "v1alpha1",
+			Resource: flect.Pluralize(strings.ToLower(authSchemaName)),
+		})
+		if err != nil {
+			return fmt.Errorf("looking up CRD: %w", err)
+		}
+		if crdOk {
+			e.log.Debug("CRD already exists", "Kind:", authSchemaName)
+			continue
+		}
+
 		resource = crdgen.Generate(ctx, crdgen.Options{
 			Managed: false,
 			WorkDir: fmt.Sprintf("gen-crds/%s", authSchemaName),
@@ -374,9 +388,9 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	cr.SetConditions(rtv1.Creating())
 	err = e.kube.Status().Update(ctx, cr)
 
-	e.log.Debug("Created Definition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
-	e.rec.Eventf(cr, corev1.EventTypeNormal, "DefinitionCreating",
-		"Definition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
+	e.log.Debug("Created RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
+		"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return err
 }
 
@@ -385,9 +399,9 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 }
 
 func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*definitionv1alpha1.Definition)
+	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
 	if !ok {
-		return errors.New(errNotDefinition)
+		return errors.New(errNotRestDefinition)
 	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionDelete) {
@@ -395,7 +409,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	e.log.Debug("Deleting Definition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.log.Debug("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
 	opts := deployment.UndeployOptions{
 		KubeClient: e.kube,
@@ -408,6 +422,8 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 			Version:  "v1alpha1",
 			Resource: flect.Pluralize(strings.ToLower(cr.Spec.Resource.Kind)),
 		},
+		Log:             e.log.Debug,
+		SecuritySchemes: e.doc.Model.Components.SecuritySchemes,
 	}
 	if meta.IsVerbose(cr) {
 		opts.Log = e.log.Debug
@@ -420,8 +436,8 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 
 	err = e.kube.Status().Update(ctx, cr)
 
-	e.log.Debug("Deleting Definition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
-	e.rec.Eventf(cr, corev1.EventTypeNormal, "DefinitionDeleting",
-		"Definition '%s/%s' deleting", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
+	e.log.Debug("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionDeleting",
+		"RestDefinition '%s/%s' deleting", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return err
 }

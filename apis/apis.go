@@ -1,7 +1,7 @@
 package apis
 
 import (
-	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/definitions/v1alpha1"
+	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/restdefinitions/v1alpha1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
