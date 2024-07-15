@@ -15,12 +15,12 @@ import (
 
 	fgetter "github.com/hashicorp/go-getter"
 
+	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/krateoplatformops/provider-runtime/pkg/controller"
 	"github.com/krateoplatformops/provider-runtime/pkg/event"
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/meta"
 	"github.com/krateoplatformops/provider-runtime/pkg/ratelimiter"
-	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/pb33f/libopenapi"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	corev1 "k8s.io/api/core/v1"
@@ -33,14 +33,14 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/provider-runtime/pkg/resource"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/controllers/compositiondefinition/generator"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/crds"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/deployment"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
+	"github.com/krateoplatformops/oasgen-provider/internal/controllers/compositiondefinition/generator"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/crds"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
 
 	//"github.com/krateoplatformops/crdgen"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/text"
 )
 
 const (
@@ -149,34 +149,11 @@ type external struct {
 	rec  record.EventRecorder
 }
 
-// func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler.ExternalObservation, error) {
-// 	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
-// 	if !ok {
-// 		return reconciler.ExternalObservation{}, errors.New(errNotRestDefinition)
-// 	}
-
-// 	if cr.Status.Created {
-// 		return reconciler.ExternalObservation{
-// 			ResourceExists:   true,
-// 			ResourceUpToDate: true,
-// 		}, nil
-// 	}
-
-// 	return reconciler.ExternalObservation{
-// 		ResourceExists: false,
-// 	}, nil
-// }
-
 func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler.ExternalObservation, error) {
 	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
 	if !ok {
 		return reconciler.ExternalObservation{}, errors.New(errNotRestDefinition)
 	}
-
-	// pkg, err := chartfs.ForSpec(ctx, e.kube, cr.Spec.Chart)
-	// if err != nil {
-	// 	return reconciler.ExternalObservation{}, err
-	// }
 
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
@@ -242,9 +219,6 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 			"gvr", gvr.String())
 	}
 
-	// cr.Status.APIVersion, cr.Status.Kind = gvk.ToAPIVersionAndKind()
-	// cr.Status.PackageURL = pkg.PackageURL()
-
 	if !deployReady {
 		cr.SetConditions(rtv1.Unavailable().
 			WithMessage(fmt.Sprintf("Dynamic Controller '%s' not ready yet", obj.Name)))
@@ -305,7 +279,6 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		SpecJsonSchemaGetter:   generator.OASSpecJsonSchemaGetter(),
 		StatusJsonSchemaGetter: generator.OASStatusJsonSchemaGetter(),
 	})
-
 	if resource.Err != nil {
 		return fmt.Errorf("generating CRD: %w", resource.Err)
 	}
@@ -319,7 +292,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	if err != nil {
 		return fmt.Errorf("installing CRD: %w", err)
 	}
-	deployment.PopulateRole(resource, &role)
+	deployment.PopulateRole(resource.GVK, &role)
 
 	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
@@ -338,6 +311,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 		if crdOk {
 			e.log.Debug("CRD already exists", "Kind:", authSchemaName)
+			deployment.PopulateRole(schema.GroupVersionKind{
+				Group:   cr.Spec.ResourceGroup,
+				Version: "v1alpha1",
+				Kind:    text.CapitaliseFirstLetter(authSchemaName),
+			}, &role)
 			continue
 		}
 
@@ -368,7 +346,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		deployment.PopulateRole(resource, &role)
+		deployment.PopulateRole(resource.GVK, &role)
 	}
 
 	err = deployment.Deploy(ctx, deployment.DeployOptions{
