@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/ptr"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/strutil"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/transpiler/jsonschema"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/ptr"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/strutil"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/transpiler/jsonschema"
 )
 
 // Field defines the data required to generate a field in Go.

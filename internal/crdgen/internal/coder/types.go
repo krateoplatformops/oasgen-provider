@@ -9,9 +9,9 @@ import (
 
 	"github.com/dave/jennifer/jen"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/ptr"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/strutil"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/transpiler"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/ptr"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/strutil"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/transpiler"
 )
 
 const (

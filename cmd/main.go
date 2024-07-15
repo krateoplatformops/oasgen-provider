@@ -10,13 +10,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/krateoplatformops/oasgen-provider/apis"
 	"github.com/krateoplatformops/provider-runtime/pkg/helpers"
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/ratelimiter"
-	"github.com/matteogastaldello/swaggergen-provider/apis"
 
+	definition "github.com/krateoplatformops/oasgen-provider/internal/controllers/definition"
 	"github.com/krateoplatformops/provider-runtime/pkg/controller"
-	definition "github.com/matteogastaldello/swaggergen-provider/internal/controllers/definition"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/stoewer/go-strcase"

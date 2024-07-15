@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/transpiler/jsonschema"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/transpiler/jsonschema"
 )
 
 func TestThatTheRootSchemaCanBeParsed(t *testing.T) {

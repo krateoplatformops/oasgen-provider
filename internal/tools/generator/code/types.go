@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/dave/jennifer/jen"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/transpiler"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/transpiler/jsonschema"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/text"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/transpiler"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/transpiler/jsonschema"
 )
 
 const (

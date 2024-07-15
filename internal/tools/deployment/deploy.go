@@ -6,8 +6,9 @@ import (
 	"strings"
 
 	"github.com/gobuffalo/flect"
-	definitionsv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/restdefinitions/v1alpha1"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
+	definitionsv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
+	rbactools "github.com/krateoplatformops/oasgen-provider/internal/tools/rbactools"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"gopkg.in/yaml.v2"
@@ -38,7 +39,7 @@ func Undeploy(ctx context.Context, opts UndeployOptions) error {
 		return err
 	}
 
-	err = UninstallRoleBinding(ctx, UninstallOptions{
+	err = rbactools.UninstallRoleBinding(ctx, rbactools.UninstallOptions{
 		KubeClient:     opts.KubeClient,
 		NamespacedName: opts.NamespacedName,
 		Log:            opts.Log,
@@ -50,7 +51,7 @@ func Undeploy(ctx context.Context, opts UndeployOptions) error {
 		opts.Log("RoleBinding successfully uninstalled", "name", opts.NamespacedName.String())
 	}
 
-	err = UninstallRole(ctx, UninstallOptions{
+	err = rbactools.UninstallRole(ctx, rbactools.UninstallOptions{
 		KubeClient:     opts.KubeClient,
 		NamespacedName: opts.NamespacedName,
 		Log:            opts.Log,
@@ -62,7 +63,7 @@ func Undeploy(ctx context.Context, opts UndeployOptions) error {
 		opts.Log("Role successfully uninstalled", "name", opts.NamespacedName.String())
 	}
 
-	err = UninstallServiceAccount(ctx, UninstallOptions{
+	err = rbactools.UninstallServiceAccount(ctx, rbactools.UninstallOptions{
 		KubeClient:     opts.KubeClient,
 		NamespacedName: opts.NamespacedName,
 		Log:            opts.Log,
@@ -126,8 +127,8 @@ type DeployOptions struct {
 
 func Deploy(ctx context.Context, opts DeployOptions) error {
 
-	sa := CreateServiceAccount(opts.NamespacedName)
-	if err := InstallServiceAccount(ctx, opts.KubeClient, &sa); err != nil {
+	sa := rbactools.CreateServiceAccount(opts.NamespacedName)
+	if err := rbactools.InstallServiceAccount(ctx, opts.KubeClient, &sa); err != nil {
 		return fmt.Errorf("failed to install service account: %w", err)
 	}
 	if opts.Log != nil {
@@ -144,7 +145,7 @@ func Deploy(ctx context.Context, opts DeployOptions) error {
 	by, _ := yaml.Marshal(opts.Role)
 	fmt.Println(string(by))
 
-	if err := InstallRole(ctx, opts.KubeClient, &opts.Role); err != nil {
+	if err := rbactools.InstallRole(ctx, opts.KubeClient, &opts.Role); err != nil {
 		return fmt.Errorf("failed to install role: %w", err)
 	}
 	if opts.Log != nil {
@@ -152,8 +153,8 @@ func Deploy(ctx context.Context, opts DeployOptions) error {
 			"gvr", gvr.String(), "name", opts.Role.Name, "namespace", opts.Role.Namespace)
 	}
 
-	rb := CreateRoleBinding(opts.NamespacedName)
-	if err := InstallRoleBinding(ctx, opts.KubeClient, &rb); err != nil {
+	rb := rbactools.CreateRoleBinding(opts.NamespacedName)
+	if err := rbactools.InstallRoleBinding(ctx, opts.KubeClient, &rb); err != nil {
 		return err
 	}
 	if opts.Log != nil {

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/text"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/transpiler/jsonschema"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/transpiler/jsonschema"
 )
 
 // transpiler will produce structs from the JSON schema.

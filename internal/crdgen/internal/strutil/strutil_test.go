@@ -3,7 +3,7 @@ package strutil_test
 import (
 	"testing"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/strutil"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/strutil"
 )
 
 func TestThatCapitalisationOccursCorrectly(t *testing.T) {

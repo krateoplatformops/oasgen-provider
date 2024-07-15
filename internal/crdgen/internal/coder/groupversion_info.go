@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/dave/jennifer/jen"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/strutil"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/strutil"
 )
 
 const (

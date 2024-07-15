@@ -4,7 +4,7 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	repo "github.com/matteogastaldello/swaggergen-provider/internal/controllers/definition"
+	repo "github.com/krateoplatformops/oasgen-provider/internal/controllers/definition"
 )
 
 // Setup creates all controllers with the supplied logger and adds them to

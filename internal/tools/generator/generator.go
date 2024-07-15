@@ -15,9 +15,9 @@ package generator
 // 	"github.com/gobuffalo/flect"
 // 	"github.com/krateoplatformops/core-provider/apis/definitions/v1alpha1"
 // 	"github.com/krateoplatformops/core-provider/internal/helm/getter"
-// 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/code"
-// 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
-// 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/tgzfs"
+// 	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/code"
+// 	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/text"
+// 	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/tgzfs"
 // 	"k8s.io/apimachinery/pkg/runtime/schema"
 // 	"sigs.k8s.io/yaml"
 // )

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/transpiler"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/transpiler/jsonschema"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/transpiler"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/transpiler/jsonschema"
 )
 
 func TestFieldGeneration(t *testing.T) {
