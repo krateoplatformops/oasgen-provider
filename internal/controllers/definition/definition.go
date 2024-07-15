@@ -37,8 +37,8 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/crds"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/rbactools"
 
-	//"github.com/krateoplatformops/crdgen"
 	"github.com/krateoplatformops/oasgen-provider/internal/crdgen"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/text"
 )
@@ -249,7 +249,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 
 	e.log.Debug("Creating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
-	err, errors := generator.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
+	gen, err, errors := generator.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
 	if err != nil {
 		return fmt.Errorf("generating byte schemas: %w", err)
 	}
@@ -259,7 +259,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 	}
 
-	role, err := deployment.InitRole(types.NamespacedName{
+	role, err := rbactools.InitRole(types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      cr.GetName(),
 	})
@@ -276,8 +276,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
 		},
 		Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
-		SpecJsonSchemaGetter:   generator.OASSpecJsonSchemaGetter(),
-		StatusJsonSchemaGetter: generator.OASStatusJsonSchemaGetter(),
+		SpecJsonSchemaGetter:   gen.OASSpecJsonSchemaGetter(),
+		StatusJsonSchemaGetter: gen.OASStatusJsonSchemaGetter(),
 	})
 	if resource.Err != nil {
 		return fmt.Errorf("generating CRD: %w", resource.Err)
@@ -292,7 +292,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	if err != nil {
 		return fmt.Errorf("installing CRD: %w", err)
 	}
-	deployment.PopulateRole(resource.GVK, &role)
+	rbactools.PopulateRole(resource.GVK, &role)
 
 	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
@@ -311,7 +311,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 		if crdOk {
 			e.log.Debug("CRD already exists", "Kind:", authSchemaName)
-			deployment.PopulateRole(schema.GroupVersionKind{
+			rbactools.PopulateRole(schema.GroupVersionKind{
 				Group:   cr.Spec.ResourceGroup,
 				Version: "v1alpha1",
 				Kind:    text.CapitaliseFirstLetter(authSchemaName),
@@ -328,7 +328,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 				Kind:    text.CapitaliseFirstLetter(authSchemaName),
 			},
 			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
-			SpecJsonSchemaGetter:   generator.OASAuthJsonSchemaGetter(authSchemaName),
+			SpecJsonSchemaGetter:   gen.OASAuthJsonSchemaGetter(authSchemaName),
 			StatusJsonSchemaGetter: generator.StaticJsonSchemaGetter(),
 		})
 
@@ -346,7 +346,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		deployment.PopulateRole(resource.GVK, &role)
+		rbactools.PopulateRole(resource.GVK, &role)
 	}
 
 	err = deployment.Deploy(ctx, deployment.DeployOptions{
