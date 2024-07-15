@@ -1,0 +1,18 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-descriptors
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/df5c66dd01d2005b1938fc907b8cdaf8c18c4f1f/graph/groups.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: Descriptor
+    identifiers:
+    - storageKey
+    - value
+    verbsDescription:
+    - action: get
+      method: GET
+      path: /{organization}/_apis/graph/descriptors/{storageKey}

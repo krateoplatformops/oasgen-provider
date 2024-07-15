@@ -1,0 +1,41 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-users
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/df5c66dd01d2005b1938fc907b8cdaf8c18c4f1f/graph/groups.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: User
+    # compareList: ["name", "description"]
+    identifiers:
+      - principalName
+      - originId # This is the field that will be used as the identifier
+      - descriptor # This is the field that will be used as the identifier
+      - displayName # This is the field that will be used as the identifier when the id is not present in the status
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /{organization}/_apis/graph/users
+    - action: findby
+      method: GET
+      path: /{organization}/_apis/graph/users
+    - action: delete
+      method: DELETE
+      path: /{organization}/_apis/graph/users/{userDescriptor}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        descriptor: userDescriptor
+    - action: get
+      method: GET
+      path: /{organization}/_apis/graph/users/{userDescriptor}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        descriptor: userDescriptor
+    - action: update
+      method: PATCH
+      path: /{organization}/_apis/graph/users/{userDescriptor}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        descriptor: userDescriptor
+
+
