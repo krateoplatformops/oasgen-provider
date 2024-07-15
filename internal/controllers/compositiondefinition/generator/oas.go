@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/restdefinitions/v1alpha1"
+	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 
 	"github.com/krateoplatformops/crdgen"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/text"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -72,76 +72,96 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 					schema.Properties.Set(prop.Key(), prop.Value())
 				}
 			}
+		}
+		om := orderedmap.New[string, *base.SchemaProxy]()
+		om.Set("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
+			Type:        []string{"object"},
+			Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
+		req := []string{}
 
-			// Add auth schema references to the spec schema
+		if schema == nil {
+			schemaproxy := base.CreateSchemaProxy(&base.Schema{
+				Type:       []string{"object"},
+				Properties: om,
+				Required:   req,
+			})
+			schema = schemaproxy.Schema()
+		} else {
+			schema.Properties = om
+			schema.Required = req
+		}
 
-			schema.Properties.Set("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
-				Type:        []string{"object"},
-				Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
-			schema.Required = append(schema.Required, []string{"authenticationRefs"}...)
+		// if schema.Properties == nil {
+		// 	fmt.Println("schema.Properties is nil")
+		// }
 
-			for key := range secByteSchema {
-				authSchemaProxy := schema.Properties.Value("authenticationRefs")
-				if authSchemaProxy == nil {
-					return fmt.Errorf("authenticationRefs schema not found for %s", verb.Path), errors
-				}
+		// // Add auth schema references to the spec schema
+		// schema.Properties.Set("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
+		// 	Type:        []string{"object"},
+		// 	Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
+		// schema.Required = append(schema.Required, []string{"authenticationRefs"}...)
 
-				// Ensure authSchemaProxy.Schema().Properties is initialized
-				if authSchemaProxy.Schema().Properties == nil {
-					authSchemaProxy.Schema().Properties = orderedmap.New[string, *base.SchemaProxy]()
-				}
-				authSchemaProxy.Schema().Properties.Set(fmt.Sprintf("%sRef", text.FirstToLower(key)),
-					base.CreateSchemaProxy(&base.Schema{Type: []string{"string"}}))
+		for key := range secByteSchema {
+			authSchemaProxy := schema.Properties.Value("authenticationRefs")
+			if authSchemaProxy == nil {
+				return fmt.Errorf("authenticationRefs schema not found for %s", verb.Path), errors
 			}
 
-			for _, verb := range resource.VerbsDescription {
-				for el := doc.Model.Paths.PathItems.First(); el != nil; el = el.Next() {
-					path := el.Value()
-					ops := path.GetOperations()
-					if ops == nil {
-						continue
-					}
-				}
-				path := doc.Model.Paths.PathItems.Value(verb.Path)
-				if path == nil {
-					return fmt.Errorf("path %s not found", verb.Path), errors
-				}
+			// Ensure authSchemaProxy.Schema().Properties is initialized
+			if authSchemaProxy.Schema().Properties == nil {
+				authSchemaProxy.Schema().Properties = orderedmap.New[string, *base.SchemaProxy]()
+			}
+			authSchemaProxy.Schema().Properties.Set(fmt.Sprintf("%sRef", text.FirstToLower(key)),
+				base.CreateSchemaProxy(&base.Schema{Type: []string{"string"}}))
+		}
+
+		for _, verb := range resource.VerbsDescription {
+			for el := doc.Model.Paths.PathItems.First(); el != nil; el = el.Next() {
+				path := el.Value()
 				ops := path.GetOperations()
 				if ops == nil {
 					continue
 				}
-				for op := ops.First(); op != nil; op = op.Next() {
-					for _, param := range op.Value().Parameters {
-						if _, ok := schema.Properties.Get(param.Name); ok {
-							errors = append(errors, fmt.Errorf("parameter %s already exists in schema", param.Name))
-							continue
-						}
-
-						schema.Properties.Set(param.Name, param.Schema)
-						schemaProxyParam := schema.Properties.Value(param.Name)
-						if schemaProxyParam == nil {
-							return fmt.Errorf("schema proxy for %s is nil", param.Name), errors
-						}
-						schemaParam, err := schemaProxyParam.BuildSchema()
-						if err != nil {
-							return fmt.Errorf("building schema for %s: %w", verb.Path, err), errors
-						}
-						schemaParam.Description = fmt.Sprintf("PARAMETER: %s, VERB: %s - %s", param.In, text.CapitaliseFirstLetter(op.Key()), param.Description)
+			}
+			path := doc.Model.Paths.PathItems.Value(verb.Path)
+			if path == nil {
+				return fmt.Errorf("path %s not found", verb.Path), errors
+			}
+			ops := path.GetOperations()
+			if ops == nil {
+				continue
+			}
+			for op := ops.First(); op != nil; op = op.Next() {
+				for _, param := range op.Value().Parameters {
+					if _, ok := schema.Properties.Get(param.Name); ok {
+						errors = append(errors, fmt.Errorf("parameter %s already exists in schema", param.Name))
+						continue
 					}
+
+					schema.Properties.Set(param.Name, param.Schema)
+					schemaProxyParam := schema.Properties.Value(param.Name)
+					if schemaProxyParam == nil {
+						return fmt.Errorf("schema proxy for %s is nil", param.Name), errors
+					}
+					schemaParam, err := schemaProxyParam.BuildSchema()
+					if err != nil {
+						return fmt.Errorf("building schema for %s: %w", verb.Path, err), errors
+					}
+					schemaParam.Description = fmt.Sprintf("PARAMETER: %s, VERB: %s - %s", param.In, text.CapitaliseFirstLetter(op.Key()), param.Description)
 				}
 			}
-
-			if schema == nil {
-				return fmt.Errorf("schema is nil for %s", verb.Path), errors
-			}
-
-			byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
-			if err != nil {
-				return err, errors
-			}
-
-			specByteSchema[resource.Kind] = byteSchema
 		}
+
+		if schema == nil {
+			return fmt.Errorf("schema is nil for %s", verb.Path), errors
+		}
+
+		byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
+		if err != nil {
+			return err, errors
+		}
+
+		specByteSchema[resource.Kind] = byteSchema
 	}
 
 	var statusByteSchema []byte

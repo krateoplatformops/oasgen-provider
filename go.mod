@@ -1,4 +1,4 @@
-module github.com/matteogastaldello/swaggergen-provider
+module github.com/krateoplatformops/oasgen-provider
 
 go 1.22.0
 

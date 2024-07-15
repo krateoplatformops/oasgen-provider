@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/transpiler/jsonschema"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/transpiler/jsonschema"
 )
 
 func TestFieldGeneration(t *testing.T) {

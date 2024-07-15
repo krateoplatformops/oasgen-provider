@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/coder"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/coder"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 

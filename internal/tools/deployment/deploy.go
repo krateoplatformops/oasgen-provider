@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/gobuffalo/flect"
-	definitionsv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/restdefinitions/v1alpha1"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
+	definitionsv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"gopkg.in/yaml.v2"

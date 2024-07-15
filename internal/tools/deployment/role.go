@@ -7,7 +7,6 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/gobuffalo/flect"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen"
 	"sigs.k8s.io/yaml"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -69,12 +68,12 @@ func InstallRole(ctx context.Context, kube client.Client, obj *rbacv1.Role) erro
 	)
 }
 
-func PopulateRole(resource crdgen.Result, role *rbacv1.Role) {
+func PopulateRole(resource schema.GroupVersionKind, role *rbacv1.Role) {
 
-	res := strings.ToLower(flect.Pluralize(resource.GVK.Kind))
+	res := strings.ToLower(flect.Pluralize(resource.Kind))
 
 	role.Rules = append(role.Rules, rbacv1.PolicyRule{
-		APIGroups: []string{resource.GVK.Group},
+		APIGroups: []string{resource.Group},
 		Resources: []string{res, fmt.Sprintf("%s/status", res)},
 		Verbs:     []string{"*"},
 	})

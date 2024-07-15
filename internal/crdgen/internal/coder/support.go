@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/transpiler"
-	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen/internal/transpiler/jsonschema"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/transpiler"
+	"github.com/krateoplatformops/oasgen-provider/internal/crdgen/internal/transpiler/jsonschema"
 )
 
 func normalizeVersion(ver string) string {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/dave/jennifer/jen"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/text"
 )
 
 func GenerateManaged(workdir string, res *Resource) error {
