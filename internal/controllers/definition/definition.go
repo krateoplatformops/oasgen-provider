@@ -267,14 +267,16 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("initializing role: %w", err)
 	}
 
+	gvk := schema.GroupVersionKind{
+		Group:   cr.Spec.ResourceGroup,
+		Version: "v1alpha1",
+		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
+	}
+
 	resource := crdgen.Generate(ctx, crdgen.Options{
-		Managed: true,
-		WorkDir: fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
-		GVK: schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: "v1alpha1",
-			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
-		},
+		Managed:                true,
+		WorkDir:                fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
+		GVK:                    gvk,
 		Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
 		SpecJsonSchemaGetter:   gen.OASSpecJsonSchemaGetter(),
 		StatusJsonSchemaGetter: gen.OASStatusJsonSchemaGetter(),
@@ -292,13 +294,18 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	if err != nil {
 		return fmt.Errorf("installing CRD: %w", err)
 	}
-	rbactools.PopulateRole(resource.GVK, &role)
+	rbactools.PopulateRole(gvk, &role)
 
 	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {
 			e.log.Debug("Generating Auth Schema Name", "Error:", err)
 			continue
+		}
+		gvk := schema.GroupVersionKind{
+			Group:   cr.Spec.ResourceGroup,
+			Version: "v1alpha1",
+			Kind:    text.CapitaliseFirstLetter(authSchemaName),
 		}
 
 		crdOk, err := deployment.LookupCRD(ctx, e.kube, schema.GroupVersionResource{
@@ -311,22 +318,18 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 		if crdOk {
 			e.log.Debug("CRD already exists", "Kind:", authSchemaName)
-			rbactools.PopulateRole(schema.GroupVersionKind{
-				Group:   cr.Spec.ResourceGroup,
-				Version: "v1alpha1",
-				Kind:    text.CapitaliseFirstLetter(authSchemaName),
-			}, &role)
+			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+				Kind:       gvk.Kind,
+				APIVersion: gvk.GroupVersion().String(),
+			})
+			rbactools.PopulateRole(gvk, &role)
 			continue
 		}
 
 		resource = crdgen.Generate(ctx, crdgen.Options{
-			Managed: false,
-			WorkDir: fmt.Sprintf("gen-crds/%s", authSchemaName),
-			GVK: schema.GroupVersionKind{
-				Group:   cr.Spec.ResourceGroup,
-				Version: "v1alpha1",
-				Kind:    text.CapitaliseFirstLetter(authSchemaName),
-			},
+			Managed:                false,
+			WorkDir:                fmt.Sprintf("gen-crds/%s", authSchemaName),
+			GVK:                    gvk,
 			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
 			SpecJsonSchemaGetter:   gen.OASAuthJsonSchemaGetter(authSchemaName),
 			StatusJsonSchemaGetter: generator.StaticJsonSchemaGetter(),
@@ -346,7 +349,12 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		rbactools.PopulateRole(resource.GVK, &role)
+		cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+			Kind:       gvk.Kind,
+			APIVersion: gvk.GroupVersion().String(),
+		})
+
+		rbactools.PopulateRole(gvk, &role)
 	}
 
 	err = deployment.Deploy(ctx, deployment.DeployOptions{
@@ -364,6 +372,12 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	cr.SetConditions(rtv1.Creating())
+	cr.Status.Resource = definitionv1alpha1.KindApiVersion{
+		Kind:       gvk.Kind,
+		APIVersion: gvk.GroupVersion().String(),
+	}
+	cr.Status.OASPath = cr.Spec.OASPath
+
 	err = e.kube.Status().Update(ctx, cr)
 
 	e.log.Debug("Created RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
