@@ -73,13 +73,16 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 				}
 			}
 		}
-		om := orderedmap.New[string, *base.SchemaProxy]()
-		om.Set("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
+		authPair := orderedmap.NewPair("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
 			Type:        []string{"object"},
 			Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
-		req := []string{}
+		req := []string{
+			"authenticationRefs",
+		}
 
 		if schema == nil {
+			om := orderedmap.New[string, *base.SchemaProxy]()
+			om.Set(authPair.Key(), authPair.Value())
 			schemaproxy := base.CreateSchemaProxy(&base.Schema{
 				Type:       []string{"object"},
 				Properties: om,
@@ -87,7 +90,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			})
 			schema = schemaproxy.Schema()
 		} else {
-			schema.Properties = om
+			schema.Properties.Set(authPair.Key(), authPair.Value())
 			schema.Required = req
 		}
 
@@ -188,7 +191,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		secByteSchema:    secByteSchema,
 	}
 
-	return nil, nil, errors
+	return g, nil, errors
 }
 
 func (g *OASSchemaGenerator) OASSpecJsonSchemaGetter() crdgen.JsonSchemaGetter {

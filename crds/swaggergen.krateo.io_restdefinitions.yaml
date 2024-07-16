@@ -19,9 +19,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.oasPath
-      name: RESOURCE
-      type: string
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: READY
       type: string
@@ -29,6 +26,18 @@ spec:
       name: AGE
       priority: 10
       type: date
+    - jsonPath: .status.resource.apiVersion
+      name: API VERSION
+      priority: 10
+      type: string
+    - jsonPath: .status.resource.kind
+      name: KIND
+      priority: 10
+      type: string
+    - jsonPath: .status.oasPath
+      name: OAS PATH
+      priority: 10
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -162,6 +171,18 @@ spec:
           status:
             description: RestDefinitionStatus is the status of a RestDefinition.
             properties:
+              authentications:
+                description: 'Authentications: the list of authentications to use'
+                items:
+                  properties:
+                    apiVersion:
+                      description: 'APIVersion: the api version of the resource'
+                      type: string
+                    kind:
+                      description: 'Kind: the kind of the resource'
+                      type: string
+                  type: object
+                type: array
               conditions:
                 description: Conditions of the resource.
                 items:
@@ -199,9 +220,18 @@ spec:
                   type: object
                 type: array
               oasPath:
+                description: 'OASPath: the path to the OAS Specification file'
                 type: string
-            required:
-            - oasPath
+              resource:
+                description: 'Resource: the resource to manage'
+                properties:
+                  apiVersion:
+                    description: 'APIVersion: the api version of the resource'
+                    type: string
+                  kind:
+                    description: 'Kind: the kind of the resource'
+                    type: string
+                type: object
             type: object
         type: object
     served: true

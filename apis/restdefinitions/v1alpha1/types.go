@@ -82,27 +82,41 @@ type RestDefinitionSpec struct {
 	Resource Resource `json:"resource"`
 }
 
+type KindApiVersion struct {
+	// APIVersion: the api version of the resource
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
+	// Kind: the kind of the resource
+	// +optional
+	Kind string `json:"kind,omitempty"`
+}
+
 // RestDefinitionStatus is the status of a RestDefinition.
 type RestDefinitionStatus struct {
 	rtv1.ManagedStatus `json:",inline"`
 
+	// OASPath: the path to the OAS Specification file
+	// +optional
 	OASPath string `json:"oasPath"`
-	// Created bool `json:"created"`
-	// // Resource: the generated custom resource
-	// // +optional
-	// Resources  `json:"resource,omitempty"`
 
-	// // PackageURL: .tgz or oci chart direct url
-	// // +optional
-	// PackageURL string `json:"packageUrl,omitempty"`
+	// Resource: the resource to manage
+	// +optional
+	Resource KindApiVersion `json:"resource"`
+
+	// Authentications: the list of authentications to use
+	// +optional
+	Authentications []KindApiVersion `json:"authentications"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:scope=Namespaced,categories={krateo,restdefinition,core}
-//+kubebuilder:printcolumn:name="RESOURCE",type="string",JSONPath=".status.oasPath"
 //+kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 //+kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp",priority=10
+//+kubebuilder:printcolumn:name="API VERSION",type="string",JSONPath=".status.resource.apiVersion",priority=10
+//+kubebuilder:printcolumn:name="KIND",type="string",JSONPath=".status.resource.kind",priority=10
+//+kubebuilder:printcolumn:name="OAS PATH",type="string",JSONPath=".status.oasPath",priority=10
 
 // RestDefinition is a RestDefinition type with a spec and a status.
 type RestDefinition struct {
