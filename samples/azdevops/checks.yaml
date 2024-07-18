@@ -5,12 +5,10 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/79b82d804e475d57342fe7a396a826a505b1de88/approvalandchecks/pipelinechecks.yaml
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/e6a44e4276ff0c6bc69698790c1355b5d20d5f41/approvalandchecks/pipelinechecks.yaml
   resourceGroup: azure.devops.com
   resource:
     kind: Checks
-    # compareList:
-    # - resource.id
     identifiers:
     - id
     - resource.id
