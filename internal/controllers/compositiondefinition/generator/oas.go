@@ -137,6 +137,16 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		if schema == nil {
 			return nil, fmt.Errorf("schema is nil for %s", verb.Path), errors
 		}
+		// Add the identifiers to the properties map
+		for _, identifier := range identifiers {
+			_, ok := schema.Properties.Get(identifier)
+			if !ok {
+				schema.Properties.Set(identifier, base.CreateSchemaProxy(&base.Schema{
+					Description: fmt.Sprintf("IDENTIFIER: %s", identifier),
+					Type:        []string{"string"},
+				}))
+			}
+		}
 
 		byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
 		if err != nil {
