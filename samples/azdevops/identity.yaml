@@ -1,0 +1,22 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-identity
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/identity/identity.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: Identity
+    # compareList: ["name", "description"]
+    identifiers:
+      - id
+      - descriptor
+      - subjectDescriptor
+      - providerDisplayName
+    verbsDescription:
+    - action: findby
+      method: GET
+      path: /{organization}/_apis/identities
+
