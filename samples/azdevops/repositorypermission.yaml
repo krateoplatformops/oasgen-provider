@@ -1,0 +1,26 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-repoperm
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/429e067b3652bb9e4975d38d5d2133cd3c00846a/security/security.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: AccessControlEntries
+    # compareList: ["name", "description"]
+    # identifiers:
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /{organization}/_apis/accesscontrolentries/{securityNamespaceId}
+    - action: update
+      method: POST
+      path: /{organization}/_apis/accesscontrolentries/{securityNamespaceId}
+    - action: delete
+      method: DELETE
+      path: /{organization}/_apis/accesscontrolentries/{securityNamespaceId}
+      altFieldMapping:
+        accessControlEntries[].descriptor: descriptors
+

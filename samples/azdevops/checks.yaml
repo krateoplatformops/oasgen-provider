@@ -5,13 +5,13 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/approvalandchecks/pipelinechecks.yaml
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/e6a44e4276ff0c6bc69698790c1355b5d20d5f41/approvalandchecks/pipelinechecks.yaml
   resourceGroup: azure.devops.com
   resource:
     kind: Checks
-    # compareList: ["name", "description"]
     identifiers:
     - id
+    - resource.id
     verbsDescription:
     - action: create
       method: POST
@@ -19,6 +19,8 @@ spec:
     - action: findby
       method: GET
       path: /{organization}/{project}/_apis/pipelines/checks/configurations
+      altFieldMapping:
+        id: resource.id
     - action: delete
       method: DELETE
       path: /{organization}/{project}/_apis/pipelines/checks/configurations/{id}
