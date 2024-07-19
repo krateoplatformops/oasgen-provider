@@ -1,0 +1,38 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-memberships
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/8a11b40fefa1c8f18bba7100d8eaa0d229b37b4d/graph/groups.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: Membership
+    # compareList: ["name", "description"]
+    identifiers:
+      - containerDescriptor
+      - memberDescriptor 
+    verbsDescription:
+    - action: findby
+      method: GET
+      path: /{organization}/_apis/graph/Memberships/{subjectDescriptor}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        memberDescriptor: subjectDescriptor
+    - action: create
+      method: PUT
+      path: /{organization}/_apis/graph/memberships/{subjectDescriptor}/{containerDescriptor}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        memberDescriptor: subjectDescriptor
+    - action: get
+      method: GET
+      path: /{organization}/_apis/graph/memberships/{subjectDescriptor}/{containerDescriptor}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        memberDescriptor: subjectDescriptor
+    - action: delete
+      method: DELETE
+      path: /{organization}/_apis/graph/memberships/{subjectDescriptor}/{containerDescriptor}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        memberDescriptor: subjectDescriptor
+    
+

@@ -44,14 +44,24 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 
 	specByteSchema := make(map[string][]byte)
 	for _, verb := range resource.VerbsDescription {
-		if strings.EqualFold(verb.Action, "create") && strings.EqualFold(verb.Method, "post") {
+		if strings.EqualFold(verb.Action, "create") {
 			path := doc.Model.Paths.PathItems.Value(verb.Path)
 			if path == nil {
 				return nil, fmt.Errorf("path %s not found", verb.Path), errors
 			}
 			bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
-			if path.Post.RequestBody != nil {
-				bodySchema = path.Post.RequestBody.Content.Value("application/json").Schema
+
+			ops := path.GetOperations()
+			if ops == nil {
+				return nil, fmt.Errorf("operations not found for %s", verb.Path), errors
+			}
+
+			op := ops.Value(strings.ToLower(verb.Method))
+			if op == nil {
+				return nil, fmt.Errorf("operation not found for %s", verb.Path), errors
+			}
+			if op.RequestBody != nil {
+				bodySchema = op.RequestBody.Content.Value("application/json").Schema
 			}
 			if bodySchema == nil {
 				return nil, fmt.Errorf("body schema not found for %s", verb.Path), errors
