@@ -1,0 +1,41 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-policy
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/04db2133d6ab57ff2dd5b1b2865b759fbe7515d6/policy/policy.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: Policy
+    # compareList: ["name", "description"]
+    identifiers: 
+    - id
+    verbsDescription:
+    - action: create
+      method: POST
+      path:  /{organization}/{project}/_apis/policy/configurations
+    - action: get
+      method: GET
+      path:  /{organization}/{project}/_apis/policy/configurations/{configurationId}
+      altFieldMapping:
+        id: configurationId
+    - action: findby
+      method: GET
+      path:  /{organization}/{project}/_apis/policy/configurations
+    - action: delete
+      method: DELETE
+      path:  /{organization}/{project}/_apis/policy/configurations/{configurationId}
+      altFieldMapping:
+        id: configurationId
+    - action: update
+      method: PUT
+      path: /{organization}/{project}/_apis/policy/configurations/{configurationId}
+      altFieldMapping:
+        id: configurationId
+
+
+
+
+  

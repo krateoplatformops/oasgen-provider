@@ -1,0 +1,43 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: repository-def
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/88deb94d62b269ca1e4badf6f006ff6fbe3df38f/git/git-new.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: GitRepository
+    # compareList: ["name", "description"]
+    identifiers: 
+    - id
+    - name
+    verbsDescription:
+    - action: create
+      method: POST
+      path:  /{organization}/{project}/_apis/git/repositories
+      altFieldMapping:
+        project.id: project
+    - action: get
+      method: GET
+      path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: repositoryId
+        project.id: project
+    - action: findby
+      method: GET
+      path:  /{organization}/{project}/_apis/git/repositories
+      altFieldMapping:
+        project.id: project
+    - action: delete
+      method: DELETE
+      path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        project.id: project
+        id: repositoryId
+
+
+
+
+  

@@ -1,0 +1,36 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-variablegroups
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/40455059bc6b1e63d7a6e8c356c75a16f149ee29/environments/environments.yaml
+  resourceGroup: azure.devops.com
+  resource:
+    kind: VariableGroup
+    identifiers:
+    - id
+    - name
+    verbsDescription:
+    - action: findby
+      method: GET
+      path: /{organization}/{project}/_apis/distributedtask/variablegroups
+    - action: get
+      method: GET
+      path: /{organization}/{project}/_apis/distributedtask/variablegroups/{groupId}
+      altFieldMapping:
+        id: groupId
+    - action: delete
+      method: DELETE 
+      path: /{organization}/_apis/distributedtask/variablegroups/{groupId}
+      altFieldMapping:
+        id: groupId
+    - action: create
+      method: POST
+      path: /{organization}/{project}/_apis/distributedtask/variablegroups
+    - action: update
+      method: PUT
+      path: /{organization}/{project}/_apis/distributedtask/variablegroups/{groupId}
+      altFieldMapping:
+        id: groupId

@@ -1,0 +1,35 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-queues
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/d9a5fd48e338733354e7272e5f1be73c76ec8f27/environments/environments.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: Queue
+    identifiers:
+    - id
+    - name
+    verbsDescription:
+    - action: get
+      method: GET
+      path: /{organization}/{project}/_apis/distributedtask/queues/{queueId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: queueId
+    - action: findby
+      method: GET
+      path: /{organization}/{project}/_apis/distributedtask/queues
+    - action: create
+      method: POST
+      path: /{organization}/{project}/_apis/distributedtask/queues
+    - action: delete
+      method: DELETE
+      path: /{organization}/{project}/_apis/distributedtask/queues/{queueId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: queueId
+
+
+
+  
