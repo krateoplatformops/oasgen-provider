@@ -64,6 +64,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 			log:      log,
 			recorder: recorder,
 		}),
+		reconciler.WithPollInterval(o.PollInterval),
 		reconciler.WithLogger(log),
 		reconciler.WithRecorder(event.NewAPIRecorder(recorder)))
 
@@ -87,7 +88,6 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 	}
 	var err error
 	swaggerPath := cr.Spec.OASPath
-
 	basePath := "/tmp/swaggergen-provider"
 	err = os.MkdirAll(basePath, os.ModePerm)
 	defer os.RemoveAll(basePath)
