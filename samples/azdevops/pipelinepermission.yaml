@@ -1,0 +1,26 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-pipelinepermissions
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/551dee778dd79044d9d2c8c2da3f9b671ab6f617/approvalandchecks/pipelinepermissions.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: PipelinePermission
+    # identifiers: 
+    # - 
+    verbsDescription:
+    - action: get
+      method: GET
+      path:  /{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
+    - action: update
+      method: PATCH
+      path: /{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
+    - action: create
+      method: PATCH
+      path: /{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
+
+
+  

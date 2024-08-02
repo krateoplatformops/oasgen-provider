@@ -1,0 +1,40 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-pools
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/d9a5fd48e338733354e7272e5f1be73c76ec8f27/environments/environments.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: Pool
+    identifiers:
+    - id
+    - name
+    verbsDescription:
+    - action: get
+      method: GET
+      path: /{organization}/_apis/distributedtask/pools/{poolId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: poolId
+    - action: findby
+      method: GET
+      path: /{organization}/_apis/distributedtask/pools
+    - action: update
+      method: PATCH
+      path: /{organization}/_apis/distributedtask/pools/{poolId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: poolId
+    - action: create
+      method: POST
+      path: /{organization}/_apis/distributedtask/pools
+    - action: delete
+      method: DELETE
+      path: /{organization}/_apis/distributedtask/pools/{poolId}
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: poolId
+
+
+
+  

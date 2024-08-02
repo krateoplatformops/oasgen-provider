@@ -1,0 +1,33 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-feedpermissions
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/1fbe57da17306afe80d9a333a9492f838e5bd250/artifacts/feeds.yaml
+  resourceGroup: azure.devops.com
+  resource: 
+    kind: FeedPermission
+    identifiers: 
+      - feedId
+      - identityDescriptor
+    verbsDescription:
+    - action: get
+      method: GET
+      path:  /{organization}/{project}/_apis/packaging/Feeds/{feedId}/permissions
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: feedId
+    - action: update
+      method: PATCH
+      path: /{organization}/{project}/_apis/packaging/Feeds/{feedId}/permissions
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: feedId
+    - action: create
+      method: PATCH
+      path: /{organization}/{project}/_apis/packaging/Feeds/{feedId}/permissions
+      altFieldMapping:  # Optional: with the format <newField>: <oldField>
+        id: feedId
+
+
+  

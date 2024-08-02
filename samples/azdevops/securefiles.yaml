@@ -1,0 +1,28 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-securefiles
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/795553e48d38430ad68240df3dbffd5344fab67e/environments/environments.yaml
+  resourceGroup: azure.devops.com
+  resource:
+    kind: SecureFile
+    identifiers:
+    - id
+    - name
+    verbsDescription:
+    - action: findby
+      method: GET
+      path: /{organization}/{project}/_apis/distributedtask/securefiles
+    - action: get
+      method: GET
+      path: /{organization}/{project}/_apis/distributedtask/securefiles/{secureid}
+      altFieldMapping:
+        id: secureid
+    - action: delete
+      method: DELETE 
+      path: /{organization}/{project}/_apis/distributedtask/securefiles/{secureid}
+      altFieldMapping:
+        id: secureid

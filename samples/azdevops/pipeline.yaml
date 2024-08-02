@@ -1,0 +1,26 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-pipeline
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/e108d151be30cc21693768b4f73edda8ae4581c4/pipelines/pipelines.yaml
+  resourceGroup: azure.devops.com
+  resource:
+    kind: Pipeline
+    identifiers:
+    - id
+    - name
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /{organization}/{project}/_apis/pipelines
+    - action: findby
+      method: GET
+      path: /{organization}/{project}/_apis/pipelines
+    - action: get
+      method: GET
+      path: /{organization}/{project}/_apis/pipelines/{pipelineId}
+      altFieldMapping:
+        id: pipelineId
