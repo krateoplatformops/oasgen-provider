@@ -11,7 +11,6 @@ import (
 	rbactools "github.com/krateoplatformops/oasgen-provider/internal/tools/rbactools"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
-	"gopkg.in/yaml.v2"
 	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -141,9 +140,6 @@ func Deploy(ctx context.Context, opts DeployOptions) error {
 		Version: opts.ResourceVersion,
 		Kind:    opts.Spec.Resource.Kind,
 	})
-
-	by, _ := yaml.Marshal(opts.Role)
-	fmt.Println(string(by))
 
 	if err := rbactools.InstallRole(ctx, opts.KubeClient, &opts.Role); err != nil {
 		return fmt.Errorf("failed to install role: %w", err)
