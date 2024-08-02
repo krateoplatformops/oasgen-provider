@@ -70,6 +70,18 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			if err != nil {
 				return nil, fmt.Errorf("building schema for %s: %w", verb.Path, err), errors
 			}
+			if len(schema.Type) > 0 {
+				if schema.Type[0] == "array" {
+					schema.Properties = orderedmap.New[string, *base.SchemaProxy]()
+					schema.Properties.Set("items", base.CreateSchemaProxy(
+						&base.Schema{
+							Type:  []string{"array"},
+							Items: schema.Items,
+						}))
+					schema.Type = []string{"object"}
+				}
+			}
+
 			populateFromAllOf(schema)
 		}
 		authPair := orderedmap.NewPair("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
@@ -89,6 +101,9 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			})
 			schema = schemaproxy.Schema()
 		} else {
+			if schema.Properties == nil {
+				schema.Properties = orderedmap.New[string, *base.SchemaProxy]()
+			}
 			schema.Properties.Set(authPair.Key(), authPair.Value())
 			schema.Required = req
 		}
@@ -206,6 +221,19 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 // func PopulateFromAllOf() is a method that populates the schema with the properties from the allOf field.
 // the recursive function to populate the schema with the properties from the allOf field.
 func populateFromAllOf(schema *base.Schema) {
+	if len(schema.Type) > 0 && schema.Type[0] == "array" {
+		if schema.Items != nil {
+			if schema.Items.N == 0 {
+				sch, err := schema.Items.A.BuildSchema()
+				if err != nil {
+					return
+				}
+
+				populateFromAllOf(sch)
+			}
+		}
+		return
+	}
 	for prop := schema.Properties.First(); prop != nil; prop = prop.Next() {
 		populateFromAllOf(prop.Value().Schema())
 	}
