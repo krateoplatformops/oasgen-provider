@@ -17,38 +17,4 @@ cdc <-u- cr : Definition for
 cdc -r-> er : Manage (Observe, Create, Update, Delete)
 
 crd <.r. cr : Represents
-
-
-
-
-
-
-' package eventrouter {
-'   component router
-'   component informer
-'   component "v1.Event" as events
-' }
- 
-' package eventsse {
-'   component subscriber
-'   interface etcd
-'   interface queue
-
-'   package API {
-'     component "/notifications" as publisher
-'     component "/events" as getter
-'   }
-
-'   publisher-[hidden]l-getter
-'   getter -d-> etcd
-'   subscriber -u-> etcd
-'   subscriber -u-> queue
-'   publisher <-d-queue
-
-' }
-
-' subscriber -> router
-' router <- informer
-' informer -> events
-
 @enduml 
