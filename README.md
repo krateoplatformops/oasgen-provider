@@ -34,7 +34,7 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
 
 ## Getting Started
 
-1. **Prepare OAS Definition:** Begin by creating or obtaining an OAS 3.0 specification that outlines the API and resources you intend to manage within Kubernetes. For the purpose of this guide, our objective is to generate a controller and the Custom Resource Definition (CRD) needed to manage (observe, create, update, delete) a resource of type GitRepository on Azure DevOps. The initial step involves locating the OAS Specification file that describes the APIs for GitRepository resources. You can find the Git repository OAS V2 Specification [here](https://github.com/MicrosoftDocs/vsts-rest-api-specs/blob/master/specification/git/7.0/git.json). Please note that in this scenario, the specification is in version 2, whereas oasgen-provider necessitates OAS at version 3.0 . Refer to [the instructions](#how-to-converto-oas2-to-oas3) on how to convert OAS2 to OAS3. For your convenience, you can view the converted and corrected OAS3 specification for GitRepository at [this](https://github.com/matteogastaldello/azuredevops-oas3/blob/main/git/git-new.yaml) link.
+1. **Prepare OAS Definition:** Begin by creating or obtaining an OAS 3.0 specification that outlines the API and resources you intend to manage within Kubernetes. For the purpose of this guide, our objective is to generate a controller and the Custom Resource Definition (CRD) needed to manage (observe, create, update, delete) a resource of type GitRepository on Azure DevOps. The initial step involves locating the OAS Specification file that describes the APIs for GitRepository resources. You can find the Git repository OAS V2 Specification [here](https://github.com/MicrosoftDocs/vsts-rest-api-specs/blob/master/specification/git/7.0/git.json). Please note that in this scenario, the specification is in version 2, whereas oasgen-provider necessitates OAS at version 3.0 . Refer to [the instructions](#how-to-converto-oas2-to-oas3) on how to convert OAS2 to OAS3. For your convenience, you can view the converted and corrected OAS3 specification for GitRepository at [this](https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml) link.
    
 2. **Run oasgen-provider:** Execute the `oasgen-provider`. You could install the provider on your cluster using Helm
 
@@ -56,7 +56,7 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
     # Policy for handling deletion of resources managed by this definition
     deletionPolicy: Delete
     # URL pointing to the OpenAPI specification document
-    oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/git/git-new.yaml
+    oasPath: https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml
     # Grouping identifier for the resources managed by this definition
     resourceGroup: azure.devops.com
     # Details about the resource being managed
@@ -128,7 +128,7 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
         authentications:
         - apiVersion: azure.devops.com/v1alpha1
         kind: BasicAuth
-        oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/git/git-new.yaml
+        oasPath: https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml
         resource:
         apiVersion: azure.devops.com/v1alpha1
         kind: GitRepository

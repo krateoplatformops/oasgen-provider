@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/1fbe57da17306afe80d9a333a9492f838e5bd250/artifacts/feeds.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/artifacts/feeds.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: FeedPermission

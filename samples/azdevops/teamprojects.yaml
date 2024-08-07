@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/26be8c45d4dd4f3e0a6bbcc5ccee0e91b7ebb62c/core/projects.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/core/projects.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: TeamProjectReference

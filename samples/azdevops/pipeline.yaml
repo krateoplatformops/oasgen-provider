@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/e108d151be30cc21693768b4f73edda8ae4581c4/pipelines/pipelines.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/pipelines/pipelines.yaml
   resourceGroup: azure.devops.com
   resource:
     kind: Pipeline

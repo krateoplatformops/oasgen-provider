@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/88deb94d62b269ca1e4badf6f006ff6fbe3df38f/git/git-new.yaml
+  oasPath: https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: GitRepository

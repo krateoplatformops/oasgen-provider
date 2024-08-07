@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/b365301737ea8fe900af7a74dc75773359b7ef35/graph/groups.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/graph/groups.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: GraphGroup
