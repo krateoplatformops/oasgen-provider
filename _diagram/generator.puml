@@ -1,11 +1,16 @@
 @startuml oasgen-provider
-' eventsse -[hidden]- eventrouter
 
-component "oasgen-provider" as provider
-collections "RestDefinition\nManifest" as restdefinition
-collections "CRD\nManifest" as crd
-component "composition-dynamic-controller-v2" as cdc
-collections "Custom resource Manifest" as cr
+package "Generator"{
+   component "oasgen-provider" as provider
+   collections "RestDefinition\nManifest" as restdefinition
+   collections "CRD\nManifest" as crd
+}
+
+package "Dynamic Controller" {
+   component "composition-dynamic-controller-v2" as cdc
+   collections "Custom resource Manifest" as cr
+}
+
 database "External Resource" as er
 
 
