@@ -1,5 +1,5 @@
 # oasgen-provider
-A k8s controller that generates CRDs and controller to manage resources from OAS 3.0 definition.
+A k8s controller that generates CRDs and controller to manage resources from OpenAPI Specification (OAS) 3.1 (also 3.0 is supported).
 
 ## Summary
 
@@ -8,14 +8,15 @@ A k8s controller that generates CRDs and controller to manage resources from OAS
   - [Core Features](#core-features)
   - [Benefits](#benefits)
   - [Technical Overview](#technical-overview)
+    - [Architecture](#architecture)
   - [Getting Started](#getting-started)
   - [Note on API Authentication](#note-on-api-authentication)
   - [How to converto OAS2 to OAS3](#how-to-converto-oas2-to-oas3)
 
 ## Core Features
-- **CRD Generation**: Automatically generates CRDs from OAS 3.0 definitions. This allows users to define custom resources that match the schema described in their API specifications, enabling seamless integration and management within Kubernetes environments.
+- **CRD Generation**: Automatically generates CRDs from OAS 3.1 definitions. This allows users to define custom resources that match the schema described in their API specifications, enabling seamless integration and management within Kubernetes environments.
 - **Controller Generation**: Beyond CRDs, oasgen-provider also automates the creation of controllers. Controllers are essential components in Kubernetes that watch for changes in resource states and act accordingly to maintain desired states. By generating controllers from OAS definitions, oasgen-provider facilitates the management of custom resources according to the logic defined in the API specifications.
-- **Custom Resource Management**: With the generated CRDs and controllers, users can manage custom resources directly within Kubernetes. This includes creating, updating, deleting, and monitoring the state of these resources, all aligned with the definitions provided in the OAS 3.0 specification.
+- **Custom Resource Management**: With the generated CRDs and controllers, users can manage custom resources directly within Kubernetes. This includes creating, updating, deleting, and monitoring the state of these resources, all aligned with the definitions provided in the OAS 3.1 specification.
 
 
 ## Benefits
@@ -25,11 +26,15 @@ A k8s controller that generates CRDs and controller to manage resources from OAS
 
 ## Technical Overview
 
-`oasgen-provider` analyzes OAS 3.0 definitions to discern the structure and requirements of the intended resources. Utilizing this information, it orchestrates the deployment of the [composition-dynamic-controller-v2](https://github.com/krateoplatformops/composition-dynamic-controller-v2), specifically tasked with managing resources that correspond to the type defined by the CRD.
+`oasgen-provider` analyzes OAS 3.1 definitions to discern the structure and requirements of the intended resources. Utilizing this information, it orchestrates the deployment of the [composition-dynamic-controller-v2](https://github.com/krateoplatformops/composition-dynamic-controller-v2), specifically tasked with managing resources that correspond to the type defined by the CRD.
+
+### Architecture
+![Generator Architecture Image](_diagram/generator.png "Generator Architecture")
+
 
 ## Getting Started
 
-1. **Prepare OAS Definition:** Begin by creating or obtaining an OAS 3.0 specification that outlines the API and resources you intend to manage within Kubernetes. For the purpose of this guide, our objective is to generate a controller and the Custom Resource Definition (CRD) needed to manage (observe, create, update, delete) a resource of type GitRepository on Azure DevOps. The initial step involves locating the OAS Specification file that describes the APIs for GitRepository resources. You can find the Git repository OAS V2 Specification [here](https://github.com/MicrosoftDocs/vsts-rest-api-specs/blob/master/specification/git/7.0/git.json). Please note that in this scenario, the specification is in version 2, whereas oasgen-provider necessitates OAS at version 3.0 or newer. Refer to [the instructions](#how-to-converto-oas2-to-oas3) on how to convert OAS2 to OAS3. For your convenience, you can view the converted and corrected OAS3 specification for GitRepository at [this](https://github.com/matteogastaldello/azuredevops-oas3/blob/main/git/git-new.yaml) link.
+1. **Prepare OAS Definition:** Begin by creating or obtaining an OAS 3.0 specification that outlines the API and resources you intend to manage within Kubernetes. For the purpose of this guide, our objective is to generate a controller and the Custom Resource Definition (CRD) needed to manage (observe, create, update, delete) a resource of type GitRepository on Azure DevOps. The initial step involves locating the OAS Specification file that describes the APIs for GitRepository resources. You can find the Git repository OAS V2 Specification [here](https://github.com/MicrosoftDocs/vsts-rest-api-specs/blob/master/specification/git/7.0/git.json). Please note that in this scenario, the specification is in version 2, whereas oasgen-provider necessitates OAS at version 3.0 . Refer to [the instructions](#how-to-converto-oas2-to-oas3) on how to convert OAS2 to OAS3. For your convenience, you can view the converted and corrected OAS3 specification for GitRepository at [this](https://github.com/matteogastaldello/azuredevops-oas3/blob/main/git/git-new.yaml) link.
    
 2. **Run oasgen-provider:** Execute the `oasgen-provider`. You could install the provider on your cluster using Helm
 
