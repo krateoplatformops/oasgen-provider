@@ -11,7 +11,7 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
     - [Architecture](#architecture)
   - [Getting Started](#getting-started)
   - [Note on API Authentication](#note-on-api-authentication)
-  - [How to converto OAS2 to OAS3](#how-to-converto-oas2-to-oas3)
+  - [How to convert OAS 2.0 to OAS 3.0](#how-to-convert-oas-20-to-oas-30)
 
 ## Core Features
 - **CRD Generation**: Automatically generates CRDs from OAS 3.1 definitions. This allows users to define custom resources that match the schema described in their API specifications, enabling seamless integration and management within Kubernetes environments.
@@ -34,7 +34,7 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
 
 ## Getting Started
 
-1. **Prepare OAS Definition:** Begin by creating or obtaining an OAS 3.0 specification that outlines the API and resources you intend to manage within Kubernetes. For the purpose of this guide, our objective is to generate a controller and the Custom Resource Definition (CRD) needed to manage (observe, create, update, delete) a resource of type GitRepository on Azure DevOps. The initial step involves locating the OAS Specification file that describes the APIs for GitRepository resources. You can find the Git repository OAS V2 Specification [here](https://github.com/MicrosoftDocs/vsts-rest-api-specs/blob/master/specification/git/7.0/git.json). Please note that in this scenario, the specification is in version 2, whereas oasgen-provider necessitates OAS at version 3.0 . Refer to [the instructions](#how-to-converto-oas2-to-oas3) on how to convert OAS2 to OAS3. For your convenience, you can view the converted and corrected OAS3 specification for GitRepository at [this](https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml) link.
+1. **Prepare OAS Definition:** Begin by creating or obtaining an OAS 3.0+ specification that outlines the API and resources you intend to manage within Kubernetes. For the purpose of this guide, our objective is to generate a controller and the Custom Resource Definition (CRD) needed to manage (observe, create, update, delete) a resource of type GitRepository on Azure DevOps. The initial step involves locating the OAS Specification file that describes the APIs for GitRepository resources. You can find the Git repository OAS 2 Specification [here](https://github.com/MicrosoftDocs/vsts-rest-api-specs/blob/master/specification/git/7.0/git.json). Please note that in this scenario, the specification is in version 2, whereas oasgen-provider necessitates OAS at version 3.0+. Refer to [the instructions](#how-to-converto-oas2-to-oas3) on how to convert OAS 2 to OAS 3.0+. For your convenience, you can view the converted and corrected OAS 3.0+ specification for GitRepository at [this](https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml) link.
    
 2. **Run oasgen-provider:** Execute the `oasgen-provider`. You could install the provider on your cluster using Helm
 
@@ -138,15 +138,15 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
 
 If the provided OAS specification mentions authentication methods, `oasgen-provider` will generate the corresponding authentication CRDs. Additionally, it adds an `authenticationRefs` field to the specs of the resource CRD to reference the CR of the authentication.
 
-## How to converto OAS2 to OAS3
+## How to convert OAS 2.0 to OAS 3.0
 
-1. **Import the OAS2 File**: Visit the website [Swagger Editor](https://editor.swagger.io). You can either import your OAS2 file directly or copy and paste its contents into the editor. The editor will automatically recognize and display the JSON in YAML format if necessary.
+1. **Import the OAS2 File**: Visit the website [Swagger Editor](https://editor.swagger.io). You can either import your OAS 2.0 file directly or copy and paste its contents into the editor. The editor will automatically recognize and display the JSON in YAML format if necessary.
 
-2. **Convert to OpenAPI 3**: Once your OAS2 document is loaded in the Swagger Editor, navigate to `Edit` -> `Convert to OpenAPI 3`. Then, click on "Convert". This action will upgrade your document to OpenAPI version 3.
+2. **Convert to OpenAPI 3**: Once your OAS 2.0 document is loaded in the Swagger Editor, navigate to `Edit` -> `Convert to OpenAPI 3`. Then, click on "Convert". This action will upgrade your document to OpenAPI version 3.0.
 
 3. **Review and Edit in a YAML Editor**: After conversion, it's advisable to review the document for any errors or warnings that may have arisen during the conversion process. Copy the content and paste it into a dedicated YAML editor for easier manipulation. If you're using Visual Studio Code, installing an extension specifically designed for OpenAPI Specifications can enhance readability and validation.
 
-4. **Resolve Conversion Errors Manually**: Be aware that the automatic conversion might not perfectly translate all aspects of your original OAS2 document into OAS3 syntax. Some manual adjustments may be required to fully align with OpenAPI 3 specifications. Carefully review the converted document, paying attention to any highlighted errors or warnings, and make the necessary corrections.
+4. **Resolve Conversion Errors Manually**: Be aware that the automatic conversion might not perfectly translate all aspects of your original OAS 2 document into OAS 3.0 syntax. Some manual adjustments may be required to fully align with OpenAPI 3 specifications. Carefully review the converted document, paying attention to any highlighted errors or warnings, and make the necessary corrections.
 
 By following these steps, you should be able to successfully convert an OAS2 document to OAS3 while ensuring the integrity and accuracy of the specification.
 
