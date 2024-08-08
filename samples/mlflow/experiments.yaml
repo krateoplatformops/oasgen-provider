@@ -1,0 +1,27 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: mlflow-experiments
+  namespace: default
+spec:
+  deletionPolicy: Delete
+  oasPath: https://raw.githubusercontent.com/matteogastaldello/toRepo123/main/mlflow.yaml
+  resourceGroup: local.mlflow.com
+  resource: 
+    kind: Experiment
+    # compareList: ["name", "description"]
+    identifiers:
+      - experiment_id # This is the field that will be used as the identifier
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /api/2.0/mlflow/experiments/create
+    - action: delete
+      method: POST
+      path: /api/2.0/mlflow/experiments/delete
+    - action: get
+      method: GET
+      path: /api/2.0/mlflow/experiments/get
+    - action: update
+      method: POST
+      path: /api/2.0/mlflow/experiments/update
