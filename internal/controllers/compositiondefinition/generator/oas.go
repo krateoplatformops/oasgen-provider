@@ -84,30 +84,32 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 
 			populateFromAllOf(schema)
 		}
-		authPair := orderedmap.NewPair("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
-			Type:        []string{"object"},
-			Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
-		req := []string{
-			"authenticationRefs",
-		}
 
-		if schema == nil {
-			om := orderedmap.New[string, *base.SchemaProxy]()
-			om.Set(authPair.Key(), authPair.Value())
-			schemaproxy := base.CreateSchemaProxy(&base.Schema{
-				Type:       []string{"object"},
-				Properties: om,
-				Required:   req,
-			})
-			schema = schemaproxy.Schema()
-		} else {
-			if schema.Properties == nil {
-				schema.Properties = orderedmap.New[string, *base.SchemaProxy]()
+		if len(secByteSchema) > 0 {
+			authPair := orderedmap.NewPair("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
+				Type:        []string{"object"},
+				Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
+			req := []string{
+				"authenticationRefs",
 			}
-			schema.Properties.Set(authPair.Key(), authPair.Value())
-			schema.Required = req
-		}
 
+			if schema == nil {
+				om := orderedmap.New[string, *base.SchemaProxy]()
+				om.Set(authPair.Key(), authPair.Value())
+				schemaproxy := base.CreateSchemaProxy(&base.Schema{
+					Type:       []string{"object"},
+					Properties: om,
+					Required:   req,
+				})
+				schema = schemaproxy.Schema()
+			} else {
+				if schema.Properties == nil {
+					schema.Properties = orderedmap.New[string, *base.SchemaProxy]()
+				}
+				schema.Properties.Set(authPair.Key(), authPair.Value())
+				schema.Required = req
+			}
+		}
 		for key := range secByteSchema {
 			authSchemaProxy := schema.Properties.Value("authenticationRefs")
 			if authSchemaProxy == nil {
