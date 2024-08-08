@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/429e067b3652bb9e4975d38d5d2133cd3c00846a/security/security.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/security/security.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: AccessControlEntries

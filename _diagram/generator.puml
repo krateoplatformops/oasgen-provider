@@ -1,0 +1,25 @@
+@startuml oasgen-provider
+
+package "Generator"{
+   component "oasgen-provider" as provider
+   collections "RestDefinition\nManifest" as restdefinition
+   collections "CRD\nManifest" as crd
+}
+
+package "Dynamic Controller" {
+   component "composition-dynamic-controller-v2" as cdc
+   collections "Custom resource Manifest" as cr
+}
+
+database "External Resource" as er
+
+
+provider -d- restdefinition : Definition for
+provider -u-> crd : Generate
+provider -r-> cdc : Deploy
+
+cdc <-u- cr : Definition for
+cdc -r-> er : Manage (Observe, Create, Update, Delete)
+
+crd <.r. cr : Represents
+@enduml 

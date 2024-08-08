@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/e6a44e4276ff0c6bc69698790c1355b5d20d5f41/approvalandchecks/pipelinechecks.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/approvalandchecks/pipelinechecks.yaml
   resourceGroup: azure.devops.com
   resource:
     kind: Checks

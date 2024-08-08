@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/04db2133d6ab57ff2dd5b1b2865b759fbe7515d6/policy/policy.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/policy/policy.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: Policy

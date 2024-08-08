@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Orphan 
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/git/git.yaml
+  oasPath: https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: PullRequest
