@@ -21,7 +21,7 @@ func TestGenerateAuthSchemaFromSecuritySchema(t *testing.T) {
 				Type:   "http",
 				Scheme: "basic",
 			},
-			expected: []byte(`{"username":"","passwordRef":{}}`),
+			expected: []byte(`{"properties":{"passwordRef":{"properties":{"key":{"type":"string"},"name":{"type":"string"},"namespace":{"type":"string"}},"required":["key","name","namespace"],"type":"object"},"username":{"type":"string"}},"required":["username","passwordRef"],"type":"object"}`),
 			err:      nil,
 		},
 		{
@@ -30,7 +30,7 @@ func TestGenerateAuthSchemaFromSecuritySchema(t *testing.T) {
 				Type:   "http",
 				Scheme: "bearer",
 			},
-			expected: []byte(`{"tokenRef":{}}`),
+			expected: []byte(`{"properties":{"tokenRef":{"properties":{"key":{"type":"string"},"name":{"type":"string"},"namespace":{"type":"string"}},"required":["key","name","namespace"],"type":"object"}},"required":["tokenRef"],"type":"object"}`),
 			err:      nil,
 		},
 		{
@@ -48,7 +48,7 @@ func TestGenerateAuthSchemaFromSecuritySchema(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			byteSchema, err := GenerateAuthSchemaFromSecuritySchema(tc.doc)
 			if !reflect.DeepEqual(byteSchema, tc.expected) {
-				t.Errorf("Expected byte schema: %v, got: %v", tc.expected, byteSchema)
+				t.Errorf("Expected byte schema: %v, got: %v", string(tc.expected), string(byteSchema))
 			}
 
 			if err != nil && tc.err != nil {
