@@ -5,11 +5,10 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/matteogastaldello/toRepo123/main/mlflow.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/mlflow-oas3/main/mlflow.yaml
   resourceGroup: local.mlflow.com
   resource: 
     kind: Experiment
-    # compareList: ["name", "description"]
     identifiers:
       - experiment_id # This is the field that will be used as the identifier
     verbsDescription:
