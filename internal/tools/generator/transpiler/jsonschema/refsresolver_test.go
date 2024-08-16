@@ -1,6 +1,8 @@
 package jsonschema
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,15 +24,18 @@ func TestRefResolver_GetPath(t *testing.T) {
 	resolver := NewRefResolver([]*Schema{root, child})
 
 	path := resolver.GetPath(child)
-	assert.Equal(t, "#/child", path)
+	assert.Equal(t, "/child", path)
 }
 func TestRefResolver_GetSchemaByReference(t *testing.T) {
-	root := &Schema{ID: "http://example.com/schema"}
-	child := &Schema{Parent: root, PathElement: "child"}
+	root := &Schema{ID: "http://example.com/schema", Reference: "#/child"}
+	child := &Schema{Parent: root, PathElement: "child", ID: "http://example.com/child"}
 	resolver := NewRefResolver([]*Schema{root, child})
 	_ = resolver.Init()
 
-	refSchema := &Schema{Parent: root, Reference: "#/child"}
+	b, _ := json.Marshal([]*Schema{root, child})
+	fmt.Println(string(b))
+
+	refSchema := &Schema{Parent: root, Reference: "child"}
 
 	schema, err := resolver.GetSchemaByReference(refSchema)
 	assert.NoError(t, err)
