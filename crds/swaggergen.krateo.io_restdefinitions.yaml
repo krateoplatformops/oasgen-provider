@@ -79,44 +79,15 @@ spec:
               resource:
                 description: The resource to manage
                 properties:
-                  compareList:
-                    description: 'CompareList: the list of fields to compare when
-                      checking if the resource is the same'
-                    items:
-                      type: string
-                    type: array
                   identifiers:
-                    description: 'Identifiers: the list of fields to use as identifiers'
+                    description: 'Identifiers: the list of fields to use as identifiers
+                      - used to populate the status of the resource'
                     items:
                       type: string
                     type: array
                   kind:
                     description: 'Name: the name of the resource to manage'
                     type: string
-                  ownerRefs:
-                    description: 'OwnerRefs: Set GVK to resources which the defined
-                      resource have ownerReference.'
-                    items:
-                      properties:
-                        field:
-                          description: 'Field: the field to use as reference - represents
-                            the id of the resource'
-                          type: string
-                        groupVersionKind:
-                          description: 'GVK: the group, version, kind of the resource'
-                          properties:
-                            group:
-                              description: 'Group: the group of the resource'
-                              type: string
-                            kind:
-                              description: 'Kind: the kind of the resource'
-                              type: string
-                            version:
-                              description: 'Version: the version of the resource'
-                              type: string
-                          type: object
-                      type: object
-                    type: array
                   verbsDescription:
                     description: 'VerbsDescription: the list of verbs to use on this
                       resource'
@@ -132,12 +103,6 @@ spec:
                           - delete
                           - findby
                           type: string
-                        altFieldMapping:
-                          additionalProperties:
-                            type: string
-                          description: 'AltFieldMapping: the alternative mapping of
-                            the fields to use in the request'
-                          type: object
                         method:
                           description: 'Method: the http method to use [GET, POST,
                             PUT, DELETE, PATCH]'

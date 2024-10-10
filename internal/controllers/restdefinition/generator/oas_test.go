@@ -97,9 +97,6 @@ func TestGenerateByteSchemas(t *testing.T) {
 					Action: "get",
 					Path:   "/pet/{petId}",
 					Method: "GET",
-					AltFieldMapping: map[string]string{
-						"petId": "id",
-					},
 				},
 				{
 					Action: "update",
@@ -110,9 +107,6 @@ func TestGenerateByteSchemas(t *testing.T) {
 					Action: "delete",
 					Path:   "/pet/{petId}",
 					Method: "DELETE",
-					AltFieldMapping: map[string]string{
-						"petId": "id",
-					},
 				},
 			},
 		}
