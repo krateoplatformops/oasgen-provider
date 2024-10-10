@@ -67,7 +67,7 @@ func GetFile(dst string, src string, auth *AuthConfig) error {
 		// Open local file
 		file, err := os.Open(src)
 		if err != nil {
-			return fmt.Errorf("error opening local file: %v", err)
+			return fmt.Errorf("error opening local file: %v - %s", err, src)
 		}
 		defer file.Close()
 		reader = file
