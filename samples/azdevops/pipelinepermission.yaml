@@ -5,16 +5,20 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Delete
-  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/approvalandchecks/pipelinepermissions.yaml
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/refs/heads/1-webservices/approvalandchecks/pipelinepermissions.yaml
   resourceGroup: azure.devops.com
   resource: 
     kind: PipelinePermission
-    # identifiers: 
-    # - 
+    # identifiers:
+    #   - resourceType
+    #   - resourceId
     verbsDescription:
+    - action: findby
+      method: POST
+      path: /ws/{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
     - action: get
-      method: GET
-      path:  /{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
+      method: POST
+      path: /ws/{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
     - action: update
       method: PATCH
       path: /{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
