@@ -19,7 +19,7 @@ COPY go.sum go.sum
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
 
-COPY cmd/ cmd/
+COPY main.go main.go
 COPY apis/ apis/
 COPY internal/ internal/
 
@@ -34,7 +34,6 @@ FROM golang:1.22.3-alpine3.18
 ENV GOCACHE='/tmp/.cache'
 RUN mkdir -p "$GOCACHE/go-build" && chmod -R 1777 "$GOCACHE"
 
-# COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /bin/manager /bin/manager
 
