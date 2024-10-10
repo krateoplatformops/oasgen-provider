@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oasgen-provider-dev
+  labels:
+    app.kubernetes.io/name: oasgen-provider-dev
+    app: oasgen-provider-dev
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: oasgen-provider-dev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oasgen-provider-dev
+        app: oasgen-provider-dev
+    spec:
+      serviceAccountName: oasgen-provider-dev
+      containers:
+      - name: oasgen-provider-dev-container
+        image: kind.local/oasgen-provider:latest
+        imagePullPolicy: Never
+        args:
+          - --debug
+        ports:
+        - containerPort: 8080

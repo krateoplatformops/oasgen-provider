@@ -1,0 +1,31 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-github
+  namespace: default
+spec:
+  deletionPolicy: Delete 
+  oasPath: https://github.com/krateoplatformops/github-oas3/raw/1-oas-specification-fixes/openapi.yaml
+  resourceGroup: gen.github.com
+  resource: 
+    kind: Repo
+    identifiers:
+      - id 
+      - name
+      - html_url
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /orgs/{org}/repos
+    - action: delete
+      method: DELETE
+      path: /repos/{owner}/{repo}
+      altFieldMapping:
+        org: owner
+        name: repo
+    - action: get
+      method: GET
+      path: /repos/{owner}/{repo}
+      altFieldMapping:
+        org: owner
+        name: repo

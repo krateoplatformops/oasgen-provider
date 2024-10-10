@@ -1,5 +1,15 @@
 #!/bin/bash
 
+# Uninstall
+
+kubectl delete -f manifests/
+kubectl delete -f crds/
+
+# Install
+
+kubectl apply -f crds/
+kubectl apply -f manifests/
+
 
 # Deploy 
 # kubectl apply -f manifests/ns.yaml

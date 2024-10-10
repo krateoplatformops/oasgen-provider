@@ -14,9 +14,9 @@ import (
 
 	_ "embed"
 
+	"github.com/krateoplatformops/crdgen"
 	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
-	"github.com/krateoplatformops/oasgen-provider/internal/controllers/compositiondefinition/generator"
-	"github.com/krateoplatformops/oasgen-provider/internal/crdgen"
+	"github.com/krateoplatformops/oasgen-provider/internal/controllers/restdefinition/generator"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/crds"
 	"github.com/pb33f/libopenapi"
 )

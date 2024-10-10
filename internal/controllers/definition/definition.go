@@ -7,13 +7,10 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/gobuffalo/flect"
 	rtv1 "github.com/krateoplatformops/provider-runtime/apis/common/v1"
-
-	fgetter "github.com/hashicorp/go-getter"
 
 	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/krateoplatformops/provider-runtime/pkg/controller"
@@ -33,21 +30,20 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/provider-runtime/pkg/resource"
 
-	"github.com/krateoplatformops/oasgen-provider/internal/controllers/compositiondefinition/generator"
+	"github.com/krateoplatformops/oasgen-provider/internal/controllers/restdefinition/generator"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/crds"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/filegetter"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/rbactools"
 
-	"github.com/krateoplatformops/oasgen-provider/internal/crdgen"
+	"github.com/krateoplatformops/crdgen"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/generator/text"
 )
 
 const (
 	errNotRestDefinition = "managed resource is not a RestDefinition"
-	labelKeyGroup        = "krateo.io/crd-group"
-	labelKeyVersion      = "krateo.io/crd-version"
-	labelKeyResource     = "krateo.io/crd-resource"
+	resourceVersion      = "v1alpha1"
 )
 
 func Setup(mgr ctrl.Manager, o controller.Options) error {
@@ -94,20 +90,14 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 	if err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
-	const errorLocalPath = "relative paths require a module with a pwd"
-	err = fgetter.GetFile(filepath.Join(basePath, filepath.Base(swaggerPath)), swaggerPath)
-	if err != nil && err.Error() == errorLocalPath {
-		swaggerPath, err = filepath.Abs(swaggerPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get absolute path: %w", err)
-		}
-		err = fgetter.GetFile(filepath.Join(basePath, filepath.Base(swaggerPath)), swaggerPath)
-	}
+
+	err = filegetter.GetFile(path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 
 	contents, _ := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+
 	d, err := libopenapi.NewDocument(contents)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
@@ -157,7 +147,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
-		Version: "v1alpha1",
+		Version: resourceVersion,
 		Kind:    cr.Spec.Resource.Kind,
 	}
 
@@ -269,7 +259,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
-		Version: "v1alpha1",
+		Version: resourceVersion,
 		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
 	}
 
@@ -304,13 +294,13 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 		gvk := schema.GroupVersionKind{
 			Group:   cr.Spec.ResourceGroup,
-			Version: "v1alpha1",
+			Version: resourceVersion,
 			Kind:    text.CapitaliseFirstLetter(authSchemaName),
 		}
 
 		crdOk, err := deployment.LookupCRD(ctx, e.kube, schema.GroupVersionResource{
 			Group:    cr.Spec.ResourceGroup,
-			Version:  "v1alpha1",
+			Version:  resourceVersion,
 			Resource: flect.Pluralize(strings.ToLower(authSchemaName)),
 		})
 		if err != nil {
@@ -364,7 +354,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Name:      cr.Name,
 		},
 		Spec:            &cr.Spec,
-		ResourceVersion: "v1alpha1",
+		ResourceVersion: resourceVersion,
 		Role:            role,
 	})
 	if err != nil {
@@ -411,7 +401,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		},
 		GVR: schema.GroupVersionResource{
 			Group:    cr.Spec.ResourceGroup,
-			Version:  "v1alpha1",
+			Version:  resourceVersion,
 			Resource: flect.Pluralize(strings.ToLower(cr.Spec.Resource.Kind)),
 		},
 		Log:             e.log.Debug,

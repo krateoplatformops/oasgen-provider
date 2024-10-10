@@ -1,0 +1,14 @@
+builds:
+- id: oasgen-provider
+  #main: main.go
+  dir: . 
+  env:
+  - CGO_ENABLED=0
+  - CORE_PROVIDER_DEBUG=true
+  ldflags:
+  - -s -w
+  - -extldflags "-static"
+defaultPlatforms:
+- linux/arm64
+#- linux/amd64
+defaultBaseImage: golang:1.23.0-alpine3.20
