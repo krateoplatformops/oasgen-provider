@@ -24,7 +24,7 @@ COPY apis/ apis/
 COPY internal/ internal/
 
 # Build
-RUN CGO_ENABLED=0 GO111MODULE=on go build -a -o /bin/manager cmd/main.go && \
+RUN CGO_ENABLED=0 GO111MODULE=on go build -a -o /bin/manager main.go && \
     strip /bin/manager
 
 # Deployment environment
