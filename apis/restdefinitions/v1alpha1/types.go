@@ -20,9 +20,10 @@ type VerbsDescription struct {
 	// +immutable
 	// +required
 	Path string `json:"path"`
-	// AltFieldMapping: the alternative mapping of the fields to use in the request
-	// +optional
-	AltFieldMapping map[string]string `json:"altFieldMapping,omitempty"`
+
+	// // AltFieldMapping: the alternative mapping of the fields to use in the request
+	// // +optional
+	// AltFieldMapping map[string]string `json:"altFieldMapping,omitempty"`
 }
 
 type GVK struct {
@@ -39,34 +40,17 @@ type GVK struct {
 	Kind string `json:"kind,omitempty"`
 }
 
-type ReferenceInfo struct {
-	// Field: the field to use as reference - represents the id of the resource
-	// +optional
-	Field string `json:"field,omitempty"`
-
-	// GVK: the group, version, kind of the resource
-	// +optional
-	GroupVersionKind GVK `json:"groupVersionKind,omitempty"`
-}
-
 type Resource struct {
 	// Name: the name of the resource to manage
 	// +immutable
 	Kind string `json:"kind"`
 
-	// OwnerRefs: Set GVK to resources which the defined resource have ownerReference.
-	// +optional
-	OwnerRefs []ReferenceInfo `json:"ownerRefs,omitempty"`
-
 	// VerbsDescription: the list of verbs to use on this resource
 	// +optional
 	VerbsDescription []VerbsDescription `json:"verbsDescription"`
-	// Identifiers: the list of fields to use as identifiers
+	// Identifiers: the list of fields to use as identifiers - used to populate the status of the resource
 	// +optional
 	Identifiers []string `json:"identifiers,omitempty"`
-	// CompareList: the list of fields to compare when checking if the resource is the same
-	// +optional
-	CompareList []string `json:"compareList,omitempty"`
 }
 
 // RestDefinitionSpec is the specification of a RestDefinition.
