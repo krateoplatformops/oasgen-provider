@@ -20,10 +20,6 @@ type VerbsDescription struct {
 	// +immutable
 	// +required
 	Path string `json:"path"`
-
-	// // AltFieldMapping: the alternative mapping of the fields to use in the request
-	// // +optional
-	// AltFieldMapping map[string]string `json:"altFieldMapping,omitempty"`
 }
 
 type GVK struct {
@@ -44,7 +40,6 @@ type Resource struct {
 	// Name: the name of the resource to manage
 	// +immutable
 	Kind string `json:"kind"`
-
 	// VerbsDescription: the list of verbs to use on this resource
 	// +optional
 	VerbsDescription []VerbsDescription `json:"verbsDescription"`
@@ -55,7 +50,6 @@ type Resource struct {
 
 // RestDefinitionSpec is the specification of a RestDefinition.
 type RestDefinitionSpec struct {
-	rtv1.ManagedSpec `json:",inline"`
 	// Represent the path to the OAS Specification file
 	OASPath string `json:"oasPath"`
 	// Group: the group of the resource to manage
@@ -78,7 +72,7 @@ type KindApiVersion struct {
 
 // RestDefinitionStatus is the status of a RestDefinition.
 type RestDefinitionStatus struct {
-	rtv1.ManagedStatus `json:",inline"`
+	rtv1.ConditionedStatus `json:",inline"`
 
 	// OASPath: the path to the OAS Specification file
 	// +optional
@@ -93,15 +87,14 @@ type RestDefinitionStatus struct {
 	Authentications []KindApiVersion `json:"authentications"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Namespaced,categories={krateo,restdefinition,core}
-//+kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-//+kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp",priority=10
-//+kubebuilder:printcolumn:name="API VERSION",type="string",JSONPath=".status.resource.apiVersion",priority=10
-//+kubebuilder:printcolumn:name="KIND",type="string",JSONPath=".status.resource.kind",priority=10
-//+kubebuilder:printcolumn:name="OAS PATH",type="string",JSONPath=".status.oasPath",priority=10
-
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced,categories={krateo,restdefinition,core}
+// +kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp",priority=10
+// +kubebuilder:printcolumn:name="API VERSION",type="string",JSONPath=".status.resource.apiVersion",priority=10
+// +kubebuilder:printcolumn:name="KIND",type="string",JSONPath=".status.resource.kind",priority=10
+// +kubebuilder:printcolumn:name="OAS PATH",type="string",JSONPath=".status.oasPath",priority=10
 // RestDefinition is a RestDefinition type with a spec and a status.
 type RestDefinition struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -118,4 +111,14 @@ type RestDefinitionList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []RestDefinition `json:"items"`
+}
+
+// GetCondition of this RestDefinition.
+func (mg *RestDefinition) GetCondition(ct rtv1.ConditionType) rtv1.Condition {
+	return mg.Status.GetCondition(ct)
+}
+
+// SetConditions of this RestDefinition.
+func (mg *RestDefinition) SetConditions(c ...rtv1.Condition) {
+	mg.Status.SetConditions(c...)
 }

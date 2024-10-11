@@ -53,8 +53,6 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
     name: repository-def
     namespace: default
     spec:
-    # Policy for handling deletion of resources managed by this definition
-    deletionPolicy: Delete
     # URL pointing to the OpenAPI specification document
     oasPath: https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml
     # Grouping identifier for the resources managed by this definition
