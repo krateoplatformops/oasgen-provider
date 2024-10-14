@@ -31,12 +31,31 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
 ### Architecture
 ![Generator Architecture Image](_diagram/generator.png "Generator Architecture")
 
+## API Endpoints Requirements
+
+1. Field Naming Consistency:
+   - Field names must be consistent across all actions (`create`, `update`, `findby`, `get`, `delete`).
+
+2. Response Consistency with Custom Resource Definition (CRD):
+   - The responses of the endpoints must be consistent with the fields in the Custom Resource Definition (CRD).
+   - Specifically, the responses of the GET (`get` action) and LIST (`findby` action) APIs should contain at least all the fields present in the CRD specification (authentication references should not be excluded from these responses). 
 
 ## Getting Started
 
 1. **Prepare OAS Definition:** Begin by creating or obtaining an OAS 3.0+ specification that outlines the API and resources you intend to manage within Kubernetes. For the purpose of this guide, our objective is to generate a controller and the Custom Resource Definition (CRD) needed to manage (observe, create, update, delete) a resource of type GitRepository on Azure DevOps. The initial step involves locating the OAS Specification file that describes the APIs for GitRepository resources. You can find the Git repository OAS 2 Specification [here](https://github.com/MicrosoftDocs/vsts-rest-api-specs/blob/master/specification/git/7.0/git.json). Please note that in this scenario, the specification is in version 2, whereas oasgen-provider necessitates OAS at version 3.0+. Refer to [the instructions](#how-to-converto-oas2-to-oas3) on how to convert OAS 2 to OAS 3.0+. For your convenience, you can view the converted and corrected OAS 3.0+ specification for GitRepository at [this](https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml) link.
+
+- Preparing the OpenAPI Specification file also requires maintaining consistency in parameter naming. For example, consider the Endpoint resource of Azure DevOps (specification available [here](https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/serviceEndpoint/endpoints.yaml)):
+
+  1. The GET API endpoint `/{organization}/{project}/_apis/serviceendpoint/endpoints/{endpointId}` uses a path parameter `endpointId`.
+  2. The POST API endpoint `/{organization}/_apis/serviceendpoint/endpoints` uses a body field `id`.
+
+    To address this inconsistency, you have two options:
+
+     - Change the name of the path parameter from `endpointId` to `id` in the GET endpoint to match the POST endpoint.
+     - Create a wrapper web service that maintains the original mapping and update the OpenAPI Specification adding the webservice API endpoints you intend to use.\
+       - Further information on creating a wrapper web service for the API [below].(#how-to-write-a-webservice)
    
-2. **Run oasgen-provider:** Execute the `oasgen-provider`. You could install the provider on your cluster using Helm
+1. **Run oasgen-provider:** Execute the `oasgen-provider`. You could install the provider on your cluster using Helm
 
     ```bash
     $ helm repo add krateo https://charts.krateo.io
@@ -44,81 +63,46 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
     $ helm install oasgen-provider krateo/oasgen-provider
     ```
    
-3. **Compile a RestDefinition Manifest**: RestDefinition is the Kind of the resource that the oasgen-provider can manage. Here is an example of a RestDefinition Manifest that when applied into the cluster create a GitRepository CRD with the fields from the OpenApi specification provided and deploys a controller that is ready to manage resources of type GitRepository.
+2. **Compile a RestDefinition Manifest**: RestDefinition is the Kind of the resource that the oasgen-provider can manage. Here is an example of a RestDefinition Manifest that when applied into the cluster create a GitRepository CRD with the fields from the OpenApi specification provided and deploys a controller that is ready to manage resources of type GitRepository.
 
     ```yaml
     kind: RestDefinition
     apiVersion: swaggergen.krateo.io/v1alpha1
     metadata:
-    name: repository-def
-    namespace: default
+        name: repository-def
+        namespace: default
     spec:
-    # URL pointing to the OpenAPI specification document
-    oasPath: https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml
-    # Grouping identifier for the resources managed by this definition
-    resourceGroup: azure.devops.com
-    # Details about the resource being managed
-    resource: 
-        # Kind of the resource, in this case, GitRepository
-        kind: GitRepository
-        # Identifiers for the resource, which could be used for unique identification
-        identifiers: 
-        - id
-        - name
-        # Description of actions supported by the resource along with HTTP methods and paths
-        verbsDescription:
-        - action: create
-        # HTTP method for the create action
-        method: POST
-        # Path template for the create action
-        path:  /{organization}/{project}/_apis/git/repositories
-        - action: get
-        method: GET
-        path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}
-        - action: findby
-        method: GET
-        path:  /{organization}/{project}/_apis/git/repositories
-        - action: delete
-        method: DELETE
-        path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}
+        # URL pointing to the OpenAPI specification document
+        oasPath: https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml
+        # Grouping identifier for the resources managed by this definition
+        resourceGroup: azure.devops.com
+        # Details about the resource being managed
+        resource: 
+            # Kind of the resource, in this case, GitRepository
+            kind: GitRepository
+            # Identifiers for the resource, which could be used for unique identification
+            identifiers: 
+            - id
+            - name
+            # Description of actions supported by the resource along with HTTP methods and paths
+            verbsDescription:
+            - action: create
+            # HTTP method for the create action
+            method: POST
+            # Path template for the create action
+            path:  /{organization}/{project}/_apis/git/repositories
+            - action: get
+            method: GET
+            path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}
+            - action: findby
+            method: GET
+            path:  /{organization}/{project}/_apis/git/repositories
+            - action: delete
+            method: DELETE
+            path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}
     ```
-   
-4. **Deploy to Kubernetes:** Apply the Manifest above and inspect the generated CRD. If some path parameters in spec.`resource.verbsDescription[i].path` are not correctly mapped you need to update the RestDefinition manifest specifying the 'altFieldMapping' field.
 
-    ````yaml
-    ...
-    spec:
-    resource:
-        verbsDescription:
-        - action: create
-        # HTTP method for the create action
-        method: POST
-        # Path template for the create action
-        path:  /{organization}/{project}/_apis/git/repositories
-        # Alternative field mappings for request parameters
-        altFieldMapping:
-            project.id: project # e.g., the CRD generated by the oasgen-provider generates the project.id field that needs to be mapped to the 'project' path parameter above in order to perform the POST call
-        - action: get
-        method: GET
-        path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}
-        # Optional alternative field mappings
-        altFieldMapping:
-            id: repositoryId  # e.g., the CRD generated by the oasgen-provider generates the id (also in the status, because it is also an identifier) field that needs to be mapped to the 'repositoryId' path parameter above in order to perform the GET call
-            project.id: project
-        - action: findby
-        method: GET
-        path:  /{organization}/{project}/_apis/git/repositories
-        altFieldMapping:
-            project.id: project
-        - action: delete
-        method: DELETE
-        path:  /{organization}/{project}/_apis/git/repositories/{repositoryId}
-        altFieldMapping:
-            project.id: project
-            id: repositoryId
-    ````
-
-5. **You are ready to go!** At this point you have a running controller that is able to manage resources of type 'GitRepository'. You can get Kind and APIVersion of installed crds in the status of the RestDefinition CR. 
+3. **You are ready to go!** At this point you have a running controller that is able to manage resources of type 'GitRepository'. You can get Kind and APIVersion of installed crds in the status of the RestDefinition CR. 
 
     Sample:
     ```yaml 
@@ -148,4 +132,14 @@ If the provided OAS specification mentions authentication methods, `oasgen-provi
 
 By following these steps, you should be able to successfully convert an OAS2 document to OAS3 while ensuring the integrity and accuracy of the specification.
 
+## How to write a WebService
+### Webservice Requirements
+Needs to be documented with OpenAPI Specification (the requirements of this OpenAPI specification are the same reported in ["API Endpoints Requirements" section](#api-endpoints-requirements))
 
+### Implementation
+Here are some sample implementation written in different programming languages
+
+- **Java - (Springboot):** [azuredevops-oas3-plugin](https://github.com/krateoplatformops/azuredevops-oas3-plugin) and the relative section in [PipelinePermission OAS](https://github.com/krateoplatformops/azuredevops-oas3/blob/1b04b8d6c289f416d1b7a003fbb2337bd7138658/approvalandchecks/pipelinepermissions.yaml#L23). 
+- **Python - (Flask)** [github-oas3-plugin](https://github.com/krateoplatformops/github-oas3-plugin) and the relative section in [Github OAS](https://github.com/krateoplatformops/github-oas3/blob/c25b1c98e9b13efa4a7d1a9b387facc5df963bf8/openapi-webservice.yaml) (search for `/repository/{owner}/{repo}/collaborators/{username}/permission`)
+
+### Deployment
