@@ -31,15 +31,6 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
 ### Architecture
 ![Generator Architecture Image](_diagram/generator.png "Generator Architecture")
 
-## API Endpoints Requirements
-
-1. Field Naming Consistency:
-   - Field names must be consistent across all actions (`create`, `update`, `findby`, `get`, `delete`).
-
-2. Response Consistency with Custom Resource Definition (CRD):
-   - The responses of the endpoints must be consistent with the fields in the Custom Resource Definition (CRD).
-   - Specifically, the responses of the GET (`get` action) and LIST (`findby` action) APIs should contain at least all the fields present in the CRD specification (authentication references should not be excluded from these responses). 
-
 ## Getting Started
 
 1. **Prepare OAS Definition:** Begin by creating or obtaining an OAS 3.0+ specification that outlines the API and resources you intend to manage within Kubernetes. For the purpose of this guide, our objective is to generate a controller and the Custom Resource Definition (CRD) needed to manage (observe, create, update, delete) a resource of type GitRepository on Azure DevOps. The initial step involves locating the OAS Specification file that describes the APIs for GitRepository resources. You can find the Git repository OAS 2 Specification [here](https://github.com/MicrosoftDocs/vsts-rest-api-specs/blob/master/specification/git/7.0/git.json). Please note that in this scenario, the specification is in version 2, whereas oasgen-provider necessitates OAS at version 3.0+. Refer to [the instructions](#how-to-converto-oas2-to-oas3) on how to convert OAS 2 to OAS 3.0+. For your convenience, you can view the converted and corrected OAS 3.0+ specification for GitRepository at [this](https://github.com/krateoplatformops/azuredevops-oas3/blob/main/git/git-new.yaml) link.
@@ -52,7 +43,7 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
     To address this inconsistency, you have two options:
 
      - Change the name of the path parameter from `endpointId` to `id` in the GET endpoint to match the POST endpoint.
-     - Create a wrapper web service that maintains the original mapping and update the OpenAPI Specification adding the webservice API endpoints you intend to use.\
+     - Create a wrapper web service that maintains the original mapping and update the OpenAPI Specification adding the webservice API endpoints you intend to use.
        - Further information on creating a wrapper web service for the API [below].(#how-to-write-a-webservice)
    
 1. **Run oasgen-provider:** Execute the `oasgen-provider`. You could install the provider on your cluster using Helm
@@ -116,6 +107,15 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
         kind: GitRepository
     ```
 
+## API Endpoints Requirements
+
+1. Field Naming Consistency:
+   - Field names must be consistent across all actions (`create`, `update`, `findby`, `get`, `delete`).
+
+2. Response Consistency with Custom Resource Definition (CRD):
+   - The responses of the endpoints must be consistent with the fields in the Custom Resource Definition (CRD).
+   - Specifically, the responses of the GET (`get` action) and LIST (`findby` action) APIs should contain at least all the fields present in the CRD specification (authentication references should not be excluded from these responses).
+
 ## Note on API Authentication
 
 If the provided OAS specification mentions authentication methods, `oasgen-provider` will generate the corresponding authentication CRDs. Additionally, it adds an `authenticationRefs` field to the specs of the resource CRD to reference the CR of the authentication.
@@ -142,4 +142,7 @@ Here are some sample implementation written in different programming languages
 - **Java - (Springboot):** [azuredevops-oas3-plugin](https://github.com/krateoplatformops/azuredevops-oas3-plugin) and the relative section in [PipelinePermission OAS](https://github.com/krateoplatformops/azuredevops-oas3/blob/1b04b8d6c289f416d1b7a003fbb2337bd7138658/approvalandchecks/pipelinepermissions.yaml#L23). 
 - **Python - (Flask)** [github-oas3-plugin](https://github.com/krateoplatformops/github-oas3-plugin) and the relative section in [Github OAS](https://github.com/krateoplatformops/github-oas3/blob/c25b1c98e9b13efa4a7d1a9b387facc5df963bf8/openapi-webservice.yaml) (search for `/repository/{owner}/{repo}/collaborators/{username}/permission`)
 
-### Deployment
+## Deployment
+
+You can deploy your web service whenever you want, inside or outside the cluster.
+However, it should be accessible from the Kubernetes cluster where oasgen-provider is installed, and the server URL needs to be specified in the OpenAPI specification as done in the sample [PipelinePermission OAS](https://github.com/krateoplatformops/azuredevops-oas3/blob/1b04b8d6c289f416d1b7a003fbb2337bd7138658/approvalandchecks/pipelinepermissions.yaml#L23).
