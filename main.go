@@ -11,7 +11,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/krateoplatformops/oasgen-provider/apis"
-	"github.com/krateoplatformops/provider-runtime/pkg/helpers"
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/ratelimiter"
 
@@ -32,9 +31,6 @@ func main() {
 	var (
 		app = kingpin.New(filepath.Base(os.Args[0]), fmt.Sprintf("Krateo %s Provider.", providerName)).
 			DefaultEnvars()
-		servicePortHack = app.Flag("service-port-hack", "Force Kubernetes Service Port env variable hack.").
-				OverrideDefaultFromEnvar(fmt.Sprintf("%s_SERVICE_PORT_HACK", envVarPrefix)).
-				Bool()
 		debug = app.Flag("debug", "Run with debug logging.").Short('d').
 			OverrideDefaultFromEnvar(fmt.Sprintf("%s_DEBUG", envVarPrefix)).
 			Bool()
@@ -56,10 +52,6 @@ func main() {
 				Bool()
 	)
 	kingpin.MustParse(app.Parse(os.Args[1:]))
-
-	if helpers.Bool(servicePortHack) {
-		helpers.FixKubernetesServicePort()
-	}
 
 	zl := zap.New(zap.UseDevMode(*debug))
 	log := logging.NewLogrLogger(zl.WithName(fmt.Sprintf("%s-provider", strcase.KebabCase(providerName))))

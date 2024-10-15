@@ -4,7 +4,7 @@ metadata:
   name: mlflow-experiments
   namespace: default
 spec:
-  deletionPolicy: Delete
+  
   oasPath: https://raw.githubusercontent.com/krateoplatformops/mlflow-oas3/main/mlflow.yaml
   resourceGroup: local.mlflow.com
   resource: 

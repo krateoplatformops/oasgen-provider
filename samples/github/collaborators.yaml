@@ -4,7 +4,7 @@ metadata:
   name: def-github-collaborators
   namespace: default
 spec:
-  deletionPolicy: Delete 
+   
   oasPath: https://raw.githubusercontent.com/krateoplatformops/github-oas3/c25b1c98e9b13efa4a7d1a9b387facc5df963bf8/openapi-webservice.yaml
   resourceGroup: gen.github.com
   resource: 
