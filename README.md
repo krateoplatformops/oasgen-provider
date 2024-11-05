@@ -101,25 +101,24 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
     Sample:
     ```yaml 
     status:
-  status:
-    authentications:
-    - apiVersion: azure.devops.com/v1alpha1
-      kind: BasicAuth
-    conditions:
-    - lastTransitionTime: "2024-10-15T11:40:46Z"
-      message: Dynamic Controller 'pipelinepermissions-v1alpha1-controller' not ready
-        yet
-      reason: Unavailable
-      status: "False"
-      type: Ready
-    - lastTransitionTime: "2024-10-15T11:40:46Z"
-      reason: ReconcileSuccess
-      status: "True"
-      type: Synced
-    oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/refs/heads/1-webservices/approvalandchecks/pipelinepermissions.yaml
-    resource:
-      apiVersion: azure.devops.com/v1alpha1
-      kind: PipelinePermission
+      authentications:
+      - apiVersion: azure.devops.com/v1alpha1
+        kind: BasicAuth
+      conditions:
+      - lastTransitionTime: "2024-10-15T11:40:46Z"
+        message: Dynamic Controller 'pipelinepermissions-v1alpha1-controller' not ready
+          yet
+        reason: Unavailable
+        status: "False"
+        type: Ready
+      - lastTransitionTime: "2024-10-15T11:40:46Z"
+        reason: ReconcileSuccess
+        status: "True"
+        type: Synced
+      oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/refs/heads/1-webservices/approvalandchecks/pipelinepermissions.yaml
+      resource:
+        apiVersion: azure.devops.com/v1alpha1
+        kind: PipelinePermission
     ```
 
 5. **Apply the PipelinePermission CR**: In this phase you create a PipelinePermission CR
