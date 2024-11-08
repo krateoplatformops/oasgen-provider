@@ -1,0 +1,24 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: gh-repo
+  namespace: gh-system
+spec:
+  oasPath: https://raw.githubusercontent.com/krateoplatformops/github-oas3/1c1a6332378a931b5998b00742bcfbf136601b18/repo.yaml
+  resourceGroup: gen.github.com
+  resource: 
+    kind: Repo
+    identifiers:
+      - id 
+      - name
+      - html_url
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /orgs/{org}/repos
+    - action: delete
+      method: DELETE
+      path: /repos/{org}/{name}
+    - action: get
+      method: GET
+      path: /repos/{org}/{name}

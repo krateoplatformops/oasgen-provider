@@ -30,8 +30,8 @@ spec:
       - name: dockerconfigjson-github-com
       containers:
       - name: {{ .resource }}-{{ .apiVersion }}-controller
-        # image: kind.local/composition-dynamic-controller:{{ or .tag "latest" }}
-        image: ghcr.io/krateoplatformops/composition-dynamic-controller-v2:{{ or .tag "latest" }}
+        # image: kind.local/rest-dynamic-controller:{{ or .tag "latest" }}
+        image: ghcr.io/krateoplatformops/rest-dynamic-controller:{{ or .tag "latest" }}
         imagePullPolicy: IfNotPresent
         args:
           - -debug
@@ -39,7 +39,6 @@ spec:
           - -version={{ .apiVersion }}
           - -resource={{ .resource }}
           - -namespace={{ .namespace }}
-          - -client={{ .clientType }}
         ports:
         - containerPort: 8080
           name: metrics
