@@ -1,5 +1,7 @@
 #!/bin/bash
 
+./scripts/build.sh
+
 # Uninstall
 
 kubectl delete -f manifests/
