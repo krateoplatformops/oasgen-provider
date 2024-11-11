@@ -7,7 +7,7 @@ package "Generator"{
 }
 
 package "Dynamic Controller" {
-   component "composition-dynamic-controller-v2" as cdc
+   component "rest-dynamic-controller" as cdc
    collections "Custom resource Manifest" as cr
 }
 
