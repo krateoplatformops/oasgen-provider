@@ -17,6 +17,7 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
     - [Webservice Requirements](#webservice-requirements)
     - [Implementation](#implementation)
   - [Deployment](#deployment)
+  - [Configuration](#configuration)
 
 ## Core Features
 - **CRD Generation**: Automatically generates CRDs from OAS 3.1 definitions. This allows users to define custom resources that match the schema described in their API specifications, enabling seamless integration and management within Kubernetes environments.
@@ -199,3 +200,7 @@ Here are some sample implementations written in different programming languages
 
 You can deploy your web service whenever you want, inside or outside the cluster.
 However, it should be accessible from the Kubernetes cluster where oasgen-provider is installed, and the server URL needs to be specified in the OpenAPI specification as done in the sample [PipelinePermission OAS](https://github.com/krateoplatformops/azuredevops-oas3/blob/1b04b8d6c289f416d1b7a003fbb2337bd7138658/approvalandchecks/pipelinepermissions.yaml#L23).
+
+## Configuration
+
+To view the CRD configuration, visit [this link](https://doc.crds.dev/github.com/krateoplatformops/oasgen-provider).
