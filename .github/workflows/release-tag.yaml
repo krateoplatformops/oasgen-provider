@@ -144,3 +144,10 @@ jobs:
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository }}:${{ steps.meta.outputs.version }}
+          
+  update-crd-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update CRD doc
+        run: |
+          curl -s https://doc.crds.dev/github.com/${{ github.repository }}@${{  github.ref_name }}
