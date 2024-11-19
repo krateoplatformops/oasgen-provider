@@ -27,7 +27,14 @@ type OASSchemaGenerator struct {
 func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource definitionv1alpha1.Resource, identifiers []string) (g *OASSchemaGenerator, fatalError error, errors []error) {
 	secByteSchema := make(map[string][]byte)
 	var schema *base.Schema
-	var err error
+	bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
+	if bodySchema == nil {
+		return nil, fmt.Errorf("schemaproxy is nil"), errors
+	}
+	schema, err := bodySchema.BuildSchema()
+	if err != nil {
+		return nil, fmt.Errorf("building schema"), errors
+	}
 	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {
@@ -49,7 +56,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			if path == nil {
 				return nil, fmt.Errorf("path %s not found", verb.Path), errors
 			}
-			bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
+			// bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
 
 			ops := path.GetOperations()
 			if ops == nil {
