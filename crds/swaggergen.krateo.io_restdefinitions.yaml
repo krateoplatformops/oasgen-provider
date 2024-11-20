@@ -64,7 +64,11 @@ spec:
             description: RestDefinitionSpec is the specification of a RestDefinition.
             properties:
               oasPath:
-                description: Represent the path to the OAS Specification file
+                description: |-
+                  Path to the OpenAPI specification. Supports the following formats:
+                  - configmap://<namespace>/<name>/<key>
+                  - http(s)://<url>
+                pattern: ^(configmap://([a-z0-9-]+)/([a-z0-9-]+)/([a-zA-Z0-9.-]+)|https?://\S+)$
                 type: string
               resource:
                 description: The resource to manage

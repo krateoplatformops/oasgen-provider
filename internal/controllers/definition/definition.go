@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -91,7 +92,12 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	err = filegetter.GetFile(path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
+	filegetter := &filegetter.Filegetter{
+		Client:     http.DefaultClient,
+		KubeClient: c.kube,
+	}
+
+	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}

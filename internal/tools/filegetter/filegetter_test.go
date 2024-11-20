@@ -1,12 +1,20 @@
 package filegetter
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestGetFile(t *testing.T) {
@@ -17,6 +25,11 @@ func TestGetFile(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
+	var kubeClient client.Client
+
+	scheme := runtime.NewScheme()
+	corev1.AddToScheme(scheme)
+	kubeClient = fake.NewClientBuilder().WithScheme(scheme).Build()
 	// Test cases
 	testCases := []struct {
 		name        string
@@ -124,6 +137,31 @@ func TestGetFile(t *testing.T) {
 			setup:       func() string { return "" },
 			validate:    func(string) bool { return true },
 		},
+		{
+			name:        "ConfigMap source",
+			src:         "configmap://default/test-configmap/test-key",
+			auth:        nil,
+			expectError: false,
+			setup: func() string {
+				scheme := runtime.NewScheme()
+				corev1.AddToScheme(scheme)
+				kubeClient = fake.NewClientBuilder().WithScheme(scheme).WithObjects(&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-configmap",
+						Namespace: "default",
+					},
+					Data: map[string]string{
+						"test-key": "configmap content",
+					},
+				}).Build()
+
+				return "configmap://default/test-configmap/test-key"
+			},
+			validate: func(dst string) bool {
+				content, err := os.ReadFile(dst)
+				return err == nil && string(content) == "configmap content"
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -134,7 +172,12 @@ func TestGetFile(t *testing.T) {
 			}
 			dst := filepath.Join(tempDir, "destination.txt")
 
-			err := GetFile(dst, tc.src, tc.auth)
+			filegetter := &Filegetter{
+				Client:     &http.Client{},
+				KubeClient: kubeClient,
+			}
+
+			err := filegetter.GetFile(context.Background(), dst, tc.src, tc.auth)
 
 			fmt.Println("source:", tc.src)
 

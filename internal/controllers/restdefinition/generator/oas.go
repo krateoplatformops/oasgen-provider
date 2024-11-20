@@ -15,8 +15,6 @@ import (
 	"github.com/pb33f/libopenapi/orderedmap"
 )
 
-// var g *OASSchemaGenerator
-
 type OASSchemaGenerator struct {
 	specByteSchema   []byte
 	statusByteSchema []byte
@@ -56,7 +54,6 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			if path == nil {
 				return nil, fmt.Errorf("path %s not found", verb.Path), errors
 			}
-			// bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
 
 			ops := path.GetOperations()
 			if ops == nil {
