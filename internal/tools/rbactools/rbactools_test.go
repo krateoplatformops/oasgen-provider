@@ -56,6 +56,11 @@ func TestRoleGeneration(t *testing.T) {
 				Verbs:     []string{"get"},
 			},
 			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
 				APIGroups: []string{"test-group"},
 				Resources: []string{"test-kinds", "test-kinds/status"},
 				Verbs:     []string{"*"},
