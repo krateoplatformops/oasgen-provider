@@ -1,0 +1,390 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gh-runners
+  namespace: gh-system
+data:
+  ghec_extracted.yaml: |
+    openapi: 3.0.3
+    info:
+      version: 1.1.4
+      title: GitHub v3 REST API
+      description: GitHub's v3 REST API.
+      license:
+        name: MIT
+        url: https://spdx.org/licenses/MIT
+      termsOfService: https://docs.github.com/articles/github-terms-of-service
+      contact:
+        name: Support
+        url: https://support.github.com/contact?tags=dotcom-rest-api
+      x-github-plan: api.github.com
+    servers:
+      - url: https://api.github.com
+    externalDocs:
+      description: GitHub v3 REST API
+      url: https://docs.github.com/rest/
+    paths:
+      "/orgs/{org}/actions/runner-groups":
+        get:
+          summary: List self-hosted runner groups for an organization
+          description: |-
+            Lists all self-hosted runner groups configured in an organization and inherited from an enterprise.
+
+            OAuth app tokens and personal access tokens (classic) need the `admin:org` scope to use this endpoint.
+          operationId: actions/list-self-hosted-runner-groups-for-org
+          tags:
+            - actions
+          externalDocs:
+            description: API method documentation
+            url: https://docs.github.com/enterprise-cloud@latest//rest/actions/self-hosted-runner-groups#list-self-hosted-runner-groups-for-an-organization
+          parameters:
+            - "$ref": "#/components/parameters/org"
+            - "$ref": "#/components/parameters/per-page"
+            - "$ref": "#/components/parameters/page"
+            - "$ref": "#/components/parameters/visible-to-repository"
+          responses:
+            "200":
+              description: Response
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    required:
+                      - total_count
+                      - runner_groups
+                    properties:
+                      total_count:
+                        type: number
+                      runner_groups:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/runner-groups-org"
+                  examples: []
+          x-github:
+            enabledForGitHubApps: true
+            githubCloudOnly: false
+            category: actions
+            subcategory: self-hosted-runner-groups
+        post:
+          summary: Create a self-hosted runner group for an organization
+          description: |-
+            Creates a new self-hosted runner group for an organization.
+
+            OAuth tokens and personal access tokens (classic) need the `admin:org` scope to use this endpoint.
+          operationId: actions/create-self-hosted-runner-group-for-org
+          tags:
+            - actions
+          externalDocs:
+            description: API method documentation
+            url: https://docs.github.com/enterprise-cloud@latest//rest/actions/self-hosted-runner-groups#create-a-self-hosted-runner-group-for-an-organization
+          parameters:
+            - "$ref": "#/components/parameters/org"
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    name:
+                      description: Name of the runner group.
+                      type: string
+                    visibility:
+                      description:
+                        Visibility of a runner group. You can select all repositories,
+                        select individual repositories, or limit access to private repositories.
+                      type: string
+                      enum:
+                        - selected
+                        - all
+                        - private
+                      default: all
+                    selected_repository_ids:
+                      description: List of repository IDs that can access the runner group.
+                      type: array
+                      items:
+                        type: integer
+                        description: Unique identifier of the repository.
+                    runners:
+                      description: List of runner IDs to add to the runner group.
+                      type: array
+                      items:
+                        type: integer
+                        description: Unique identifier of the runner.
+                    allows_public_repositories:
+                      description: Whether the runner group can be used by `public` repositories.
+                      type: boolean
+                      default: false
+                    restricted_to_workflows:
+                      description:
+                        If `true`, the runner group will be restricted to running
+                        only the workflows specified in the `selected_workflows` array.
+                      type: boolean
+                      default: false
+                    selected_workflows:
+                      description:
+                        List of workflows the runner group should be allowed
+                        to run. This setting will be ignored unless `restricted_to_workflows`
+                        is set to `true`.
+                      type: array
+                      items:
+                        type: string
+                        description:
+                          Name of workflow the runner group should be allowed
+                          to run. Note that a ref, tag, or long SHA is required.
+                        examples: []
+                  required:
+                    - name
+                examples:
+                  default:
+                    value:
+                      name: Expensive hardware runners
+                      visibility: selected
+                      selected_repository_ids:
+                        - 32
+                        - 91
+                      runners:
+                        - 9
+                        - 2
+          responses:
+            "201":
+              description: Response
+              content:
+                application/json:
+                  schema:
+                    "$ref": "#/components/schemas/runner-groups-org"
+                  examples: []
+          x-github:
+            enabledForGitHubApps: true
+            githubCloudOnly: false
+            category: actions
+            subcategory: self-hosted-runner-groups
+      "/orgs/{org}/actions/runner-groups/{runner_group_id}":
+        get:
+          summary: Get a self-hosted runner group for an organization
+          description: |-
+            Gets a specific self-hosted runner group for an organization.
+
+            OAuth app tokens and personal access tokens (classic) need the `admin:org` scope to use this endpoint.
+          operationId: actions/get-self-hosted-runner-group-for-org
+          tags:
+            - actions
+          externalDocs:
+            description: API method documentation
+            url: https://docs.github.com/enterprise-cloud@latest//rest/actions/self-hosted-runner-groups#get-a-self-hosted-runner-group-for-an-organization
+          parameters:
+            - "$ref": "#/components/parameters/org"
+            - "$ref": "#/components/parameters/runner-group-id"
+          responses:
+            "200":
+              description: Response
+              content:
+                application/json:
+                  schema:
+                    "$ref": "#/components/schemas/runner-groups-org"
+                  examples: []
+          x-github:
+            enabledForGitHubApps: true
+            githubCloudOnly: false
+            category: actions
+            subcategory: self-hosted-runner-groups
+        patch:
+          summary: Update a self-hosted runner group for an organization
+          description: |-
+            Updates the `name` and `visibility` of a self-hosted runner group in an organization.
+
+            OAuth app tokens and personal access tokens (classic) need the `admin:org` scope to use this endpoint.
+          operationId: actions/update-self-hosted-runner-group-for-org
+          tags:
+            - actions
+          externalDocs:
+            description: API method documentation
+            url: https://docs.github.com/enterprise-cloud@latest//rest/actions/self-hosted-runner-groups#update-a-self-hosted-runner-group-for-an-organization
+          parameters:
+            - "$ref": "#/components/parameters/org"
+            - "$ref": "#/components/parameters/runner-group-id"
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    name:
+                      description: Name of the runner group.
+                      type: string
+                    visibility:
+                      description:
+                        Visibility of a runner group. You can select all repositories,
+                        select individual repositories, or all private repositories.
+                      type: string
+                      enum:
+                        - selected
+                        - all
+                        - private
+                    allows_public_repositories:
+                      description: Whether the runner group can be used by `public` repositories.
+                      type: boolean
+                      default: false
+                    restricted_to_workflows:
+                      description:
+                        If `true`, the runner group will be restricted to running
+                        only the workflows specified in the `selected_workflows` array.
+                      type: boolean
+                      default: false
+                    selected_workflows:
+                      description:
+                        List of workflows the runner group should be allowed
+                        to run. This setting will be ignored unless `restricted_to_workflows`
+                        is set to `true`.
+                      type: array
+                      items:
+                        type: string
+                        description:
+                          Name of workflow the runner group should be allowed
+                          to run. Note that a ref, tag, or long SHA is required.
+                        examples: []
+                  required:
+                    - name
+                examples:
+                  default:
+                    value:
+                      name: Expensive hardware runners
+                      visibility: selected
+          responses:
+            "200":
+              description: Response
+              content:
+                application/json:
+                  schema:
+                    "$ref": "#/components/schemas/runner-groups-org"
+                  examples: []
+          x-github:
+            enabledForGitHubApps: true
+            githubCloudOnly: false
+            category: actions
+            subcategory: self-hosted-runner-groups
+        delete:
+          summary: Delete a self-hosted runner group from an organization
+          description: |-
+            Deletes a self-hosted runner group for an organization.
+
+            OAuth tokens and personal access tokens (classic) need the `admin:org` scope to use this endpoint.
+          operationId: actions/delete-self-hosted-runner-group-from-org
+          tags:
+            - actions
+          externalDocs:
+            description: API method documentation
+            url: https://docs.github.com/enterprise-cloud@latest//rest/actions/self-hosted-runner-groups#delete-a-self-hosted-runner-group-from-an-organization
+          parameters:
+            - "$ref": "#/components/parameters/org"
+            - "$ref": "#/components/parameters/runner-group-id"
+          responses:
+            "204":
+              description: Response
+          x-github:
+            enabledForGitHubApps: true
+            githubCloudOnly: false
+            category: actions
+            subcategory: self-hosted-runner-groups
+    components:
+      schemas:
+        runner-groups-org:
+          type: object
+          properties:
+            id:
+              type: number
+            name:
+              type: string
+            visibility:
+              type: string
+            default:
+              type: boolean
+            selected_repositories_url:
+              description:
+                Link to the selected repositories resource for this runner
+                group. Not present unless visibility was set to `selected`
+              type: string
+            runners_url:
+              type: string
+            hosted_runners_url:
+              type: string
+            inherited:
+              type: boolean
+            inherited_allows_public_repositories:
+              type: boolean
+            allows_public_repositories:
+              type: boolean
+            workflow_restrictions_read_only:
+              description:
+                If `true`, the `restricted_to_workflows` and `selected_workflows`
+                fields cannot be modified.
+              type: boolean
+              default: false
+            restricted_to_workflows:
+              description:
+                If `true`, the runner group will be restricted to running only
+                the workflows specified in the `selected_workflows` array.
+              type: boolean
+              default: false
+            selected_workflows:
+              description:
+                List of workflows the runner group should be allowed to run.
+                This setting will be ignored unless `restricted_to_workflows` is set to
+                `true`.
+              type: array
+              items:
+                type: string
+                description:
+                  Name of workflow the runner group should be allowed to run.
+                  Note that a ref, tag, or long SHA is required.
+                examples: []
+          required:
+            - id
+            - name
+            - visibility
+            - default
+            - runners_url
+            - inherited
+            - allows_public_repositories
+      parameters:
+        org:
+          name: org
+          description: The organization name. The name is not case sensitive.
+          in: path
+          required: true
+          schema:
+            type: string
+        per-page:
+          name: per_page
+          description:
+            The number of results per page (max 100). For more information,
+            see "[Using pagination in the REST API](https://docs.github.com/enterprise-cloud@latest//rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+          in: query
+          schema:
+            type: integer
+            default: 30
+        page:
+          name: page
+          description:
+            The page number of the results to fetch. For more information,
+            see "[Using pagination in the REST API](https://docs.github.com/enterprise-cloud@latest//rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+          in: query
+          schema:
+            type: integer
+            default: 1
+        visible-to-repository:
+          name: visible_to_repository
+          description: Only return runner groups that are allowed to be used by this repository.
+          in: query
+          required: false
+          schema:
+            type: string
+        runner-group-id:
+          name: runner_group_id
+          description: Unique identifier of the self-hosted runner group.
+          in: path
+          required: true
+          schema:
+            type: integer
+
