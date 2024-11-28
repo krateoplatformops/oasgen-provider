@@ -99,6 +99,11 @@ func InitRole(opts types.NamespacedName) (rbacv1.Role, error) {
 				Resources: []string{"secrets"},
 				Verbs:     []string{"get"},
 			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
 		},
 	}
 

@@ -51,8 +51,8 @@ type Resource struct {
 // RestDefinitionSpec is the specification of a RestDefinition.
 type RestDefinitionSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^(configmap://([a-z0-9-]+)/([a-z0-9-]+)/([a-zA-Z0-9.-]+)|https?://\S+)$`
-	// Path to the OpenAPI specification. Supports the following formats:
+	// +kubebuilder:validation:Pattern=`^(configmap:\/\/([a-z0-9-]+)\/([a-z0-9-]+)\/([a-zA-Z0-9.-_]+)|https?:\/\/\S+)$`
+	// Path to the OpenAPI specification. Supports the following formats: (note that the configmap should be in the same namespace as the RestDefinition)
 	// - configmap://<namespace>/<name>/<key>
 	// - http(s)://<url>
 	OASPath string `json:"oasPath"`
