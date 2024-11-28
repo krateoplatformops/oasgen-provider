@@ -5,11 +5,11 @@
 # Uninstall
 
 kubectl delete -f manifests/
-kubectl delete -f crds/
+# kubectl delete -f crds/
 
 # Install
 
-kubectl apply -f crds/
+# kubectl apply -f crds/
 kubectl apply -f manifests/
 
 

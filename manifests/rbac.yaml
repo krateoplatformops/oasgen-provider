@@ -10,6 +10,14 @@ metadata:
   name: oasgen-provider-dev
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - 'get'
+  - 'list'
+  - 'watch'
+- apiGroups:
   - swaggergen.krateo.io
   resources:
   - restdefinitions

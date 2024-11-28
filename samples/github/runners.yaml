@@ -1,0 +1,29 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: github-runnergroup
+  namespace: gh-system
+spec:
+  oasPath: configmap://gh-system/gh-runners/ghec_extracted.yaml # Path to the OpenAPI Spec. The confimap is placed in the assets folder
+  resourceGroup: github.customer.com
+  resource:
+    kind: RunnerGroup
+    identifiers:
+      - org
+      - runner_group_id
+    verbsDescription:
+    - action: findby
+      method: GET
+      path: /orgs/{org}/actions/runner-groups/{runner_group_id}
+    - action: get
+      method: GET
+      path: /orgs/{org}/actions/runner-groups/{runner_group_id}
+    - action: update
+      method: PATCH
+      path: /orgs/{org}/actions/runner-groups/{runner_group_id}
+    - action: create
+      method: POST
+      path: /orgs/{org}/actions/runner-groups
+    - action: delete
+      method: DELETE
+      path: /orgs/{org}/actions/runner-groups/{runner_group_id}
