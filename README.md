@@ -57,13 +57,22 @@ A k8s controller that generates CRDs and controller to manage resources from Ope
      - Create a wrapper web service that maintains the original mapping and update the OpenAPI Specification adding the webservice API endpoints you intend to use.
        - Further information on creating a wrapper web service for the API [below](#how-to-write-a-webservice).
    
-2. **Run oasgen-provider:** Execute the `oasgen-provider`. You could install the provider on your cluster using Helm
+2. **Run Krateo Operator Generator (KOG):** Execute the `krateo-oasgen-provider`. You can install the provider on your cluster using Helm. The `krateo-oasgen-provider` requires Krateo BFF to be installed in your cluster to perform some actions. If Krateo BFF is not already installed, you can install it with the following commands (note that it should be installed in the `krateo-system` namespace):
 
-    ```bash
-    $ helm repo add krateo https://charts.krateo.io
-    $ helm repo update krateo
-    $ helm install oasgen-provider krateo/oasgen-provider
-    ```
+```sh
+helm repo add krateo https://charts.krateo.io
+helm repo update
+helm install bff krateo/bff --namespace krateo-system --create-namespace
+```
+
+After installing Krateo BFF, you can install the `krateo-oasgen-provider` with the following commands:
+
+```sh
+helm repo add krateo https://charts.krateo.io
+helm repo update
+helm install krateo-oasgen-provider krateo/oasgen-provider --namespace krateo-system --create-namespace
+```
+
    
 3. **Compile a RestDefinition Manifest**: RestDefinition is the Kind of resource that oasgen-provider can manage. Here is an example of a RestDefinition Manifest that when applied into the cluster create a PipelinePermission CRD with the fields from the OpenApi specification provided and deploys a controller that is ready to manage resources of type PipelinePermission.
 
