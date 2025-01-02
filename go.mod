@@ -7,16 +7,16 @@ toolchain go1.23.2
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/gobuffalo/flect v1.0.2
-	github.com/krateoplatformops/crdgen v0.3.7
+	github.com/krateoplatformops/crdgen v0.3.9
 	github.com/krateoplatformops/provider-runtime v0.9.0
 	github.com/pb33f/libopenapi v0.16.8
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.9.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
-	k8s.io/api v0.31.0
+	k8s.io/api v0.31.1
 	k8s.io/apiextensions-apiserver v0.31.0
-	k8s.io/apimachinery v0.31.0
-	k8s.io/client-go v0.31.0
+	k8s.io/apimachinery v0.31.1
+	k8s.io/client-go v0.31.1
 	sigs.k8s.io/controller-runtime v0.19.0
 	sigs.k8s.io/controller-tools v0.16.1
 	sigs.k8s.io/yaml v1.4.0
