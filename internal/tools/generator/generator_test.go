@@ -10,7 +10,7 @@ package generator
 // 	"os"
 // 	"testing"
 
-// 	"github.com/krateoplatformops/core-provider/internal/helm/getter"
+// 	"github.com/krateoplatformops/oasgen-provider/internal/helm/getter"
 // )
 
 // const (

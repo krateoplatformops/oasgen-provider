@@ -87,9 +87,10 @@ func TestCreateDeployment(t *testing.T) {
 		Namespace: "test-namespace",
 		Name:      "test-deployment",
 	}
+	path := "testdata/deployment.yaml"
 
 	// Create the deployment
-	deploymentObj, err := deployment.CreateDeployment(gvr, nn)
+	deploymentObj, err := deployment.CreateDeployment(gvr, nn, path)
 	if err != nil {
 		t.Errorf("failed to create deployment: %v", err)
 	}

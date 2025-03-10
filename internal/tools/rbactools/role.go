@@ -3,18 +3,63 @@ package rbactools
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/avast/retry-go"
 	"github.com/gobuffalo/flect"
+	"github.com/krateoplatformops/oasgen-provider/internal/templates"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/types"
+	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// CreateRole creates a Role object from a template file, with the given GroupVersionResource and NamespacedName
+// The path is the path to the template file, and additionalvalues are key-value pairs that will be used to render the template
+func CreateRole(gvr schema.GroupVersionResource, nn types.NamespacedName, path string, additionalvalues ...string) (rbacv1.Role, error) {
+	templateF, err := os.ReadFile(path)
+	if err != nil {
+		return rbacv1.Role{}, fmt.Errorf("failed to read role template file: %w", err)
+	}
+	values := templates.Values(templates.Renderoptions{
+		Group:     gvr.Group,
+		Version:   gvr.Version,
+		Resource:  gvr.Resource,
+		Namespace: nn.Namespace,
+		Name:      nn.Name,
+	})
+
+	if len(additionalvalues)%2 != 0 {
+		return rbacv1.Role{}, fmt.Errorf("additionalvalues must be in pairs: %w", err)
+	}
+	for i := 0; i < len(additionalvalues); i += 2 {
+		values[additionalvalues[i]] = additionalvalues[i+1]
+	}
+
+	template := templates.Template(string(templateF))
+	dat, err := template.Render(values)
+	if err != nil {
+		return rbacv1.Role{}, err
+	}
+
+	s := json.NewYAMLSerializer(json.DefaultMetaFactory,
+		clientsetscheme.Scheme,
+		clientsetscheme.Scheme)
+
+	res := rbacv1.Role{}
+	_, _, err = s.Decode(dat, nil, &res)
+	if err != nil {
+		return rbacv1.Role{}, fmt.Errorf("failed to decode clusterrole: %w", err)
+	}
+
+	return res, err
+}
 
 func UninstallRole(ctx context.Context, opts UninstallOptions) error {
 	return retry.Do(
@@ -66,19 +111,8 @@ func InstallRole(ctx context.Context, kube client.Client, obj *rbacv1.Role) erro
 	)
 }
 
-func PopulateRole(resource schema.GroupVersionKind, role *rbacv1.Role) {
-
-	res := strings.ToLower(flect.Pluralize(resource.Kind))
-
-	role.Rules = append(role.Rules, rbacv1.PolicyRule{
-		APIGroups: []string{resource.Group},
-		Resources: []string{res, fmt.Sprintf("%s/status", res)},
-		Verbs:     []string{"*"},
-	})
-}
-
-func InitRole(opts types.NamespacedName) (rbacv1.Role, error) {
-
+func InitRole(resource string, opts types.NamespacedName) rbacv1.Role {
+	kind := strings.ToLower(flect.Singularize(resource))
 	role := rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "rbac.authorization.k8s.io/v1",
@@ -87,25 +121,17 @@ func InitRole(opts types.NamespacedName) (rbacv1.Role, error) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      opts.Name,
 			Namespace: opts.Namespace,
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"swaggergen.krateo.io"},
-				Resources: []string{"restdefinitions", "restdefinitions/status"},
-				Verbs:     []string{"*"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"get", "list", "watch"},
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "role",
+				"app.kubernetes.io/instance":   "manager-role",
+				"app.kubernetes.io/component":  "rbac",
+				"app.kubernetes.io/created-by": kind,
+				"app.kubernetes.io/part-of":    kind,
+				"app.kubernetes.io/managed-by": "kustomize",
 			},
 		},
+		Rules: []rbacv1.PolicyRule{},
 	}
 
-	return role, nil
+	return role
 }

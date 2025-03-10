@@ -1,9 +1,8 @@
-package deployment_test
+package plurals
 
 import (
 	"testing"
 
-	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -19,7 +18,7 @@ func TestToGroupVersionResource(t *testing.T) {
 		Resource: "pets",
 	}
 
-	result := deployment.ToGroupVersionResource(gvk)
+	result := ToGroupVersionResource(gvk)
 
 	if result != expected {
 		t.Errorf("Expected %v, but got %v", expected, result)

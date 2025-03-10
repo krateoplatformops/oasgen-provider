@@ -17,7 +17,7 @@ import (
 	"github.com/krateoplatformops/crdgen"
 	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/krateoplatformops/oasgen-provider/internal/controllers/restdefinition/generator"
-	"github.com/krateoplatformops/oasgen-provider/internal/tools/crds"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/crd"
 	"github.com/pb33f/libopenapi"
 )
 
@@ -139,7 +139,7 @@ func TestGenerateByteSchemas(t *testing.T) {
 			t.Errorf("error: %v", resourceResult.Err)
 		}
 
-		_, err = crds.UnmarshalCRD(resourceResult.Manifest)
+		_, err = crd.Unmarshal(resourceResult.Manifest)
 		if err != nil {
 			t.Errorf("unmarshalling CRD: %f", err)
 		}
