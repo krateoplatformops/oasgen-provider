@@ -65,7 +65,7 @@ jobs:
       - name: Gather dependencies
         run: go mod download
       - name: Run coverage
-        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+        run: go test -race -tags=unit,integration -p 1 -coverprofile=coverage.txt -timeout 20m -covermode=atomic ./...
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
