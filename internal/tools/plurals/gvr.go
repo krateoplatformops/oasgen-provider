@@ -11,6 +11,6 @@ func ToGroupVersionResource(gvk schema.GroupVersionKind) schema.GroupVersionReso
 	return schema.GroupVersionResource{
 		Group:    gvk.Group,
 		Version:  gvk.Version,
-		Resource: strings.ToLower(flect.Pluralize(gvk.Kind)),
+		Resource: flect.Pluralize(strings.ToLower(gvk.Kind)),
 	}
 }

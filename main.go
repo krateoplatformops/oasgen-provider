@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	providerName = "OAS Gen"
+	providerName = "OASGen"
 )
 
 func main() {

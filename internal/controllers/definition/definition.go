@@ -10,7 +10,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/gobuffalo/flect"
 	rtv1 "github.com/krateoplatformops/provider-runtime/apis/common/v1"
 	"github.com/krateoplatformops/snowplow/plumbing/env"
 
@@ -300,6 +299,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("installing CRD: %w", err)
 	}
 
+	var authenticationGVRs []schema.GroupVersionResource
 	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {
@@ -312,16 +312,13 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Kind:    text.CapitaliseFirstLetter(authSchemaName),
 		}
 
-		crdOk, err := crd.Lookup(ctx, e.kube, schema.GroupVersionResource{
-			Group:    cr.Spec.ResourceGroup,
-			Version:  resourceVersion,
-			Resource: flect.Pluralize(strings.ToLower(authSchemaName)),
-		})
+		crdOk, err := crd.Lookup(ctx, e.kube, plurals.ToGroupVersionResource(gvk))
 		if err != nil {
 			return fmt.Errorf("looking up CRD: %w", err)
 		}
 		if crdOk {
 			e.log.Debug("CRD already exists", "Kind:", authSchemaName)
+			authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
 			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
 				Kind:       gvk.Kind,
 				APIVersion: gvk.GroupVersion().String(),
@@ -352,6 +349,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
+		authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
+
 		cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
 			Kind:       gvk.Kind,
 			APIVersion: gvk.GroupVersion().String(),
@@ -359,6 +358,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	opts := deploy.DeployOptions{
+		AuthenticationGVRs:     authenticationGVRs,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
@@ -414,6 +414,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 
 	e.log.Debug("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
+	var authenticationGVRs []schema.GroupVersionResource
 	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {
@@ -421,39 +422,47 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 			continue
 		}
 
-		crdOk, err := crd.Lookup(ctx, e.kube, schema.GroupVersionResource{
-			Group:    cr.Spec.ResourceGroup,
-			Version:  resourceVersion,
-			Resource: flect.Pluralize(strings.ToLower(authSchemaName)),
-		})
+		gvk := schema.GroupVersionKind{
+			Group:   cr.Spec.ResourceGroup,
+			Version: resourceVersion,
+			Kind:    text.CapitaliseFirstLetter(authSchemaName),
+		}
+
+		gvr := plurals.ToGroupVersionResource(gvk)
+
+		crdOk, err := crd.Lookup(ctx, e.kube, gvr)
 		if err != nil {
 			return fmt.Errorf("looking up CRD: %w", err)
 		}
 		if crdOk {
 			e.log.Debug("CRD already exists, deleting", "Kind:", authSchemaName)
 			err = crd.Uninstall(ctx, e.kube, schema.GroupResource{
-				Group:    cr.Spec.ResourceGroup,
-				Resource: flect.Pluralize(strings.ToLower(authSchemaName)),
+				Group:    gvr.Group,
+				Resource: gvr.Resource,
 			})
 			if err != nil {
 				return fmt.Errorf("uninstalling authentication CRD: %w", err)
 			}
+			authenticationGVRs = append(authenticationGVRs, gvr)
 		}
 	}
 
+	gvr := plurals.ToGroupVersionResource(schema.GroupVersionKind{
+		Group:   cr.Spec.ResourceGroup,
+		Version: resourceVersion,
+		Kind:    cr.Spec.Resource.Kind,
+	})
+
 	opts := deploy.UndeployOptions{
-		SkipCRD:        false,
-		RBACFolderPath: RDCrbacConfigFolder,
-		KubeClient:     e.kube,
+		AuthenticationGVRs: authenticationGVRs,
+		SkipCRD:            false,
+		RBACFolderPath:     RDCrbacConfigFolder,
+		KubeClient:         e.kube,
 		NamespacedName: types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Name,
 		},
-		GVR: schema.GroupVersionResource{
-			Group:    cr.Spec.ResourceGroup,
-			Version:  resourceVersion,
-			Resource: flect.Pluralize(strings.ToLower(cr.Spec.Resource.Kind)),
-		},
+		GVR: gvr,
 		Log: e.log.Debug,
 	}
 	if meta.IsVerbose(cr) {

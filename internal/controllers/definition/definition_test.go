@@ -8,11 +8,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/krateoplatformops/oasgen-provider/apis"
 	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/plurals"
 
 	"github.com/go-logr/logr"
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
@@ -24,6 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/e2e-framework/klient/decoder"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
+	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
@@ -69,8 +75,8 @@ func TestMain(m *testing.M) {
 			return ctx, nil
 		},
 	).Finish(
-	// envfuncs.DeleteNamespace(namespace),
-	// envfuncs.DestroyCluster(clusterName),
+		envfuncs.DeleteNamespace(namespace),
+		envfuncs.DestroyCluster(clusterName),
 	)
 
 	os.Exit(testenv.Run(m))
@@ -153,13 +159,32 @@ func TestDefinition(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
-		if apierrors.IsNotFound(err) {
-			return ctx
-		} else if err != nil {
+		gvk := schema.GroupVersionKind{
+			Group:   mg.Spec.ResourceGroup,
+			Version: resourceVersion,
+			Kind:    mg.Spec.Resource.Kind,
+		}
+
+		gvr := plurals.ToGroupVersionResource(gvk)
+
+		depl, err := deployment.CreateDeployment(
+			gvr,
+			types.NamespacedName{
+				Namespace: mg.GetNamespace(),
+				Name:      mg.GetName(),
+			},
+			filepath.Join(testdataPath, "rdc", "deployment.yaml"))
+		if err != nil {
 			t.Fatal(err)
-		} else if err == nil {
-			t.Fatal("Resource not deleted")
+		}
+
+		err = wait.For(
+			conditions.New(r).ResourceDeleted(&depl),
+			wait.WithTimeout(time.Second*30),
+			wait.WithInterval(time.Second*1),
+		)
+		if err != nil {
+			t.Fatal(err)
 		}
 
 		return ctx

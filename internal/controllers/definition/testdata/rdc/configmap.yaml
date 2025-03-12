@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: test-core-provider-cdc-configmap
-  namespace: gh-system
+  name: {{ .name }}
+  namespace: {{ .namespace }}
 data:
     configmap.yaml: |
       apiVersion: v1

@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .resource }}-{{ .apiVersion }}-controller
+  name: {{ .name }}
   namespace: {{ .namespace }}
   labels:
     app.kubernetes.io/name: {{ .name }}
@@ -22,17 +22,17 @@ spec:
       labels:
         app.kubernetes.io/name: {{ .name }}
     spec:
-      serviceAccountName: {{ .serviceAccountName}}
+      serviceAccountName: {{ .serviceAccountName }}
       securityContext:
         {}
       containers:
-        - name: {{ .resource }}-{{ .apiVersion }}-controller
+        - name: {{ .name }}
           # image: "ghcr.io/krateoplatformops/composition-dynamic-controller:0.16.0"
           image: "kind.local/rest-dynamic-controller:latest" # uncomment this line to use local image
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
-                name: {{ .resource }}-{{ .apiVersion }}-configmap
+                name: {{ .name }}
           securityContext:
             {}
           args:

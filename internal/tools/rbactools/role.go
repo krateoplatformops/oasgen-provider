@@ -22,7 +22,7 @@ import (
 
 // CreateRole creates a Role object from a template file, with the given GroupVersionResource and NamespacedName
 // The path is the path to the template file, and additionalvalues are key-value pairs that will be used to render the template
-func CreateRole(gvr schema.GroupVersionResource, nn types.NamespacedName, path string, additionalvalues ...string) (rbacv1.Role, error) {
+func CreateRole(gvr schema.GroupVersionResource, nn types.NamespacedName, path string, additionalvalues ...any) (rbacv1.Role, error) {
 	templateF, err := os.ReadFile(path)
 	if err != nil {
 		return rbacv1.Role{}, fmt.Errorf("failed to read role template file: %w", err)
@@ -39,7 +39,11 @@ func CreateRole(gvr schema.GroupVersionResource, nn types.NamespacedName, path s
 		return rbacv1.Role{}, fmt.Errorf("additionalvalues must be in pairs: %w", err)
 	}
 	for i := 0; i < len(additionalvalues); i += 2 {
-		values[additionalvalues[i]] = additionalvalues[i+1]
+		key, ok := additionalvalues[i].(string)
+		if !ok {
+			return rbacv1.Role{}, fmt.Errorf("additionalvalues key must be a string: %w", err)
+		}
+		values[key] = additionalvalues[i+1]
 	}
 
 	template := templates.Template(string(templateF))

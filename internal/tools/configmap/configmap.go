@@ -7,6 +7,7 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/krateoplatformops/oasgen-provider/internal/templates"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -23,6 +24,7 @@ type UninstallOptions struct {
 }
 
 func UninstallConfigmap(ctx context.Context, opts UninstallOptions) error {
+	opts.NamespacedName.Name += deployment.ControllerResourceSuffix
 	return retry.Do(
 		func() error {
 			cm := corev1.ConfigMap{}
@@ -78,7 +80,7 @@ func CreateConfigmap(gvr schema.GroupVersionResource, nn types.NamespacedName, c
 		Version:   gvr.Version,
 		Resource:  gvr.Resource,
 		Namespace: nn.Namespace,
-		Name:      nn.Name,
+		Name:      nn.Name + deployment.ControllerResourceSuffix,
 	})
 
 	if len(additionalvalues)%2 != 0 {

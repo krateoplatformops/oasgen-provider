@@ -17,22 +17,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	controllerResourceSuffix = "-controller"
-	configmapResourceSuffix  = "-configmap"
-)
-
 type UndeployOptions struct {
-	KubeClient     client.Client
-	NamespacedName types.NamespacedName
-	GVR            schema.GroupVersionResource
-	RBACFolderPath string
-	Log            func(msg string, keysAndValues ...any)
-	SkipCRD        bool
+	AuthenticationGVRs []schema.GroupVersionResource
+	KubeClient         client.Client
+	NamespacedName     types.NamespacedName
+	GVR                schema.GroupVersionResource
+	RBACFolderPath     string
+	Log                func(msg string, keysAndValues ...any)
+	SkipCRD            bool
 }
 
 type DeployOptions struct {
 	GVR                    schema.GroupVersionResource
+	AuthenticationGVRs     []schema.GroupVersionResource
 	KubeClient             client.Client
 	NamespacedName         types.NamespacedName
 	RBACFolderPath         string
@@ -47,7 +44,12 @@ func logError(log func(msg string, keysAndValues ...any), msg string, err error)
 	}
 }
 
-func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.NamespacedName, rbacFolderPath string) (corev1.ServiceAccount, rbacv1.ClusterRole, rbacv1.ClusterRoleBinding, rbacv1.Role, rbacv1.RoleBinding, error) {
+func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.NamespacedName, authenticationsGVRs []schema.GroupVersionResource, rbacFolderPath string) (corev1.ServiceAccount, rbacv1.ClusterRole, rbacv1.ClusterRoleBinding, rbacv1.Role, rbacv1.RoleBinding, error) {
+	rbacNSName = types.NamespacedName{
+		Namespace: rbacNSName.Namespace,
+		Name:      rbacNSName.Name + deployment.ControllerResourceSuffix,
+	}
+
 	sa, err := rbactools.CreateServiceAccount(gvr, rbacNSName, path.Join(rbacFolderPath, "serviceaccount.yaml"))
 	if err != nil {
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
@@ -63,7 +65,12 @@ func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.Names
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
 	}
 
-	role, err := rbactools.CreateRole(gvr, rbacNSName, path.Join(rbacFolderPath, "role.yaml"))
+	var authentications []string
+	for _, crd := range authenticationsGVRs {
+		authentications = append(authentications, crd.Resource)
+	}
+
+	role, err := rbactools.CreateRole(gvr, rbacNSName, path.Join(rbacFolderPath, "role.yaml"), "authentications", authentications)
 	if err != nil {
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
 	}
@@ -190,12 +197,7 @@ func uninstallRBACResources(ctx context.Context, kubeClient client.Client, clust
 }
 
 func Deploy(ctx context.Context, kube client.Client, opts DeployOptions) (err error) {
-	rbacNSName := types.NamespacedName{
-		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + controllerResourceSuffix,
-	}
-
-	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, rbacNSName, opts.RBACFolderPath)
+	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.AuthenticationGVRs, opts.RBACFolderPath)
 	if err != nil {
 		return err
 	}
@@ -205,12 +207,7 @@ func Deploy(ctx context.Context, kube client.Client, opts DeployOptions) (err er
 		return err
 	}
 
-	cmNSName := types.NamespacedName{
-		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + configmapResourceSuffix,
-	}
-
-	cm, err := configmap.CreateConfigmap(opts.GVR, cmNSName, opts.ConfigmapTemplatePath,
+	cm, err := configmap.CreateConfigmap(opts.GVR, opts.NamespacedName, opts.ConfigmapTemplatePath,
 		"composition_controller_sa_name", sa.Name,
 		"composition_controller_sa_namespace", sa.Namespace)
 	if err != nil {
@@ -223,13 +220,9 @@ func Deploy(ctx context.Context, kube client.Client, opts DeployOptions) (err er
 	}
 	opts.Log("Configmap successfully installed", "gvr", opts.GVR.String(), "name", cm.Name, "namespace", cm.Namespace)
 
-	deploymentNSName := types.NamespacedName{
-		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + controllerResourceSuffix,
-	}
 	dep, err := deployment.CreateDeployment(
 		opts.GVR,
-		deploymentNSName,
+		opts.NamespacedName,
 		opts.DeploymentTemplatePath,
 		"serviceAccountName", sa.Name)
 	if err != nil {
@@ -255,54 +248,26 @@ func Undeploy(ctx context.Context, kube client.Client, opts UndeployOptions) err
 			opts.Log("Error uninstalling CRD", "name", opts.GVR.GroupResource().String(), "error", err)
 			return err
 		}
-
-		// labelreq, err := labels.NewRequirement(CompositionVersionLabel, selection.Equals, []string{opts.GVR.Version})
-		// if err != nil {
-		// 	return err
-		// }
-		// selector := labels.NewSelector().Add(*labelreq)
-
-		// li, err := opts.DynamicClient.Resource(opts.GVR).List(ctx, metav1.ListOptions{
-		// 	LabelSelector: selector.String(),
-		// })
-		// if err != nil {
-		// 	return err
-		// }
-
-		// if len(li.Items) > 0 {
-		// 	return fmt.Errorf("%v for %s", ErrCompositionStillExist, opts.GVR.String())
-		// }
 	}
 
 	err := deployment.UninstallDeployment(ctx, deployment.UninstallOptions{
-		KubeClient: opts.KubeClient,
-		NamespacedName: types.NamespacedName{
-			Namespace: opts.NamespacedName.Namespace,
-			Name:      opts.NamespacedName.Name + controllerResourceSuffix,
-		},
-		Log: opts.Log,
+		KubeClient:     opts.KubeClient,
+		NamespacedName: opts.NamespacedName,
+		Log:            opts.Log,
 	})
 	if err != nil {
 		return err
 	}
 
 	err = configmap.UninstallConfigmap(ctx, configmap.UninstallOptions{
-		KubeClient: opts.KubeClient,
-		NamespacedName: types.NamespacedName{
-			Namespace: opts.NamespacedName.Namespace,
-			Name:      opts.NamespacedName.Name + configmapResourceSuffix,
-		},
+		KubeClient:     opts.KubeClient,
+		NamespacedName: opts.NamespacedName,
 	})
 	if err != nil {
 		return err
 	}
 
-	rbacNSName := types.NamespacedName{
-		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + controllerResourceSuffix,
-	}
-
-	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, rbacNSName, opts.RBACFolderPath)
+	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.AuthenticationGVRs, opts.RBACFolderPath)
 	if err != nil {
 		return err
 	}
