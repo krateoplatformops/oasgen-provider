@@ -2,27 +2,19 @@ package templates
 
 import (
 	"bytes"
-	_ "embed"
 	"fmt"
 	"text/template"
 )
 
-var (
-	//go:embed assets/deployment.yaml
-	deploymentTpl string
-)
-
 type Renderoptions struct {
-	Group      string
-	Version    string
-	Resource   string
-	Namespace  string
-	Name       string
-	Tag        string
-	ClientType string
+	Group     string
+	Version   string
+	Resource  string
+	Namespace string
+	Name      string
 }
 
-func Values(opts Renderoptions) map[string]string {
+func Values(opts Renderoptions) map[string]any {
 	if len(opts.Name) == 0 {
 		opts.Name = fmt.Sprintf("%s-controller", opts.Resource)
 	}
@@ -31,19 +23,21 @@ func Values(opts Renderoptions) map[string]string {
 		opts.Namespace = "default"
 	}
 
-	return map[string]string{
+	values := map[string]any{
 		"apiGroup":   opts.Group,
 		"apiVersion": opts.Version,
 		"resource":   opts.Resource,
 		"name":       opts.Name,
 		"namespace":  opts.Namespace,
-		"tag":        opts.Tag,
-		"clientType": opts.ClientType,
 	}
+
+	return values
 }
 
-func RenderDeployment(values map[string]string) ([]byte, error) {
-	tpl, err := template.New("deployment").Funcs(TxtFuncMap()).Parse(deploymentTpl)
+type Template string
+
+func (t Template) Render(values map[string]any) ([]byte, error) {
+	tpl, err := template.New("template").Funcs(TxtFuncMap()).Parse(string(t))
 	if err != nil {
 		return nil, err
 	}

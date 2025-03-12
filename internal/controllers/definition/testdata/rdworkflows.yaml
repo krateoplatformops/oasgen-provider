@@ -1,0 +1,14 @@
+kind: RestDefinition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: github-workflows
+  namespace: gh-system
+spec:
+  oasPath: configmap://gh-system/gh-workflows/ghworkflows.yaml
+  resourceGroup: krateo.github.com
+  resource:
+    kind: Workflow
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches

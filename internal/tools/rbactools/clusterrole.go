@@ -2,15 +2,52 @@ package rbactools
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/avast/retry-go"
+	"github.com/krateoplatformops/oasgen-provider/internal/templates"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/types"
+	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func CreateClusterRole(gvr schema.GroupVersionResource, nn types.NamespacedName, path string) (rbacv1.ClusterRole, error) {
+	templateF, err := os.ReadFile(path)
+	if err != nil {
+		return rbacv1.ClusterRole{}, fmt.Errorf("failed to read clusterrole template file: %w", err)
+	}
+	values := templates.Values(templates.Renderoptions{
+		Group:     gvr.Group,
+		Version:   gvr.Version,
+		Resource:  gvr.Resource,
+		Namespace: nn.Namespace,
+		Name:      nn.Name,
+	})
+
+	template := templates.Template(string(templateF))
+	dat, err := template.Render(values)
+	if err != nil {
+		return rbacv1.ClusterRole{}, err
+	}
+
+	s := json.NewYAMLSerializer(json.DefaultMetaFactory,
+		clientsetscheme.Scheme,
+		clientsetscheme.Scheme)
+
+	res := rbacv1.ClusterRole{}
+	_, _, err = s.Decode(dat, nil, &res)
+	if err != nil {
+		return rbacv1.ClusterRole{}, fmt.Errorf("failed to decode clusterrole: %w", err)
+	}
+
+	return res, err
+}
 func InstallClusterRole(ctx context.Context, kube client.Client, obj *rbacv1.ClusterRole) error {
 	return retry.Do(
 		func() error {
@@ -61,7 +98,7 @@ func UninstallClusterRole(ctx context.Context, opts UninstallOptions) error {
 	)
 }
 
-func CreateClusterRole(opts types.NamespacedName) rbacv1.ClusterRole {
+func InitClusterRole(opts types.NamespacedName) rbacv1.ClusterRole {
 	return rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "rbac.authorization.k8s.io/v1",
@@ -72,14 +109,14 @@ func CreateClusterRole(opts types.NamespacedName) rbacv1.ClusterRole {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"*"},
+				APIGroups: []string{"apiextensions.k8s.io"},
+				Resources: []string{"customresourcedefinitions"},
+				Verbs:     []string{"get", "list"},
 			},
 			{
-				APIGroups: []string{"apiextensions.k8s.io/v1"},
-				Resources: []string{"crds"},
-				Verbs:     []string{"*"},
+				APIGroups: []string{""},
+				Resources: []string{"events"},
+				Verbs:     []string{"create", "patch", "update"},
 			},
 		},
 	}

@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/avast/retry-go"
@@ -16,6 +17,10 @@ import (
 	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
+const (
+	ControllerResourceSuffix = "-controller"
+)
+
 type UninstallOptions struct {
 	KubeClient     client.Client
 	NamespacedName types.NamespacedName
@@ -23,12 +28,17 @@ type UninstallOptions struct {
 }
 
 func UninstallDeployment(ctx context.Context, opts UninstallOptions) error {
+	opts.NamespacedName.Name += ControllerResourceSuffix
 	return retry.Do(
 		func() error {
 			obj := appsv1.Deployment{}
 			err := opts.KubeClient.Get(ctx, opts.NamespacedName, &obj, &client.GetOptions{})
 			if err != nil {
 				if apierrors.IsNotFound(err) {
+					if opts.Log != nil {
+						opts.Log("Deployment not found, skipping uninstall",
+							"name", opts.NamespacedName.Name, "namespace", opts.NamespacedName.Namespace)
+					}
 					return nil
 				}
 
@@ -38,6 +48,10 @@ func UninstallDeployment(ctx context.Context, opts UninstallOptions) error {
 			err = opts.KubeClient.Delete(ctx, &obj, &client.DeleteOptions{})
 			if err != nil {
 				if apierrors.IsNotFound(err) {
+					if opts.Log != nil {
+						opts.Log("Deployment not found, skipping uninstall",
+							"name", opts.NamespacedName.Name, "namespace", opts.NamespacedName.Namespace)
+					}
 					return nil
 				}
 
@@ -72,18 +86,29 @@ func InstallDeployment(ctx context.Context, kube client.Client, obj *appsv1.Depl
 	)
 }
 
-func CreateDeployment(gvr schema.GroupVersionResource, nn types.NamespacedName) (appsv1.Deployment, error) {
+func CreateDeployment(gvr schema.GroupVersionResource, nn types.NamespacedName, templatePath string, additionalvalues ...string) (appsv1.Deployment, error) {
 	values := templates.Values(templates.Renderoptions{
-		Group:      gvr.Group,
-		Version:    gvr.Version,
-		Resource:   gvr.Resource,
-		Namespace:  nn.Namespace,
-		Name:       nn.Name,
-		Tag:        os.Getenv("CDC_IMAGE_TAG"),
-		ClientType: "REST",
+		Group:     gvr.Group,
+		Version:   gvr.Version,
+		Resource:  gvr.Resource,
+		Namespace: nn.Namespace,
+		Name:      nn.Name + ControllerResourceSuffix,
 	})
 
-	dat, err := templates.RenderDeployment(values)
+	if len(additionalvalues)%2 != 0 {
+		return appsv1.Deployment{}, fmt.Errorf("additionalvalues must be in pairs")
+	}
+	for i := 0; i < len(additionalvalues); i += 2 {
+		values[additionalvalues[i]] = additionalvalues[i+1]
+	}
+
+	templateF, err := os.ReadFile(templatePath)
+	if err != nil {
+		return appsv1.Deployment{}, fmt.Errorf("failed to read template file: %w", err)
+	}
+
+	template := templates.Template(string(templateF))
+	dat, err := template.Render(values)
 	if err != nil {
 		return appsv1.Deployment{}, err
 	}

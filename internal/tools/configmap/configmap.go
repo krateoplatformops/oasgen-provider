@@ -1,4 +1,4 @@
-package rbactools
+package configmap
 
 import (
 	"context"
@@ -7,7 +7,8 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/krateoplatformops/oasgen-provider/internal/templates"
-	rbacv1 "k8s.io/api/rbac/v1"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
@@ -16,11 +17,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func UninstallRoleBinding(ctx context.Context, opts UninstallOptions) error {
+type UninstallOptions struct {
+	KubeClient     client.Client
+	NamespacedName types.NamespacedName
+	Log            func(msg string, keysAndValues ...any)
+}
+
+func UninstallConfigmap(ctx context.Context, opts UninstallOptions) error {
+	opts.NamespacedName.Name += deployment.ControllerResourceSuffix
 	return retry.Do(
 		func() error {
-			obj := rbacv1.RoleBinding{}
-			err := opts.KubeClient.Get(ctx, opts.NamespacedName, &obj, &client.GetOptions{})
+			cm := corev1.ConfigMap{}
+			err := opts.KubeClient.Get(ctx, opts.NamespacedName, &cm, &client.GetOptions{})
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					return nil
@@ -29,7 +37,7 @@ func UninstallRoleBinding(ctx context.Context, opts UninstallOptions) error {
 				return err
 			}
 
-			err = opts.KubeClient.Delete(ctx, &obj, &client.DeleteOptions{})
+			err = opts.KubeClient.Delete(ctx, &cm, &client.DeleteOptions{})
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					return nil
@@ -39,8 +47,8 @@ func UninstallRoleBinding(ctx context.Context, opts UninstallOptions) error {
 			}
 
 			if opts.Log != nil {
-				opts.Log("RoleBinding successfully uninstalled",
-					"name", obj.GetName(), "namespace", obj.GetNamespace())
+				opts.Log("Configmap successfully uninstalled",
+					"name", cm.GetName(), "namespace", cm.GetNamespace())
 			}
 
 			return nil
@@ -48,10 +56,10 @@ func UninstallRoleBinding(ctx context.Context, opts UninstallOptions) error {
 	)
 }
 
-func InstallRoleBinding(ctx context.Context, kube client.Client, obj *rbacv1.RoleBinding) error {
+func InstallConfigmap(ctx context.Context, kube client.Client, obj *corev1.ConfigMap) error {
 	return retry.Do(
 		func() error {
-			tmp := rbacv1.RoleBinding{}
+			tmp := corev1.ConfigMap{}
 			err := kube.Get(ctx, client.ObjectKeyFromObject(obj), &tmp)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
@@ -66,40 +74,41 @@ func InstallRoleBinding(ctx context.Context, kube client.Client, obj *rbacv1.Rol
 	)
 }
 
-func CreateRoleBinding(gvr schema.GroupVersionResource, nn types.NamespacedName, path string, additionalvalues ...string) (rbacv1.RoleBinding, error) {
-	templateF, err := os.ReadFile(path)
-	if err != nil {
-		return rbacv1.RoleBinding{}, fmt.Errorf("failed to read role template file: %w", err)
-	}
+func CreateConfigmap(gvr schema.GroupVersionResource, nn types.NamespacedName, configmapTemplatePath string, additionalvalues ...string) (corev1.ConfigMap, error) {
 	values := templates.Values(templates.Renderoptions{
 		Group:     gvr.Group,
 		Version:   gvr.Version,
 		Resource:  gvr.Resource,
 		Namespace: nn.Namespace,
-		Name:      nn.Name,
+		Name:      nn.Name + deployment.ControllerResourceSuffix,
 	})
 
 	if len(additionalvalues)%2 != 0 {
-		return rbacv1.RoleBinding{}, fmt.Errorf("additionalvalues must be in pairs: %w", err)
+		return corev1.ConfigMap{}, fmt.Errorf("additionalvalues must be in pairs")
 	}
 	for i := 0; i < len(additionalvalues); i += 2 {
 		values[additionalvalues[i]] = additionalvalues[i+1]
 	}
 
+	templateF, err := os.ReadFile(configmapTemplatePath)
+	if err != nil {
+		return corev1.ConfigMap{}, fmt.Errorf("failed to read configmap template file: %w", err)
+	}
+
 	template := templates.Template(string(templateF))
 	dat, err := template.Render(values)
 	if err != nil {
-		return rbacv1.RoleBinding{}, err
+		return corev1.ConfigMap{}, err
 	}
 
 	s := json.NewYAMLSerializer(json.DefaultMetaFactory,
 		clientsetscheme.Scheme,
 		clientsetscheme.Scheme)
 
-	res := rbacv1.RoleBinding{}
+	res := corev1.ConfigMap{}
 	_, _, err = s.Decode(dat, nil, &res)
 	if err != nil {
-		return rbacv1.RoleBinding{}, fmt.Errorf("failed to decode clusterrole: %w", err)
+		return corev1.ConfigMap{}, fmt.Errorf("failed to decode configmap: %w", err)
 	}
 
 	return res, err
