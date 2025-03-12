@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/plurals"
 	"github.com/krateoplatformops/snowplow/plumbing/e2e"
 	xenv "github.com/krateoplatformops/snowplow/plumbing/env"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -112,7 +112,7 @@ func TestLookup(t *testing.T) {
 			Kind:    "CompositionDefinition",
 		}
 
-		gvr := InferGroupResource(gvk.GroupKind()).WithVersion(gvk.Version)
+		gvr := plurals.ToGroupVersionResource((gvk.GroupKind()).WithVersion(gvk.Version))
 
 		ok, err := Lookup(context.Background(), kube, gvr)
 		if err != nil {
@@ -128,25 +128,6 @@ func TestLookup(t *testing.T) {
 	}).Feature()
 
 	testenv.Test(t, f)
-}
-
-func TestInferGroupResource(t *testing.T) {
-	table := []struct {
-		gk   schema.GroupKind
-		want schema.GroupResource
-	}{
-		{
-			gk:   schema.GroupKind{Group: "core.krateo.io", Kind: "CardTemplate"},
-			want: schema.GroupResource{Group: "core.krateo.io", Resource: "cardtemplates"},
-		},
-	}
-
-	for i, tc := range table {
-		got := InferGroupResource(tc.gk)
-		if diff := cmp.Diff(got, tc.want); len(diff) > 0 {
-			t.Fatalf("[tc: %d] diff: %s", i, diff)
-		}
-	}
 }
 
 func TestGet(t *testing.T) {

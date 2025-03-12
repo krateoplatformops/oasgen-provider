@@ -101,7 +101,6 @@ package crd
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/avast/retry-go"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -110,19 +109,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/gengo/namer"
-	"k8s.io/gengo/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-func InferGroupResource(gk schema.GroupKind) schema.GroupResource {
-	kind := types.Type{Name: types.Name{Name: gk.Kind}}
-	namer := namer.NewPrivatePluralNamer(nil)
-	return schema.GroupResource{
-		Group:    gk.Group,
-		Resource: strings.ToLower(namer.Name(&kind)),
-	}
-}
 
 func Update(ctx context.Context, kube client.Client, name string, newObj *apiextensionsv1.CustomResourceDefinition) error {
 	if err := registerEventually(); err != nil {
