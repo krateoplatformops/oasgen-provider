@@ -4,12 +4,6 @@ metadata:
   name: {{ .resource }}-{{ .apiVersion }}
   namespace: {{ .namespace }}
 rules:
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch", "update"]
-- apiGroups: ["swaggergen.krateo.io"]
-  resources: ["restdefinitions", "restdefinitions/status"]
-  verbs: ["get", "list", "watch"]
 - apiGroups: [ {{ .apiGroup }}]
   resources: ["{{ .resource }}", "{{ .resource }}/status"]
   verbs: ["*"]

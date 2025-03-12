@@ -14,9 +14,9 @@ import (
 
 func TestCreateRole(t *testing.T) {
 	gvr := schema.GroupVersionResource{
-		Group:    "rbac.authorization.k8s.io",
+		Group:    "krateo.gen",
 		Version:  "v1",
-		Resource: "roles",
+		Resource: "test",
 	}
 	nn := types.NamespacedName{
 		Name:      "test-role",
@@ -24,42 +24,28 @@ func TestCreateRole(t *testing.T) {
 	}
 	path := "testdata/role_template.yaml"
 
-	clusterRole, err := CreateRole(gvr, nn, path, "secretName", "test-value")
+	authentications := []string{"testauth", "testauth2"}
+
+	role, err := CreateRole(gvr, nn, path, "authentications", authentications)
 	assert.NoError(t, err)
 
 	expectedRules := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{"apiextensions.k8s.io"},
-			Resources: []string{"customresourcedefinitions"},
-			Verbs:     []string{"get", "list"},
+			APIGroups: []string{"krateo.gen"},
+			Resources: []string{"test", "test/status"},
+			Verbs:     []string{"*"},
 		},
 		{
-			APIGroups: []string{""},
-			Resources: []string{"events"},
-			Verbs:     []string{"create", "patch", "update"},
-		},
-		{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			Verbs:         []string{"get", "list", "watch"},
-			ResourceNames: []string{"test-value"},
-		},
-		{
-			APIGroups: []string{"swaggergen.krateo.io"},
-			Resources: []string{"restdefinitions", "restdefinitions/status"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"get", "list", "watch"},
+			APIGroups: []string{"krateo.gen"},
+			Resources: []string{"testauth", "testauth2"},
+			Verbs:     []string{"*"},
 		},
 	}
 
-	assert.Equal(t, "rbac.authorization.k8s.io/v1", clusterRole.APIVersion)
-	assert.Equal(t, "Role", clusterRole.Kind)
-	assert.Equal(t, gvr.Resource+"-"+gvr.Version, clusterRole.Name)
-	assert.Equal(t, expectedRules, clusterRole.Rules)
+	assert.Equal(t, "rbac.authorization.k8s.io/v1", role.APIVersion)
+	assert.Equal(t, "Role", role.Kind)
+	assert.Equal(t, gvr.Resource+"-"+gvr.Version, role.Name)
+	assert.Equal(t, expectedRules, role.Rules)
 }
 func TestInitRole(t *testing.T) {
 	resource := "example"
