@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"text/template"
+
+	"github.com/Masterminds/sprig/v3"
 )
 
 type Renderoptions struct {
@@ -37,7 +39,7 @@ func Values(opts Renderoptions) map[string]any {
 type Template string
 
 func (t Template) Render(values map[string]any) ([]byte, error) {
-	tpl, err := template.New("template").Funcs(TxtFuncMap()).Parse(string(t))
+	tpl, err := template.New("template").Funcs(sprig.FuncMap()).Parse(string(t))
 	if err != nil {
 		return nil, err
 	}
