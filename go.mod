@@ -8,10 +8,9 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/go-logr/logr v1.4.2
-	github.com/go-task/slim-sprig/v3 v3.0.0
 	github.com/gobuffalo/flect v1.0.3
 	github.com/google/go-cmp v0.6.0
-	github.com/krateoplatformops/crdgen v0.3.9
+	github.com/krateoplatformops/crdgen v0.4.0
 	github.com/krateoplatformops/provider-runtime v0.9.1
 	github.com/krateoplatformops/snowplow v0.0.0-20250226111717-f0d3196e3c50
 	github.com/pb33f/libopenapi v0.16.8
