@@ -1,0 +1,110 @@
+apiVersion: v1
+data:
+  ghworkflows.yaml: |-
+    openapi: 3.0.3
+    info:
+      version: 1.1.4
+      title: GitHub v3 REST API
+      description: GitHub's v3 REST API.
+      license:
+        name: MIT
+        url: https://spdx.org/licenses/MIT
+      termsOfService: https://docs.github.com/articles/github-terms-of-service
+      contact:
+        name: Support
+        url: https://support.github.com/contact?tags=dotcom-rest-api
+      x-github-plan: api.github.com
+    servers:
+      - url: https://api.github.com
+    externalDocs:
+      description: GitHub v3 REST API
+      url: https://docs.github.com/rest/
+    paths:
+      "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches":
+        post:
+          summary: Create a workflow dispatch event
+          description: |-
+            You can use this endpoint to manually trigger a GitHub Actions workflow run. You can replace `workflow_id` with the workflow file name. For example, you could use `main.yaml`.
+
+            You must configure your GitHub Actions workflow to run when the [`workflow_dispatch` webhook](/developers/webhooks-and-events/webhook-events-and-payloads#workflow_dispatch) event occurs. The `inputs` are configured in the workflow file. For more information about how to configure the `workflow_dispatch` event in the workflow file, see "[Events that trigger workflows](/actions/reference/events-that-trigger-workflows#workflow_dispatch)."
+
+            OAuth tokens and personal access tokens (classic) need the `repo` scope to use this endpoint.
+          operationId: actions/create-workflow-dispatch
+          tags:
+          - actions
+          externalDocs:
+            description: API method documentation
+            url: https://docs.github.com/rest/actions/workflows#create-a-workflow-dispatch-event
+          parameters:
+          - "$ref": "#/components/parameters/owner"
+          - "$ref": "#/components/parameters/repo"
+          - "$ref": "#/components/parameters/workflow-id"
+          responses:
+            '204':
+              description: Response
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    ref:
+                      type: string
+                      description: The git reference for the workflow. The reference can
+                        be a branch or tag name.
+                    inputs:
+                      type: object
+                      description: Input keys and values configured in the workflow file.
+                        The maximum number of properties is 10. Any default properties
+                        configured in the workflow file will be used when `inputs` are
+                        omitted.
+                      additionalProperties: true
+                      maxProperties: 10
+                  required:
+                  - ref
+                examples:
+                  default:
+                    value:
+                      ref: topic-branch
+                      inputs:
+                        name: Mona the Octocat
+                        home: San Francisco, CA
+          x-github:
+            githubCloudOnly: false
+            enabledForGitHubApps: true
+            category: actions
+            subcategory: workflows
+    components:
+      securitySchemes:
+        accessToken:
+          type: http
+          scheme: bearer
+      parameters:
+        owner:
+          name: owner
+          description: The account owner of the repository. The name is not case sensitive.
+          in: path
+          required: true
+          schema:
+            type: string
+        repo:
+          name: repo
+          description: The name of the repository without the `.git` extension. The name
+            is not case sensitive.
+          in: path
+          required: true
+          schema:
+            type: string
+        workflow-id:
+          name: workflow_id
+          in: path
+          description: The ID of the workflow. You can also pass the workflow file name
+            as a string.
+          required: true
+          schema:
+            type: string
+kind: ConfigMap
+metadata:
+  name: gh-workflows
+  namespace: gh-system
