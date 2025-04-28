@@ -221,10 +221,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 	deployOk, deployReady, err := deployment.LookupDeployment(ctx, e.kube, &obj)
 	if err != nil {
-		return reconciler.ExternalObservation{
-			ResourceExists:   true,
-			ResourceUpToDate: true,
-		}, err
+		return reconciler.ExternalObservation{}, err
 	}
 	if !deployOk {
 		if meta.IsVerbose(cr) {
@@ -325,16 +322,6 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 
 	e.log.Debug("Creating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
-	gen, errors, err := oas2jsonschema.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
-	if err != nil {
-		return fmt.Errorf("generating byte schemas: %w", err)
-	}
-	if meta.IsVerbose(cr) {
-		for _, er := range errors {
-			e.log.Debug("Generating Byte Schemas", "Error:", er)
-		}
-	}
-
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
 		Version: resourceVersion,
@@ -342,64 +329,30 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 	gvr := plurals.ToGroupVersionResource(gvk)
 
-	resource := crdgen.Generate(ctx, crdgen.Options{
-		Managed:                true,
-		WorkDir:                fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
-		GVK:                    gvk,
-		Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restresources", "rr"},
-		SpecJsonSchemaGetter:   gen.OASSpecJsonSchemaGetter(),
-		StatusJsonSchemaGetter: gen.OASStatusJsonSchemaGetter(),
-	})
-	if resource.Err != nil {
-		return fmt.Errorf("generating CRD: %w", resource.Err)
-	}
-
-	crdu, err := crd.Unmarshal(resource.Manifest)
+	crdOk, err := crd.Lookup(ctx, e.kube, gvr)
 	if err != nil {
-		return fmt.Errorf("unmarshalling CRD: %w", err)
+		return err
 	}
 
-	err = kube.Apply(ctx, e.kube, crdu, kube.ApplyOptions{})
-	if err != nil {
-		return fmt.Errorf("installing CRD: %w", err)
-	}
-
-	var authenticationGVRs []schema.GroupVersionResource
-	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
+	if !crdOk {
+		gen, errors, err := oas2jsonschema.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
 		if err != nil {
-			e.log.Debug("Generating Auth Schema Name", "Error:", err)
-			return fmt.Errorf("generating Auth Schema Name: %w", err)
+			return fmt.Errorf("generating byte schemas: %w", err)
 		}
-		gvk := schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(authSchemaName),
-		}
-
-		crdOk, err := crd.Lookup(ctx, e.kube, plurals.ToGroupVersionResource(gvk))
-		if err != nil {
-			return fmt.Errorf("looking up CRD: %w", err)
-		}
-		if crdOk {
-			e.log.Debug("CRD already exists", "Kind:", authSchemaName)
-			authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
-			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-				Kind:       gvk.Kind,
-				APIVersion: gvk.GroupVersion().String(),
-			})
-			continue
+		if meta.IsVerbose(cr) {
+			for _, er := range errors {
+				e.log.Debug("Generating Byte Schemas", "Error:", er)
+			}
 		}
 
-		resource = crdgen.Generate(ctx, crdgen.Options{
-			Managed:                false,
-			WorkDir:                fmt.Sprintf("gen-crds/%s", authSchemaName),
+		resource := crdgen.Generate(ctx, crdgen.Options{
+			Managed:                true,
+			WorkDir:                fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
 			GVK:                    gvk,
-			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restauths", "ra"},
-			SpecJsonSchemaGetter:   gen.OASAuthJsonSchemaGetter(authSchemaName),
-			StatusJsonSchemaGetter: oas2jsonschema.StaticJsonSchemaGetter(),
+			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restresources", "rr"},
+			SpecJsonSchemaGetter:   gen.OASSpecJsonSchemaGetter(),
+			StatusJsonSchemaGetter: gen.OASStatusJsonSchemaGetter(),
 		})
-
 		if resource.Err != nil {
 			return fmt.Errorf("generating CRD: %w", resource.Err)
 		}
@@ -414,17 +367,80 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
+		for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
+			authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
+			if err != nil {
+				e.log.Debug("Generating Auth Schema Name", "Error:", err)
+				return fmt.Errorf("generating Auth Schema Name: %w", err)
+			}
+			gvk := schema.GroupVersionKind{
+				Group:   cr.Spec.ResourceGroup,
+				Version: resourceVersion,
+				Kind:    text.CapitaliseFirstLetter(authSchemaName),
+			}
 
-		cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-			Kind:       gvk.Kind,
-			APIVersion: gvk.GroupVersion().String(),
-		})
+			crdOk, err := crd.Lookup(ctx, e.kube, plurals.ToGroupVersionResource(gvk))
+			if err != nil {
+				return fmt.Errorf("looking up CRD: %w", err)
+			}
+			if crdOk {
+				e.log.Debug("CRD already exists", "Kind:", authSchemaName)
+				cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+					Kind:       gvk.Kind,
+					APIVersion: gvk.GroupVersion().String(),
+				})
+				continue
+			}
+
+			resource = crdgen.Generate(ctx, crdgen.Options{
+				Managed:                false,
+				WorkDir:                fmt.Sprintf("gen-crds/%s", authSchemaName),
+				GVK:                    gvk,
+				Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restauths", "ra"},
+				SpecJsonSchemaGetter:   gen.OASAuthJsonSchemaGetter(authSchemaName),
+				StatusJsonSchemaGetter: oas2jsonschema.StaticJsonSchemaGetter(),
+			})
+
+			if resource.Err != nil {
+				return fmt.Errorf("generating CRD: %w", resource.Err)
+			}
+
+			crdu, err := crd.Unmarshal(resource.Manifest)
+			if err != nil {
+				return fmt.Errorf("unmarshalling CRD: %w", err)
+			}
+
+			err = kube.Apply(ctx, e.kube, crdu, kube.ApplyOptions{})
+			if err != nil {
+				return fmt.Errorf("installing CRD: %w", err)
+			}
+
+			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+				Kind:       gvk.Kind,
+				APIVersion: gvk.GroupVersion().String(),
+			})
+		}
+
+		cr.SetConditions(rtv1.Creating())
+		err = e.kube.Status().Update(ctx, cr)
+		if err != nil {
+			return fmt.Errorf("updating status: %w", err)
+		}
+		e.log.Debug("Created CRD", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+		e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
+			"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
+
+		return nil
 	}
 
 	log := logging.NewNopLogger()
 	if meta.IsVerbose(cr) {
 		log = e.log
+	}
+
+	authenticationGVRs, err := getAuthenticationGVRs(ctx, e.kube, e.doc, cr)
+	if err != nil {
+		return fmt.Errorf("getting authentication GVRs: %w", err)
 	}
 	opts := deploy.DeployOptions{
 		AuthenticationGVRs:     authenticationGVRs,
