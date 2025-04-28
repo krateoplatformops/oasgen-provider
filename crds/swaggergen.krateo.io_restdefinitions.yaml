@@ -178,6 +178,9 @@ spec:
                   - type
                   type: object
                 type: array
+              digest:
+                description: 'Digest: the digest of the managed resources'
+                type: string
               oasPath:
                 description: 'OASPath: the path to the OAS Specification file'
                 type: string

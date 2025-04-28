@@ -3,6 +3,7 @@ package kube
 import (
 	"context"
 
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/avast/retry-go"
@@ -74,6 +75,56 @@ func Uninstall(ctx context.Context, kube client.Client, obj client.Object, opts 
 			return nil
 		},
 	)
+}
+
+func UninstallFromReference(ctx context.Context, kube client.Client, ref v1.ObjectReference, opts UninstallOptions) error {
+	return retry.Do(
+		func() error {
+			tmp := &unstructured.Unstructured{}
+
+			// tmp.SetAPIVersion(gvk.GroupVersion().String())
+			// tmp.SetKind(gvk.Kind)
+
+			tmp.SetGroupVersionKind(ref.GroupVersionKind())
+			err := kube.Get(ctx, client.ObjectKey{
+				Name:      ref.Name,
+				Namespace: ref.Namespace,
+			}, tmp)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return nil
+				}
+				return err
+			}
+
+			err = kube.Delete(ctx, tmp, &client.DeleteOptions{
+				DryRun:             opts.DryRun,
+				Preconditions:      opts.Preconditions,
+				PropagationPolicy:  opts.PropagationPolicy,
+				GracePeriodSeconds: opts.GracePeriodSeconds,
+			})
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return nil
+				}
+				return err
+			}
+			return nil
+		},
+	)
+}
+
+func GetFromReference(ctx context.Context, kube client.Client, ref v1.ObjectReference) error {
+	tmp := &unstructured.Unstructured{}
+	tmp.SetGroupVersionKind(ref.GroupVersionKind())
+	err := kube.Get(ctx, client.ObjectKey{
+		Name:      ref.Name,
+		Namespace: ref.Namespace,
+	}, tmp)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func Get(ctx context.Context, kube client.Client, obj client.Object) error {

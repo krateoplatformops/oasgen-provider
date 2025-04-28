@@ -10,10 +10,6 @@ import (
 	"testing"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-
 	"github.com/krateoplatformops/oasgen-provider/apis"
 	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/objects"
@@ -24,6 +20,9 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/snowplow/plumbing/e2e"
 	xenv "github.com/krateoplatformops/snowplow/plumbing/env"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,7 +49,7 @@ const (
 	manifestsPath = "../../../manifests"
 	scriptsPath   = "../../scripts"
 
-	testFileName = "rdworkflows.yaml"
+	testFileName = "sample.yaml"
 )
 
 func TestMain(m *testing.M) {
@@ -61,9 +60,10 @@ func TestMain(m *testing.M) {
 	testenv = env.New()
 
 	testenv.Setup(
-		envfuncs.CreateCluster(kind.NewProvider(), clusterName),
+		envfuncs.CreateClusterWithConfig(kind.NewProvider(), clusterName, filepath.Join(manifestsPath, "kind.yaml")),
 		envfuncs.SetupCRDs(crdPath, "swaggergen.krateo.io_restdefinitions.yaml"),
 		e2e.CreateNamespace(namespace),
+		e2e.CreateNamespace("demo-system"),
 		e2e.CreateNamespace("krateo-system"),
 
 		func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
@@ -71,8 +71,13 @@ func TestMain(m *testing.M) {
 			if err != nil {
 				return ctx, err
 			}
-			r.WithNamespace(namespace)
-
+			err = decoder.DecodeEachFile(ctx, os.DirFS(filepath.Join(manifestsPath)),
+				"ws-deployment.yaml",
+				decoder.CreateIgnoreAlreadyExists(r))
+			if err != nil {
+				return ctx, err
+			}
+			time.Sleep(10 * time.Second)
 			return ctx, nil
 		},
 	).Finish(
@@ -103,14 +108,21 @@ func TestDefinition(t *testing.T) {
 			os.Setenv("RDC_TEMPLATE_CONFIGMAP_PATH", filepath.Join(testdataPath, "rdc", "configmap.yaml"))
 			os.Setenv("RDC_RBAC_CONFIG_FOLDER", filepath.Join(testdataPath, "rdc", "rbac"))
 
-			err = decoder.DecodeEachFile(ctx, os.DirFS(filepath.Join(testdataPath)),
+			err = decoder.DecodeEachFile(ctx, os.DirFS(filepath.Join(testdataPath, "restdefinitions")),
 				"*.yaml",
 				decoder.CreateIgnoreAlreadyExists(r))
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			err = decoder.DecodeFile(os.DirFS(filepath.Join(testdataPath)), testFileName, &mg)
+			err = decoder.DecodeEachFile(ctx, os.DirFS(filepath.Join(testdataPath, "restdefinitions", "cm")),
+				"sample.yaml",
+				decoder.CreateIgnoreAlreadyExists(r))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = decoder.DecodeFile(os.DirFS(filepath.Join(testdataPath, "restdefinitions")), testFileName, &mg)
 			if err != nil {
 				t.Fatal(err)
 			}

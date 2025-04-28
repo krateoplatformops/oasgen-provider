@@ -9,7 +9,7 @@ kubectl delete -f manifests/
 
 # Install
 
-# kubectl apply -f crds/
+kubectl apply -f crds/
 kubectl apply -f manifests/
 
 

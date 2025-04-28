@@ -20,14 +20,6 @@ import (
 	"github.com/pb33f/libopenapi"
 )
 
-// var schemaRef = "https://petstore3.swagger.io/api/v3/openapi.yaml"
-
-// //go:embed tests/oas/petstore.yaml
-// var schemaRef []byte
-
-// //go:embed tests/oas/petstore_auth.yaml
-// var schemaRefAuth []byte
-
 //go:embed tests/oas/*
 var content embed.FS
 
@@ -75,6 +67,14 @@ func TestGenerateByteSchemas(t *testing.T) {
 			t.Errorf("failed to build model")
 		}
 
+		if doc == nil {
+			t.Errorf("failed to build model")
+			return
+		}
+		if doc.Index == nil {
+			t.Errorf("failed to build model index")
+			return
+		}
 		// Resolve model references
 		resolvingErrors := doc.Index.GetResolver().Resolve()
 		errs := []error{}
@@ -115,7 +115,7 @@ func TestGenerateByteSchemas(t *testing.T) {
 
 		identifiers := []string{"id"}
 
-		gen, fatalError, errors := GenerateByteSchemas(doc, resource, identifiers)
+		gen, errors, fatalError := GenerateByteSchemas(doc, resource, identifiers)
 		if fatalError != nil {
 			t.Errorf("fatal error: %v", fatalError)
 		}

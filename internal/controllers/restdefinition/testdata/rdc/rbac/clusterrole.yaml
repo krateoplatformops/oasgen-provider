@@ -6,9 +6,26 @@ rules:
 - apiGroups: ["apiextensions.k8s.io"]
   resources: ["customresourcedefinitions"]
   verbs: ["get", "list"]
-# - apiGroups: [""]
-#   resources: ["events"]
-#   verbs: ["create", "patch", "update"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch", "update"]
+- apiGroups: ["swaggergen.krateo.io"]
+  resources: ["restdefinitions", "restdefinitions/status"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "watch"]
+- apiGroups: [ {{ .apiGroup }}]
+  resources: ["{{ .resource }}", "{{ .resource }}/status"]
+  verbs: ["*"]
+{{- if .authentications }}
+- apiGroups: [{{ .apiGroup }}]
+  resources:
+  {{- range .authentications }}
+  - "{{ . }}"
+  {{- end }}
+  verbs: ["*"]
+{{- end }}

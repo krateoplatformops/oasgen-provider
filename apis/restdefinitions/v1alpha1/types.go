@@ -89,6 +89,10 @@ type RestDefinitionStatus struct {
 	// Authentications: the list of authentications to use
 	// +optional
 	Authentications []KindApiVersion `json:"authentications"`
+
+	// Digest: the digest of the managed resources
+	// +optional
+	Digest string `json:"digest,omitempty"`
 }
 
 // +kubebuilder:object:root=true

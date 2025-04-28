@@ -11,6 +11,7 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
+
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 )
@@ -22,28 +23,31 @@ type OASSchemaGenerator struct {
 }
 
 // GenerateByteSchemas generates the byte schemas for the spec, status and auth schemas. Returns a fatal error and a list of generic errors.
-func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource definitionv1alpha1.Resource, identifiers []string) (g *OASSchemaGenerator, fatalError error, errors []error) {
+func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource definitionv1alpha1.Resource, identifiers []string) (g *OASSchemaGenerator, errors []error, fatalError error) {
 	secByteSchema := make(map[string][]byte)
 	var schema *base.Schema
 	bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
 	if bodySchema == nil {
-		return nil, fmt.Errorf("schemaproxy is nil"), errors
+		return nil, errors, fmt.Errorf("schemaproxy is nil")
 	}
 	schema, err := bodySchema.BuildSchema()
 	if err != nil {
-		return nil, fmt.Errorf("building schema"), errors
+		return nil, errors, fmt.Errorf("building schema")
 	}
 	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {
-			errors = append(errors, err)
-			continue
+			// errors = append(errors, err)
+
+			// continue
+			return nil, errors, fmt.Errorf("auth schema name: %w", err)
 		}
 
 		secByteSchema[authSchemaName], err = generation.GenerateAuthSchemaFromSecuritySchema(secSchemaPair.Value())
 		if err != nil {
-			errors = append(errors, err)
-			continue
+			// errors = append(errors, err)
+			// continue
+			return nil, errors, fmt.Errorf("auth schema: %w", err)
 		}
 	}
 
@@ -52,27 +56,27 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		if strings.EqualFold(verb.Action, "create") {
 			path := doc.Model.Paths.PathItems.Value(verb.Path)
 			if path == nil {
-				return nil, fmt.Errorf("path %s not found", verb.Path), errors
+				return nil, errors, fmt.Errorf("path %s not found", verb.Path)
 			}
 
 			ops := path.GetOperations()
 			if ops == nil {
-				return nil, fmt.Errorf("operations not found for %s", verb.Path), errors
+				return nil, errors, fmt.Errorf("operations not found for %s", verb.Path)
 			}
 
 			op := ops.Value(strings.ToLower(verb.Method))
 			if op == nil {
-				return nil, fmt.Errorf("operation not found for %s", verb.Path), errors
+				return nil, errors, fmt.Errorf("operation not found for %s", verb.Path)
 			}
 			if op.RequestBody != nil {
 				bodySchema = op.RequestBody.Content.Value("application/json").Schema
 			}
 			if bodySchema == nil {
-				return nil, fmt.Errorf("body schema not found for %s", verb.Path), errors
+				return nil, errors, fmt.Errorf("body schema not found for %s", verb.Path)
 			}
 			schema, err = bodySchema.BuildSchema()
 			if err != nil {
-				return nil, fmt.Errorf("building schema for %s: %w", verb.Path, err), errors
+				return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
 			}
 			if len(schema.Type) > 0 {
 				if schema.Type[0] == "array" {
@@ -105,7 +109,11 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 					Properties: om,
 					Required:   req,
 				})
-				schema = schemaproxy.Schema()
+				schema, err = schemaproxy.BuildSchema()
+				if err != nil {
+					return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
+				}
+
 			} else {
 				if schema.Properties == nil {
 					schema.Properties = orderedmap.New[string, *base.SchemaProxy]()
@@ -117,23 +125,31 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		for key := range secByteSchema {
 			authSchemaProxy := schema.Properties.Value("authenticationRefs")
 			if authSchemaProxy == nil {
-				return nil, fmt.Errorf("authenticationRefs schema not found for %s", verb.Path), errors
+				return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
 			}
 
-			if authSchemaProxy.Schema() == nil {
+			sch, err := authSchemaProxy.BuildSchema()
+			if err != nil {
+				return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
+			}
+
+			if sch == nil {
 				authSchemaProxy = base.CreateSchemaProxy(&base.Schema{
 					Type:        []string{"object"},
 					Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set.",
 					Properties:  orderedmap.New[string, *base.SchemaProxy](),
 					Required:    []string{"authenticationRefs"},
 				})
+				sch, err = authSchemaProxy.BuildSchema()
+				if err != nil {
+					return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
+				}
 			}
 
-			// Ensure authSchemaProxy.Schema().Properties is initialized
-			if authSchemaProxy.Schema().Properties == nil {
-				authSchemaProxy.Schema().Properties = orderedmap.New[string, *base.SchemaProxy]()
+			if sch.Properties == nil {
+				sch.Properties = orderedmap.New[string, *base.SchemaProxy]()
 			}
-			authSchemaProxy.Schema().Properties.Set(fmt.Sprintf("%sRef", text.FirstToLower(key)),
+			sch.Properties.Set(fmt.Sprintf("%sRef", text.FirstToLower(key)),
 				base.CreateSchemaProxy(&base.Schema{Type: []string{"string"}}))
 		}
 
@@ -147,7 +163,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			}
 			path := doc.Model.Paths.PathItems.Value(verb.Path)
 			if path == nil {
-				return nil, fmt.Errorf("path %s not found", verb.Path), errors
+				return nil, errors, fmt.Errorf("path %s not found", verb.Path)
 			}
 			ops := path.GetOperations()
 			if ops == nil {
@@ -163,11 +179,11 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 					schema.Properties.Set(param.Name, param.Schema)
 					schemaProxyParam := schema.Properties.Value(param.Name)
 					if schemaProxyParam == nil {
-						return nil, fmt.Errorf("schema proxy for %s is nil", param.Name), errors
+						return nil, errors, fmt.Errorf("schema proxy for %s is nil", param.Name)
 					}
 					schemaParam, err := schemaProxyParam.BuildSchema()
 					if err != nil {
-						return nil, fmt.Errorf("building schema for %s: %w", verb.Path, err), errors
+						return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
 					}
 					schemaParam.Description = fmt.Sprintf("PARAMETER: %s, VERB: %s - %s", param.In, text.CapitaliseFirstLetter(op.Key()), param.Description)
 				}
@@ -175,7 +191,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		}
 
 		if schema == nil {
-			return nil, fmt.Errorf("schema is nil for %s", verb.Path), errors
+			return nil, errors, fmt.Errorf("schema is nil for %s", verb.Path)
 		}
 		// Add the identifiers to the properties map
 		for _, identifier := range identifiers {
@@ -190,7 +206,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 
 		byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
 		if err != nil {
-			return nil, err, errors
+			return nil, errors, err
 		}
 
 		specByteSchema[resource.Kind] = byteSchema
@@ -216,12 +232,12 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 
 	statusSchema, err := schemaProxy.BuildSchema()
 	if err != nil {
-		return nil, fmt.Errorf("building status schema for %s: %w", identifiers, err), errors
+		return nil, errors, fmt.Errorf("building status schema for %s: %w", identifiers, err)
 	}
 
 	statusByteSchema, err = generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(statusSchema))
 	if err != nil {
-		return nil, err, errors
+		return nil, errors, err
 	}
 
 	g = &OASSchemaGenerator{
@@ -230,33 +246,37 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		secByteSchema:    secByteSchema,
 	}
 
-	return g, nil, errors
+	return g, errors, nil
 }
 
 // func PopulateFromAllOf() is a method that populates the schema with the properties from the allOf field.
 // the recursive function to populate the schema with the properties from the allOf field.
-func populateFromAllOf(schema *base.Schema) {
+func populateFromAllOf(schema *base.Schema) error {
 	if len(schema.Type) > 0 && schema.Type[0] == "array" {
 		if schema.Items != nil {
 			if schema.Items.N == 0 {
 				sch, err := schema.Items.A.BuildSchema()
 				if err != nil {
-					return
+					return err
 				}
 
 				populateFromAllOf(sch)
 			}
 		}
-		return
+		return nil
 	}
 	for prop := schema.Properties.First(); prop != nil; prop = prop.Next() {
-		populateFromAllOf(prop.Value().Schema())
+		sch, err := prop.Value().BuildSchema()
+		if err != nil {
+			return err
+		}
+		populateFromAllOf(sch)
 	}
 	for _, proxy := range schema.AllOf {
 		propSchema, err := proxy.BuildSchema()
 		populateFromAllOf(propSchema)
 		if err != nil {
-			return
+			return err
 		}
 		// Iterate over the properties of the schema with First() and Next()
 		for prop := propSchema.Properties.First(); prop != nil; prop = prop.Next() {
@@ -267,6 +287,7 @@ func populateFromAllOf(schema *base.Schema) {
 			schema.Properties.Set(prop.Key(), prop.Value())
 		}
 	}
+	return nil
 }
 
 func (g *OASSchemaGenerator) OASSpecJsonSchemaGetter() crdgen.JsonSchemaGetter {

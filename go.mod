@@ -1,8 +1,6 @@
 module github.com/krateoplatformops/oasgen-provider
 
-go 1.24.1
-
-toolchain go1.24.2
+go 1.24.0
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0

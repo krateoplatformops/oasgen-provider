@@ -1,0 +1,28 @@
+apiVersion: swaggergen.krateo.io/v1alpha1
+kind: RestDefinition
+metadata:
+  name: sample
+  namespace: demo-system 
+spec:
+  oasPath: configmap://demo-system/sample-cm/openapi.yaml
+  resourceGroup: sample.krateo.io
+  resource:
+    identifiers:
+    - name
+    kind: Sample
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /resource
+    - action: delete
+      method: DELETE
+      path: /resource
+    - action: get
+      method: GET
+      path: /resource
+    - action: findby
+      method: GET
+      path: /resources
+    - action: update
+      method: PATCH
+      path: /resource

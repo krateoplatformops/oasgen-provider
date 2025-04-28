@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+
 	"net/http"
 	"os"
 	"path"
@@ -35,6 +35,7 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/filegetter"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/kube"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/oas2jsonschema"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/objects"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/plurals"
@@ -188,7 +189,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	gvr := plurals.ToGroupVersionResource(gvk)
-	log.Printf("[DBG] Observing (gvk: %s, gvr: %s)\n", gvk.String(), gvr.String())
+	e.log.Info("Observing RestDefinition", "gvr", gvr.String())
 
 	crdOk, err := crd.Lookup(ctx, e.kube, gvr)
 	if err != nil {
@@ -196,7 +197,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if !crdOk {
-		log.Printf("[DBG] CRD does not exists yet (gvr: %q)\n", gvr.String())
+		e.log.Info("CRD not found", "gvr", gvr.String())
 
 		cr.SetConditions(rtv1.Unavailable().
 			WithMessage(fmt.Sprintf("CRD for '%s' does not exists yet", gvr.String())))
@@ -205,8 +206,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 			ResourceUpToDate: true,
 		}, nil
 	}
-
-	log.Printf("[DBG] Searching for Dynamic Controller (gvr: %q)\n", gvr.String())
+	e.log.Info("Searching for Dynamic Controller", "gvr", gvr.String())
 
 	obj := appsv1.Deployment{}
 	err = objects.CreateK8sObject(&obj, gvr, types.NamespacedName{
@@ -223,7 +223,6 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 			ResourceUpToDate: true,
 		}, err
 	}
-
 	if !deployOk {
 		if meta.IsVerbose(cr) {
 			e.log.Debug("Dynamic Controller not deployed yet",
@@ -255,6 +254,42 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, nil
 	}
 
+	log := logging.NewNopLogger()
+	if meta.IsVerbose(cr) {
+		log = e.log
+	}
+	authenticationGVRs, err := getAuthenticationGVRs(ctx, e.kube, e.doc, cr)
+	if err != nil {
+		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
+	}
+	opts := deploy.DeployOptions{
+		AuthenticationGVRs:     authenticationGVRs,
+		RBACFolderPath:         RDCrbacConfigFolder,
+		DeploymentTemplatePath: RDCtemplateDeploymentPath,
+		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
+		KubeClient:             e.kube,
+		NamespacedName: types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Name,
+		},
+		GVR:          gvr,
+		Log:          log.Debug,
+		DryRunServer: true,
+	}
+
+	dig, err := deploy.Deploy(ctx, e.kube, opts)
+	if err != nil {
+		return reconciler.ExternalObservation{}, err
+	}
+
+	if cr.Status.Digest != dig {
+		e.log.Info("Rendered resources digest changed", "status", cr.Status.Digest, "rendered", dig)
+		return reconciler.ExternalObservation{
+			ResourceExists:   true,
+			ResourceUpToDate: false,
+		}, nil
+	}
+
 	cr.SetConditions(rtv1.Available())
 	return reconciler.ExternalObservation{
 		ResourceExists:   true,
@@ -275,7 +310,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 
 	e.log.Debug("Creating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
-	gen, err, errors := oas2jsonschema.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
+	gen, errors, err := oas2jsonschema.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
 	if err != nil {
 		return fmt.Errorf("generating byte schemas: %w", err)
 	}
@@ -314,7 +349,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("unmarshalling CRD: %w", err)
 	}
 
-	err = crd.Install(ctx, e.kube, crdu)
+	err = kube.Apply(ctx, e.kube, crdu, kube.ApplyOptions{})
 	if err != nil {
 		return fmt.Errorf("installing CRD: %w", err)
 	}
@@ -324,7 +359,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {
 			e.log.Debug("Generating Auth Schema Name", "Error:", err)
-			continue
+			return fmt.Errorf("generating Auth Schema Name: %w", err)
 		}
 		gvk := schema.GroupVersionKind{
 			Group:   cr.Spec.ResourceGroup,
@@ -364,7 +399,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("unmarshalling CRD: %w", err)
 		}
 
-		err = crd.Install(ctx, e.kube, crdu)
+		err = kube.Apply(ctx, e.kube, crdu, kube.ApplyOptions{})
 		if err != nil {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
@@ -394,7 +429,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		GVR: gvr,
 		Log: log.Debug,
 	}
-	err = deploy.Deploy(ctx, e.kube, opts)
+	_, err = deploy.Deploy(ctx, e.kube, opts)
 	if err != nil {
 		return fmt.Errorf("installing controller: %w", err)
 	}
@@ -454,12 +489,14 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		if err != nil {
 			return fmt.Errorf("looking up CRD: %w", err)
 		}
+
 		if crdOk {
 			e.log.Debug("CRD already exists, deleting", "Kind:", authSchemaName)
 			err = crd.Uninstall(ctx, e.kube, schema.GroupResource{
 				Group:    gvr.Group,
 				Resource: gvr.Resource,
 			})
+
 			if err != nil {
 				return fmt.Errorf("uninstalling authentication CRD: %w", err)
 			}
@@ -503,4 +540,40 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionDeleting",
 		"RestDefinition '%s/%s' deleting", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return err
+}
+
+func getAuthenticationGVRs(ctx context.Context, kube client.Client, doc *libopenapi.DocumentModel[v3.Document], cr *definitionv1alpha1.RestDefinition) ([]schema.GroupVersionResource, error) {
+	var authenticationGVRs []schema.GroupVersionResource
+	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
+		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
+		if err != nil {
+			return nil, fmt.Errorf("generating Auth Schema Name: %w", err)
+		}
+		gvk := schema.GroupVersionKind{
+			Group:   cr.Spec.ResourceGroup,
+			Version: resourceVersion,
+			Kind:    text.CapitaliseFirstLetter(authSchemaName),
+		}
+
+		crdOk, err := crd.Lookup(ctx, kube, plurals.ToGroupVersionResource(gvk))
+		if err != nil {
+			return nil, fmt.Errorf("looking up CRD: %w", err)
+		}
+		if crdOk {
+			authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
+			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+				Kind:       gvk.Kind,
+				APIVersion: gvk.GroupVersion().String(),
+			})
+			continue
+		}
+
+		authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
+
+		cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+			Kind:       gvk.Kind,
+			APIVersion: gvk.GroupVersion().String(),
+		})
+	}
+	return authenticationGVRs, nil
 }

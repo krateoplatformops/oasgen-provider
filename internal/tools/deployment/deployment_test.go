@@ -3,8 +3,11 @@ package deployment
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -125,4 +128,57 @@ func TestLookupDeployment(t *testing.T) {
 
 func int32Ptr(i int32) *int32 {
 	return &i
+}
+
+func TestRestartDeployment(t *testing.T) {
+	// Setup
+	ctx := context.TODO()
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+
+	deploymentObj := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deploymentObj).Build()
+
+	// Act
+	err := RestartDeployment(ctx, client, deploymentObj)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Contains(t, deploymentObj.Spec.Template.Annotations, "kubectl.kubernetes.io/restartedAt")
+	_, err = time.Parse(time.RFC3339, deploymentObj.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"])
+	assert.NoError(t, err)
+}
+
+func TestCleanFromRestartAnnotation(t *testing.T) {
+	// Setup
+	deploymentObj := &appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"kubectl.kubernetes.io/restartedAt": time.Now().Format(time.RFC3339),
+					},
+				},
+			},
+		},
+	}
+
+	// Act
+	CleanFromRestartAnnotation(deploymentObj)
+
+	// Assert
+	assert.NotContains(t, deploymentObj.Spec.Template.Annotations, "kubectl.kubernetes.io/restartedAt")
 }
