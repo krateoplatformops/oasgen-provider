@@ -37,16 +37,11 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {
-			// errors = append(errors, err)
-
-			// continue
 			return nil, errors, fmt.Errorf("auth schema name: %w", err)
 		}
 
 		secByteSchema[authSchemaName], err = generation.GenerateAuthSchemaFromSecuritySchema(secSchemaPair.Value())
 		if err != nil {
-			// errors = append(errors, err)
-			// continue
 			return nil, errors, fmt.Errorf("auth schema: %w", err)
 		}
 	}

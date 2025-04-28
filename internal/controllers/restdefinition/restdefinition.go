@@ -118,7 +118,10 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 
-	contents, _ := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
 
 	d, err := libopenapi.NewDocument(contents)
 	if err != nil {
@@ -290,6 +293,18 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, nil
 	}
 
+	dig, err = deploy.Lookup(ctx, e.kube, opts)
+	if err != nil {
+		return reconciler.ExternalObservation{}, err
+	}
+	if cr.Status.Digest != dig {
+		e.log.Info("Deployed resources digest changed", "status", cr.Status.Digest, "deployed", dig)
+		return reconciler.ExternalObservation{
+			ResourceExists:   true,
+			ResourceUpToDate: false,
+		}, nil
+	}
+
 	cr.SetConditions(rtv1.Available())
 	return reconciler.ExternalObservation{
 		ResourceExists:   true,
@@ -320,23 +335,18 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 	}
 
-	gvr := plurals.ToGroupVersionResource(schema.GroupVersionKind{
-		Group:   cr.Spec.ResourceGroup,
-		Version: resourceVersion,
-		Kind:    cr.Spec.Resource.Kind,
-	})
-
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
 		Version: resourceVersion,
 		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
 	}
+	gvr := plurals.ToGroupVersionResource(gvk)
 
 	resource := crdgen.Generate(ctx, crdgen.Options{
 		Managed:                true,
 		WorkDir:                fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
 		GVK:                    gvk,
-		Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
+		Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restresources", "rr"},
 		SpecJsonSchemaGetter:   gen.OASSpecJsonSchemaGetter(),
 		StatusJsonSchemaGetter: gen.OASStatusJsonSchemaGetter(),
 	})
@@ -385,7 +395,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Managed:                false,
 			WorkDir:                fmt.Sprintf("gen-crds/%s", authSchemaName),
 			GVK:                    gvk,
-			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
+			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restauths", "ra"},
 			SpecJsonSchemaGetter:   gen.OASAuthJsonSchemaGetter(authSchemaName),
 			StatusJsonSchemaGetter: oas2jsonschema.StaticJsonSchemaGetter(),
 		})
@@ -429,6 +439,72 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		GVR: gvr,
 		Log: log.Debug,
 	}
+	dig, err := deploy.Deploy(ctx, e.kube, opts)
+	if err != nil {
+		return fmt.Errorf("installing controller: %w", err)
+	}
+
+	cr.SetConditions(rtv1.Creating())
+	cr.Status.Resource = definitionv1alpha1.KindApiVersion{
+		Kind:       gvk.Kind,
+		APIVersion: gvk.GroupVersion().String(),
+	}
+	cr.Status.OASPath = cr.Spec.OASPath
+	cr.Status.Digest = dig
+
+	err = e.kube.Status().Update(ctx, cr)
+	if err != nil {
+		fmt.Println("Error updating status")
+	}
+
+	e.log.Debug("Created RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
+		"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
+	return err
+}
+
+func (e *external) Update(ctx context.Context, mg resource.Managed) error {
+	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
+	if !ok {
+		return errors.New(errNotRestDefinition)
+	}
+
+	if !meta.IsActionAllowed(cr, meta.ActionUpdate) {
+		e.log.Debug("External resource should not be updated by provider, skip updating.")
+		return nil
+	}
+
+	e.log.Debug("Updating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+
+	gvk := schema.GroupVersionKind{
+		Group:   cr.Spec.ResourceGroup,
+		Version: resourceVersion,
+		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
+	}
+	gvr := plurals.ToGroupVersionResource(gvk)
+
+	authenticationGVRs, err := getAuthenticationGVRs(ctx, e.kube, e.doc, cr)
+	if err != nil {
+		return fmt.Errorf("getting authentication GVRs: %w", err)
+	}
+
+	log := logging.NewNopLogger()
+	if meta.IsVerbose(cr) {
+		log = e.log
+	}
+	opts := deploy.DeployOptions{
+		AuthenticationGVRs:     authenticationGVRs,
+		RBACFolderPath:         RDCrbacConfigFolder,
+		DeploymentTemplatePath: RDCtemplateDeploymentPath,
+		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
+		KubeClient:             e.kube,
+		NamespacedName: types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Name,
+		},
+		GVR: gvr,
+		Log: log.Debug,
+	}
 	_, err = deploy.Deploy(ctx, e.kube, opts)
 	if err != nil {
 		return fmt.Errorf("installing controller: %w", err)
@@ -443,16 +519,12 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 
 	err = e.kube.Status().Update(ctx, cr)
 	if err != nil {
-		fmt.Println("Error updating status")
+		return fmt.Errorf("updating status: %w", err)
 	}
 
-	e.log.Debug("Created RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
-	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
-		"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
-	return err
-}
-
-func (e *external) Update(ctx context.Context, mg resource.Managed) error {
+	e.log.Debug("Updated RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionUpdating",
+		"RestDefinition '%s/%s' updating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return nil
 }
 
@@ -473,8 +545,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {
-			e.log.Debug("Generating Auth Schema Name", "Error:", err)
-			continue
+			return fmt.Errorf("generating Auth Schema Name: %w", err)
 		}
 
 		gvk := schema.GroupVersionKind{
@@ -567,13 +638,6 @@ func getAuthenticationGVRs(ctx context.Context, kube client.Client, doc *libopen
 			})
 			continue
 		}
-
-		authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
-
-		cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-			Kind:       gvk.Kind,
-			APIVersion: gvk.GroupVersion().String(),
-		})
 	}
 	return authenticationGVRs, nil
 }
