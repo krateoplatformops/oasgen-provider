@@ -19,9 +19,6 @@ spec:
       containers:
       - name: sample-webservice-container
         image: ghcr.io/krateoplatformops/sample-webservice:0.0.1
-        env:
-          - name: REST_CONTROLLER_NAMESPACE
-            value: ""
         args:
           - "-debug"
         imagePullPolicy: IfNotPresent

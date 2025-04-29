@@ -10,12 +10,8 @@ kubectl delete -f manifests/
 # Install
 
 kubectl apply -f crds/
+kubectl apply -f manifests/rdc/
 kubectl apply -f manifests/
 
 
-# Deploy 
-# kubectl apply -f manifests/ns.yaml
-# kubectl apply -f manifests/sa.yaml
-# kubectl apply -f manifests/deployment.yaml
-# kubectl apply -f manifests/registration.yaml
-# kubectl apply -f manifests/service.yaml
+
