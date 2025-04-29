@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	controllerResourceSuffix = "-controller"
-	configmapResourceSuffix  = "-configmap"
+	ControllerResourceSuffix = "-controller"
+	ConfigmapResourceSuffix  = "-configmap"
 )
 
 type UndeployOptions struct {
@@ -58,7 +58,7 @@ func logError(log func(msg string, keysAndValues ...any), msg string, err error)
 func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.NamespacedName, authenticationsGVRs []schema.GroupVersionResource, rbacFolderPath string) (corev1.ServiceAccount, rbacv1.ClusterRole, rbacv1.ClusterRoleBinding, rbacv1.Role, rbacv1.RoleBinding, error) {
 	rbacNSName = types.NamespacedName{
 		Namespace: rbacNSName.Namespace,
-		Name:      rbacNSName.Name + controllerResourceSuffix,
+		Name:      rbacNSName.Name + ControllerResourceSuffix,
 	}
 
 	sa := corev1.ServiceAccount{}
@@ -265,8 +265,12 @@ func Deploy(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 		return "", err
 	}
 
+	cmNSName := types.NamespacedName{
+		Namespace: opts.NamespacedName.Namespace,
+		Name:      opts.NamespacedName.Name + ConfigmapResourceSuffix,
+	}
 	cm := corev1.ConfigMap{}
-	err = templates.CreateK8sObject(&cm, opts.GVR, opts.NamespacedName, opts.ConfigmapTemplatePath,
+	err = templates.CreateK8sObject(&cm, opts.GVR, cmNSName, opts.ConfigmapTemplatePath,
 		"composition_controller_sa_name", sa.Name,
 		"composition_controller_sa_namespace", sa.Namespace)
 	if err != nil {
@@ -281,11 +285,15 @@ func Deploy(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 	}
 	opts.Log("Configmap successfully installed", "gvr", opts.GVR.String(), "name", cm.Name, "namespace", cm.Namespace)
 
+	deploymentNSName := types.NamespacedName{
+		Namespace: opts.NamespacedName.Namespace,
+		Name:      opts.NamespacedName.Name + ControllerResourceSuffix,
+	}
 	dep := appsv1.Deployment{}
 	err = templates.CreateK8sObject(
 		&dep,
 		opts.GVR,
-		opts.NamespacedName,
+		deploymentNSName,
 		opts.DeploymentTemplatePath,
 		"serviceAccountName", sa.Name)
 	if err != nil {
@@ -300,10 +308,21 @@ func Deploy(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 	}
 
 	if !opts.DryRunServer {
+		dep := appsv1.Deployment{}
+		err = templates.CreateK8sObject(
+			&dep,
+			opts.GVR,
+			deploymentNSName,
+			opts.DeploymentTemplatePath,
+			"serviceAccountName", sa.Name)
+		if err != nil {
+			opts.Log("Error creating deployment object", "error", err)
+			return "", err
+		}
 		// Deployment needs to be restarted if the hash changes to get the new configmap
 		err = kubecli.Get(ctx, opts.KubeClient, &dep)
 		if err != nil {
-			logError(opts.Log, "Error installing deployment", err)
+			logError(opts.Log, "Error getting deployment", err)
 			return "", err
 		}
 		// restart only if deployment is presently running
@@ -352,12 +371,15 @@ func Undeploy(ctx context.Context, kube client.Client, opts UndeployOptions) err
 		opts.Log("Error creating RBAC resources", "error", err)
 		return err
 	}
-
+	deploymentNSName := types.NamespacedName{
+		Namespace: opts.NamespacedName.Namespace,
+		Name:      opts.NamespacedName.Name + ControllerResourceSuffix,
+	}
 	dep := appsv1.Deployment{}
 	err = templates.CreateK8sObject(
 		&dep,
 		opts.GVR,
-		opts.NamespacedName,
+		deploymentNSName,
 		opts.DeploymentTemplatePath,
 		"serviceAccountName", sa.Name)
 	if err != nil {
@@ -369,9 +391,12 @@ func Undeploy(ctx context.Context, kube client.Client, opts UndeployOptions) err
 		opts.Log("Error uninstalling deployment", "name", dep.Name, "namespace", dep.Namespace, "error", err)
 		return fmt.Errorf("error uninstalling deployment: %v", err)
 	}
-
+	cmNSName := types.NamespacedName{
+		Namespace: opts.NamespacedName.Namespace,
+		Name:      opts.NamespacedName.Name + ConfigmapResourceSuffix,
+	}
 	cm := corev1.ConfigMap{}
-	err = templates.CreateK8sObject(&cm, opts.GVR, opts.NamespacedName, opts.ConfigmapTemplatePath,
+	err = templates.CreateK8sObject(&cm, opts.GVR, cmNSName, opts.ConfigmapTemplatePath,
 		"composition_controller_sa_name", sa.Name,
 		"composition_controller_sa_namespace", sa.Namespace)
 	if err != nil {
@@ -412,12 +437,12 @@ func Lookup(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 
 	err = lookupRBACResources(ctx, opts.KubeClient, clusterrole, clusterrolebinding, role, rolebinding, sa, opts.Log, &hsh)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 
 	cmNSName := types.NamespacedName{
 		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + configmapResourceSuffix,
+		Name:      opts.NamespacedName.Name + ConfigmapResourceSuffix,
 	}
 	cm := corev1.ConfigMap{}
 	err = templates.CreateK8sObject(&cm, opts.GVR, cmNSName, opts.ConfigmapTemplatePath,
@@ -430,13 +455,13 @@ func Lookup(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 	err = kubecli.Get(ctx, opts.KubeClient, &cm)
 	if err != nil {
 		logError(opts.Log, "Error fetching configmap", err)
-		return "", err
+		return "", nil
 	}
 	opts.Log("Configmap successfully fetched", "gvr", opts.GVR.String(), "name", cm.Name, "namespace", cm.Namespace)
 
 	deploymentNSName := types.NamespacedName{
 		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + controllerResourceSuffix,
+		Name:      opts.NamespacedName.Name + ControllerResourceSuffix,
 	}
 	dep := appsv1.Deployment{}
 	err = templates.CreateK8sObject(
@@ -452,7 +477,7 @@ func Lookup(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 	err = kubecli.Get(ctx, opts.KubeClient, &dep)
 	if err != nil {
 		logError(opts.Log, "Error fetching deployment", err)
-		return "", err
+		return "", nil
 	}
 	opts.Log("Deployment successfully fetched", "gvr", opts.GVR.String(), "name", dep.Name, "namespace", dep.Namespace)
 

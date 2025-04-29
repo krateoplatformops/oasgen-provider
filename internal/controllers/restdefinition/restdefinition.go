@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"net/http"
 	"os"
@@ -55,8 +56,6 @@ var (
 	RDCtemplateDeploymentPath = path.Join(os.TempDir(), "assets/rdc-deployment/deployment.yaml")
 	RDCtemplateConfigmapPath  = path.Join(os.TempDir(), "assets/rdc-configmap/configmap.yaml")
 	RDCrbacConfigFolder       = path.Join(os.TempDir(), "assets/rdc-rbac/")
-
-	DEMO_FLAG = env.Bool("DEMO", true)
 )
 
 func Setup(mgr ctrl.Manager, o controller.Options) error {
@@ -169,6 +168,12 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	if !ok {
 		return reconciler.ExternalObservation{}, errors.New(errNotRestDefinition)
 	}
+	tlog := logging.NewNopLogger()
+	if meta.IsVerbose(cr) {
+		tlog = e.log
+	}
+	log := e.log.Info
+	debugLog := tlog.Debug
 
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
@@ -176,23 +181,8 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		Kind:    cr.Spec.Resource.Kind,
 	}
 
-	if DEMO_FLAG {
-		//remove krateo.io/external-create-pending if it exists
-		if cr.GetAnnotations() != nil {
-			if _, ok := cr.GetAnnotations()["krateo.io/external-create-pending"]; ok {
-				delete(cr.GetAnnotations(), "krateo.io/external-create-pending")
-				e.log.Debug("Removing annotation krateo.io/external-create-pending. Demo Mode")
-			}
-		}
-
-		err := e.kube.Update(ctx, cr)
-		if err != nil {
-			return reconciler.ExternalObservation{}, fmt.Errorf("error updating annotation: %w", err)
-		}
-	}
-
 	gvr := plurals.ToGroupVersionResource(gvk)
-	e.log.Info("Observing RestDefinition", "gvr", gvr.String())
+	log("Observing RestDefinition", "gvr", gvr.String())
 
 	crdOk, err := crd.Lookup(ctx, e.kube, gvr)
 	if err != nil {
@@ -200,7 +190,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if !crdOk {
-		e.log.Info("CRD not found", "gvr", gvr.String())
+		log("CRD not found", "gvr", gvr.String())
 
 		cr.SetConditions(rtv1.Unavailable().
 			WithMessage(fmt.Sprintf("CRD for '%s' does not exists yet", gvr.String())))
@@ -209,13 +199,14 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 			ResourceUpToDate: true,
 		}, nil
 	}
-	e.log.Info("Searching for Dynamic Controller", "gvr", gvr.String())
+	log("Searching for Dynamic Controller", "gvr", gvr.String())
 
-	obj := appsv1.Deployment{}
-	err = objects.CreateK8sObject(&obj, gvr, types.NamespacedName{
+	deploymentNSName := types.NamespacedName{
 		Namespace: cr.Namespace,
-		Name:      cr.Name,
-	}, RDCtemplateDeploymentPath)
+		Name:      cr.Name + deploy.ControllerResourceSuffix,
+	}
+	obj := appsv1.Deployment{}
+	err = objects.CreateK8sObject(&obj, gvr, deploymentNSName, RDCtemplateDeploymentPath)
 	if err != nil {
 		return reconciler.ExternalObservation{}, err
 	}
@@ -224,10 +215,8 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		return reconciler.ExternalObservation{}, err
 	}
 	if !deployOk {
-		if meta.IsVerbose(cr) {
-			e.log.Debug("Dynamic Controller not deployed yet",
-				"name", obj.Name, "namespace", obj.Namespace, "gvr", gvr.String())
-		}
+		debugLog("Dynamic Controller not deployed yet",
+			"name", obj.Name, "namespace", obj.Namespace, "gvr", gvr.String())
 
 		cr.SetConditions(rtv1.Unavailable().
 			WithMessage(fmt.Sprintf("Dynamic Controller '%s' not deployed yet", obj.Name)))
@@ -238,26 +227,25 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, nil
 	}
 
-	if meta.IsVerbose(cr) {
-		e.log.Debug("Dynamic Controller already deployed",
-			"name", obj.Name, "namespace", obj.Namespace,
-			"gvr", gvr.String())
-	}
+	debugLog("Dynamic Controller already deployed",
+		"name", obj.Name, "namespace", obj.Namespace,
+		"gvr", gvr.String(), "ready", deployReady,
+		"replicas", *obj.Spec.Replicas, "readyReplicas", obj.Status.ReadyReplicas)
 
 	if !deployReady {
+		debugLog("Dynamic Controller not ready yet",
+			"name", obj.Name, "namespace", obj.Namespace,
+		)
+
 		cr.SetConditions(rtv1.Unavailable().
 			WithMessage(fmt.Sprintf("Dynamic Controller '%s' not ready yet", obj.Name)))
 
 		return reconciler.ExternalObservation{
-			ResourceExists:   true,
+			ResourceExists:   false,
 			ResourceUpToDate: true,
 		}, nil
 	}
 
-	log := logging.NewNopLogger()
-	if meta.IsVerbose(cr) {
-		log = e.log
-	}
 	authenticationGVRs, err := getAuthenticationGVRs(ctx, e.kube, e.doc, cr)
 	if err != nil {
 		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
@@ -273,7 +261,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 			Name:      cr.Name,
 		},
 		GVR:          gvr,
-		Log:          log.Debug,
+		Log:          debugLog,
 		DryRunServer: true,
 	}
 
@@ -283,7 +271,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if cr.Status.Digest != dig {
-		e.log.Info("Rendered resources digest changed", "status", cr.Status.Digest, "rendered", dig)
+		log("Rendered resources digest changed", "status", cr.Status.Digest, "rendered", dig)
 		return reconciler.ExternalObservation{
 			ResourceExists:   true,
 			ResourceUpToDate: false,
@@ -295,7 +283,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		return reconciler.ExternalObservation{}, err
 	}
 	if cr.Status.Digest != dig {
-		e.log.Info("Deployed resources digest changed", "status", cr.Status.Digest, "deployed", dig)
+		log("Deployed resources digest changed", "status", cr.Status.Digest, "deployed", dig)
 		return reconciler.ExternalObservation{
 			ResourceExists:   true,
 			ResourceUpToDate: false,
@@ -385,10 +373,16 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			}
 			if crdOk {
 				e.log.Debug("CRD already exists", "Kind:", authSchemaName)
-				cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+				if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
 					Kind:       gvk.Kind,
 					APIVersion: gvk.GroupVersion().String(),
-				})
+				}) {
+					e.log.Debug("Adding authentication CRD to status", "Kind:", authSchemaName)
+					cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+						Kind:       gvk.Kind,
+						APIVersion: gvk.GroupVersion().String(),
+					})
+				}
 				continue
 			}
 
@@ -415,10 +409,16 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 				return fmt.Errorf("installing CRD: %w", err)
 			}
 
-			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+			if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
 				Kind:       gvk.Kind,
 				APIVersion: gvk.GroupVersion().String(),
-			})
+			}) {
+				e.log.Debug("Adding authentication CRD to status", "Kind:", authSchemaName)
+				cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+					Kind:       gvk.Kind,
+					APIVersion: gvk.GroupVersion().String(),
+				})
+			}
 		}
 
 		cr.SetConditions(rtv1.Creating())
@@ -521,7 +521,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		GVR: gvr,
 		Log: log.Debug,
 	}
-	_, err = deploy.Deploy(ctx, e.kube, opts)
+	dig, err := deploy.Deploy(ctx, e.kube, opts)
 	if err != nil {
 		return fmt.Errorf("installing controller: %w", err)
 	}
@@ -532,6 +532,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		APIVersion: gvk.GroupVersion().String(),
 	}
 	cr.Status.OASPath = cr.Spec.OASPath
+	cr.Status.Digest = dig
 
 	err = e.kube.Status().Update(ctx, cr)
 	if err != nil {
@@ -648,10 +649,6 @@ func getAuthenticationGVRs(ctx context.Context, kube client.Client, doc *libopen
 		}
 		if crdOk {
 			authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
-			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-				Kind:       gvk.Kind,
-				APIVersion: gvk.GroupVersion().String(),
-			})
 			continue
 		}
 	}

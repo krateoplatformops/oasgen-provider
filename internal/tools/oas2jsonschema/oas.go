@@ -34,6 +34,12 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 	if err != nil {
 		return nil, errors, fmt.Errorf("building schema")
 	}
+	if doc.Model.Components == nil {
+		return nil, errors, fmt.Errorf("components not found")
+	}
+	if doc.Model.Components.SecuritySchemes == nil {
+		return nil, errors, fmt.Errorf("security schemes not found")
+	}
 	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 		if err != nil {

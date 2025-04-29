@@ -155,6 +155,41 @@ func TestDefinition(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		time.Sleep(5 * time.Second)
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		obs, err := handler.Observe(ctx, &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if obs.ResourceExists == false && obs.ResourceUpToDate == true {
+			err = handler.Create(ctx, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			t.Fatal("Unexpected state", obs)
+		}
+
+		time.Sleep(20 * time.Second)
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		obs, err = handler.Observe(ctx, &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if obs.ResourceExists == true && obs.ResourceUpToDate == true {
+			return ctx
+		}
+		t.Fatal("Unexpected state", obs)
 		return ctx
 	}).Assess("Delete", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 		r, err := resources.New(cfg.Client().RESTConfig())
