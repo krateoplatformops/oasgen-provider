@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: oasgen-provider-dev
+  namespace: demo-system
   labels:
     app.kubernetes.io/name: oasgen-provider-dev
     app: oasgen-provider-dev
@@ -27,3 +28,23 @@ spec:
           - --debug
         ports:
         - containerPort: 8080
+        volumeMounts:
+        - mountPath: /tmp/assets/rdc-deployment
+          name: rdc-deployment
+          readOnly: true
+        - mountPath: /tmp/assets/rdc-configmap
+          name: rdc-configmap
+          readOnly: true
+        - mountPath: /tmp/assets/rdc-rbac
+          name: rdc-rbac
+          readOnly: true
+      volumes:
+      - name: rdc-deployment
+        configMap:
+          name: rdc-deployment
+      - name: rdc-configmap
+        configMap:
+          name: rdc-configmap
+      - name: rdc-rbac
+        configMap:
+          name: rdc-rbac-configmap

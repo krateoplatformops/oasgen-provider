@@ -1,141 +1,184 @@
-package deployment_test
+package deployment
 
 import (
 	"context"
-	"fmt"
 	"testing"
+	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
+	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestUninstallDeployment(t *testing.T) {
-	ctx := context.TODO()
-
-	// Create a fake client
-	client := fake.NewClientBuilder().Build()
-
-	// Create a deployment object
-	deploymentObj := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-deployment",
-			Namespace: "test-namespace",
-		},
-	}
-
-	// Create uninstall options
-	uninstallOpts := deployment.UninstallOptions{
-		KubeClient:     client,
-		NamespacedName: types.NamespacedName{Name: deploymentObj.Name, Namespace: deploymentObj.Namespace},
-		Log:            nil, // Provide your own log function if needed
-	}
-
-	// Uninstall the deployment
-	err := deployment.UninstallDeployment(ctx, uninstallOpts)
-	if err != nil {
-		t.Errorf("failed to uninstall deployment: %v", err)
-	}
-
-	// Verify that the deployment is uninstalled
-	err = client.Get(ctx, types.NamespacedName{Name: deploymentObj.Name, Namespace: deploymentObj.Namespace}, deploymentObj)
-	if !apierrors.IsNotFound(err) {
-		t.Errorf("expected deployment to be uninstalled, got error: %v", err)
-	}
-}
-
-func TestInstallDeployment(t *testing.T) {
-	ctx := context.TODO()
-
-	// Create a fake client
-	client := fake.NewClientBuilder().Build()
-
-	// Create a deployment object
-	deploymentObj := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-deployment",
-			Namespace: "test-namespace",
-		},
-	}
-
-	// Install the deployment
-	err := deployment.InstallDeployment(ctx, client, deploymentObj)
-	if err != nil {
-		t.Errorf("failed to install deployment: %v", err)
-	}
-
-	// Verify that the deployment is installed
-	err = client.Get(ctx, types.NamespacedName{Name: deploymentObj.Name, Namespace: deploymentObj.Namespace}, deploymentObj)
-	if err != nil {
-		t.Errorf("expected deployment to be installed, got error: %v", err)
-	}
-}
-
-func TestCreateDeployment(t *testing.T) {
-	// Create a GroupVersionResource and NamespacedName
-	gvr := schema.GroupVersionResource{
-		Group:    "apps",
-		Version:  "v1",
-		Resource: "deployments",
-	}
-	nn := types.NamespacedName{
-		Namespace: "test-namespace",
-		Name:      "test-deployment",
-	}
-	path := "testdata/deployment.yaml"
-
-	// Create the deployment
-	deploymentObj, err := deployment.CreateDeployment(gvr, nn, path)
-	if err != nil {
-		t.Errorf("failed to create deployment: %v", err)
-	}
-
-	// Verify the deployment fields
-	if deploymentObj.Name != fmt.Sprintf("%s-%s-controller", gvr.Resource, gvr.Version) {
-		t.Errorf("expected deployment name to be %s, got %s", nn.Name, deploymentObj.Name)
-	}
-	if deploymentObj.Namespace != nn.Namespace {
-		t.Errorf("expected deployment namespace to be %s, got %s", nn.Namespace, deploymentObj.Namespace)
-	}
-	// Add more assertions for other fields if needed
-}
-
 func TestLookupDeployment(t *testing.T) {
-	ctx := context.TODO()
+	// Setup the scheme for the fake client
+	s := scheme.Scheme
+	_ = appsv1.AddToScheme(s)
 
-	// Create a fake client
-	client := fake.NewClientBuilder().Build()
-
-	// Create a deployment object
-	deploymentObj := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-deployment",
-			Namespace: "test-namespace",
+	tests := []struct {
+		name          string
+		deployment    *appsv1.Deployment
+		clientObjects []runtime.Object
+		expectedFound bool
+		expectedReady bool
+		expectError   bool
+	}{
+		{
+			name: "Deployment not found",
+			deployment: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment",
+					Namespace: "default",
+				},
+			},
+			clientObjects: nil,
+			expectedFound: false,
+			expectedReady: false,
+			expectError:   false,
+		},
+		{
+			name: "Deployment found but not ready",
+			deployment: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment",
+					Namespace: "default",
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: int32Ptr(3),
+				},
+				Status: appsv1.DeploymentStatus{
+					ReadyReplicas: 1,
+				},
+			},
+			clientObjects: []runtime.Object{
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "default",
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: int32Ptr(3),
+					},
+					Status: appsv1.DeploymentStatus{
+						ReadyReplicas: 1,
+					},
+				},
+			},
+			expectedFound: true,
+			expectedReady: false,
+			expectError:   false,
+		},
+		{
+			name: "Deployment found and ready",
+			deployment: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment",
+					Namespace: "default",
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: int32Ptr(3),
+				},
+				Status: appsv1.DeploymentStatus{
+					ReadyReplicas: 3,
+				},
+			},
+			clientObjects: []runtime.Object{
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "default",
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: int32Ptr(3),
+					},
+					Status: appsv1.DeploymentStatus{
+						ReadyReplicas: 3,
+					},
+				},
+			},
+			expectedFound: true,
+			expectedReady: true,
+			expectError:   false,
 		},
 	}
 
-	// Create the deployment
-	err := client.Create(ctx, deploymentObj)
-	if err != nil {
-		t.Fatalf("failed to create deployment: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a fake client with the provided objects
+			fakeClient := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(tt.clientObjects...).Build()
+
+			found, ready, err := LookupDeployment(context.TODO(), fakeClient, tt.deployment)
+
+			if (err != nil) != tt.expectError {
+				t.Errorf("expected error: %v, got: %v", tt.expectError, err)
+			}
+			if found != tt.expectedFound {
+				t.Errorf("expected found: %v, got: %v", tt.expectedFound, found)
+			}
+			if ready != tt.expectedReady {
+				t.Errorf("expected ready: %v, got: %v", tt.expectedReady, ready)
+			}
+		})
+	}
+}
+
+func int32Ptr(i int32) *int32 {
+	return &i
+}
+
+func TestRestartDeployment(t *testing.T) {
+	// Setup
+	ctx := context.TODO()
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+
+	deploymentObj := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+			},
+		},
 	}
 
-	// Lookup the deployment
-	found, ready, err := deployment.LookupDeployment(ctx, client, deploymentObj)
-	if err != nil {
-		t.Errorf("failed to lookup deployment: %v", err)
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deploymentObj).Build()
+
+	// Act
+	err := RestartDeployment(ctx, client, deploymentObj)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Contains(t, deploymentObj.Spec.Template.Annotations, "kubectl.kubernetes.io/restartedAt")
+	_, err = time.Parse(time.RFC3339, deploymentObj.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"])
+	assert.NoError(t, err)
+}
+
+func TestCleanFromRestartAnnotation(t *testing.T) {
+	// Setup
+	deploymentObj := &appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"kubectl.kubernetes.io/restartedAt": time.Now().Format(time.RFC3339),
+					},
+				},
+			},
+		},
 	}
 
-	// Verify the lookup results
-	if !found {
-		t.Errorf("expected deployment to be found, got not found")
-	}
-	if !ready {
-		t.Logf("deployment is not ready")
-	}
+	// Act
+	CleanFromRestartAnnotation(deploymentObj)
+
+	// Assert
+	assert.NotContains(t, deploymentObj.Spec.Template.Annotations, "kubectl.kubernetes.io/restartedAt")
 }

@@ -1,12 +1,12 @@
 kind: Repo
-apiVersion: gen.github.com/v1alpha1
+apiVersion: github.krateo.io/v1alpha1
 metadata:
   name: gh-repo1
-  namespace: gh-system
+  namespace: krateo-system
   annotations:
     krateo.io/connector-verbose: "true"
 spec:
-  org: krateoplatformops
-  name: test-generatore
+  org: matteogastadello
+  name: test-exponential-retry
   authenticationRefs:
     bearerAuthRef: bearer-gh-ref

@@ -1,11 +1,11 @@
 kind: BearerAuth
-apiVersion: gen.github.com/v1alpha1
+apiVersion: github.krateo.io/v1alpha1
 metadata:
   name: bearer-gh-ref
-  namespace: gh-system
+  namespace: krateo-system
 spec:
   tokenRef:
     key: token
     name: gh-token
-    namespace: gh-system
+    namespace: krateo-system
   

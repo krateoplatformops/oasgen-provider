@@ -1,0 +1,51 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .name }}
+    app.kubernetes.io/instance: {{ .resource }}-{{ .apiVersion }}
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: krateoplatformops
+    app.kubernetes.io/managed-by: krateo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .name }}
+  template:
+    metadata:
+      name: {{ .name }}
+      namespace: {{ .namespace }}
+      labels:
+        app.kubernetes.io/name: {{ .name }}
+    spec:
+      serviceAccountName: {{ .serviceAccountName }}
+      securityContext:
+        {}
+      containers:
+        - name: {{ .name }}
+          image: "ghcr.io/krateoplatformops/rest-dynamic-controller:0.1.4" 
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: {{ .name }}
+          securityContext:
+            {}
+          args:
+            - -debug
+            - -group={{ .apiGroup }}
+            - -version={{ .apiVersion }}
+            - -resource={{ .resource }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            null
+          readinessProbe:
+            null
+          resources:
+            {}

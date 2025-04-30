@@ -96,7 +96,7 @@ func TestDeploy(t *testing.T) {
 			Log: func(msg string, keysAndValues ...any) {},
 		}
 
-		err = Deploy(context.Background(), cli, opts)
+		_, err = Deploy(context.Background(), cli, opts)
 		assert.NoError(t, err)
 
 		return ctx
@@ -108,8 +108,10 @@ func TestDeploy(t *testing.T) {
 		}
 
 		opts := UndeployOptions{
-			RBACFolderPath: "testdata",
-			KubeClient:     cli,
+			RBACFolderPath:         "testdata",
+			DeploymentTemplatePath: "testdata/deploy.yaml",
+			ConfigmapTemplatePath:  "testdata/cm.yaml",
+			KubeClient:             cli,
 			NamespacedName: types.NamespacedName{
 				Namespace: "default",
 				Name:      "test-deploy",
@@ -129,6 +131,54 @@ func TestDeploy(t *testing.T) {
 		return ctx
 	},
 	).Feature()
+
+	testenv.Test(t, f)
+}
+
+func TestLookup(t *testing.T) {
+	os.Setenv("DEBUG", "1")
+
+	f := features.New("Lookup").
+		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			return ctx
+		}).Assess("Lookup Deployment State", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		cli, err := client.New(cfg.Client().RESTConfig(), client.Options{})
+		if err != nil {
+			t.Fatalf("failed to create client: %v", err)
+			return ctx
+		}
+
+		opts := DeployOptions{
+			RBACFolderPath:         "testdata",
+			DeploymentTemplatePath: "testdata/deploy.yaml",
+			ConfigmapTemplatePath:  "testdata/cm.yaml",
+			KubeClient:             cli,
+			NamespacedName: types.NamespacedName{
+				Namespace: "default",
+				Name:      "test-lookup",
+			},
+			GVR: schema.GroupVersionResource{
+				Group:    "compositions.krateo.io",
+				Version:  "v1alpha1",
+				Resource: "fireworksapps",
+			},
+			Log: func(msg string, keysAndValues ...any) {},
+		}
+
+		// Deploy first to ensure resources exist for lookup
+		ddig, err := Deploy(context.Background(), cli, opts)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, ddig)
+
+		// Perform the lookup
+		digest, err := Lookup(context.Background(), cli, opts)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, digest)
+
+		assert.Equal(t, ddig, digest)
+
+		return ctx
+	}).Feature()
 
 	testenv.Test(t, f)
 }

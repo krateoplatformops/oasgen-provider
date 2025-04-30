@@ -40,7 +40,7 @@ func TestGenerateAuthSchemaFromSecuritySchema(t *testing.T) {
 				Scheme: "invalid",
 			},
 			expected: nil,
-			err:      fmt.Errorf(ErrInvalidSecuritySchema),
+			err:      fmt.Errorf("error: %v", ErrInvalidSecuritySchema),
 		},
 	}
 

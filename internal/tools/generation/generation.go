@@ -62,5 +62,5 @@ func GenerateAuthSchemaFromSecuritySchema(doc *v3.SecurityScheme) (byteSchema []
 		return ReflectBytes(reflect.TypeOf(BearerAuth{}))
 	}
 
-	return nil, fmt.Errorf(ErrInvalidSecuritySchema)
+	return nil, fmt.Errorf("error: %v", ErrInvalidSecuritySchema)
 }

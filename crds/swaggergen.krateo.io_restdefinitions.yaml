@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.1
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: restdefinitions.swaggergen.krateo.io
 spec:
   group: swaggergen.krateo.io
@@ -178,6 +178,9 @@ spec:
                   - type
                   type: object
                 type: array
+              digest:
+                description: 'Digest: the digest of the managed resources'
+                type: string
               oasPath:
                 description: 'OASPath: the path to the OAS Specification file'
                 type: string

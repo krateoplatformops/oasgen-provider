@@ -1,0 +1,129 @@
+apiVersion: v1
+data:
+  openapi.yaml: |
+    openapi: 3.0.1
+    info:
+      title: Sample Webservice API
+      description: Sample Webservice API.
+      contact: {}
+      version: "1.0"
+    servers:
+      - url: http://sample-webservice-service.demo-system.svc.cluster.local:8081/
+    paths:
+      /resource:
+        get:
+          summary: Sample API GET hardcoded resource
+          description: Get a hardcoded resource
+          operationId: get-resource
+          parameters:
+            - name: name
+              in: query
+              description: Name of the resource
+              required: true
+              schema:
+                type: string
+          responses:
+            "200":
+              description: OK
+              content:
+                application/json:
+                  schema:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/handlers.Resource'
+        post:
+          summary: Sample API GET hardcoded resource.
+          description: Create a resource. It returns 201 Created if the resource is created successfully.
+          operationId: create-resource
+          requestBody:
+            description: Resource to create
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/handlers.Resource'
+            required: true
+          responses:
+            "201":
+              description: Created
+              content:
+                application/json:
+                  schema:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/handlers.Resource'
+        delete:
+          summary: Sample API DELETE hardcoded resource.
+          description: Delete a resource. It returns 204 No Content if the resource is deleted successfully.
+          operationId: delete-resource
+          parameters:
+            - name: name
+              in: query
+              description: Name of the resource
+              required: true
+              schema:
+                type: string
+          responses:
+            "204":
+              description: No Content
+              content: {}
+        patch:
+          summary: Sample API PATCH hardcoded resource.
+          description: Patch a resource. It returns 200 OK if the resource is updated successfully.
+          operationId: patch-resource
+          requestBody:
+            description: Resource to create
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/handlers.Resource'
+            required: true
+          responses:
+            "200":
+              description: OK
+              content:
+                application/json:
+                  schema:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/handlers.Resource'
+      /resources:
+        get:
+          summary: Sample API GET list hardcoded resources
+          description: List hardcoded resources
+          operationId: list-resource
+          responses:
+            "200":
+              description: OK
+              content:
+                application/json:
+                  schema:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/resources.ListResponse'
+    components:
+      schemas:
+        handlers.Resource:
+          type: object
+          properties:
+            description:
+              type: string
+            name:
+              type: string
+        resources.ListResponse:
+          type: object
+          properties:
+            count:
+              type: integer
+            resources:
+              type: array
+              items:
+                $ref: '#/components/schemas/handlers.Resource'
+      securitySchemes:
+        BearerAuth:
+          type: http
+          scheme: bearer
+    x-original-swagger-version: "2.0"
+kind: ConfigMap
+metadata:
+  name: sample-cm
+  namespace: demo-system
