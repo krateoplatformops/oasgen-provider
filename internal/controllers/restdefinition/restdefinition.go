@@ -357,10 +357,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		if err != nil {
 			return fmt.Errorf("generating byte schemas: %w", err)
 		}
-		if meta.IsVerbose(cr) {
-			for _, er := range errors {
-				e.log.Debug("Generating Byte Schemas", "Error:", er)
-			}
+		for _, er := range errors {
+			e.log.Debug("Generating Byte Schemas", "Error:", er)
 		}
 
 		resource := crdgen.Generate(ctx, crdgen.Options{
@@ -437,6 +435,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			if err != nil {
 				return fmt.Errorf("installing CRD: %w", err)
 			}
+
+			e.log.Info("Created authentication CRD", "Kind:", authSchemaName, "Group:", gvk.Group)
 
 			if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
 				Kind:       gvk.Kind,

@@ -27,8 +27,7 @@ spec:
         {}
       containers:
         - name: {{ .name }}
-          # image: "ghcr.io/krateoplatformops/composition-dynamic-controller:0.16.0"
-          image: "kind.local/rest-dynamic-controller:latest" # uncomment this line to use local image
+          image: "ghcr.io/krateoplatformops/rest-dynamic-controller:0.1.4" 
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:

@@ -3,6 +3,8 @@ kind: RestDefinition
 metadata:
   name: sample
   namespace: demo-system 
+  annotations:
+    krateo.io/connector-verbose: "true"
 spec:
   oasPath: configmap://demo-system/sample-cm/openapi.yaml
   resourceGroup: sample.krateo.io

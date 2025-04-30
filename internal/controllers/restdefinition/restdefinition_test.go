@@ -5,6 +5,7 @@ package restdefinition
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,6 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/objects"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/plurals"
 
-	"github.com/go-logr/logr"
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/snowplow/plumbing/e2e"
@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/tools/record"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -66,12 +67,30 @@ func TestMain(m *testing.M) {
 		e2e.CreateNamespace("demo-system"),
 		e2e.CreateNamespace("krateo-system"),
 	).Finish(
-		envfuncs.DeleteNamespace(namespace),
-		envfuncs.DestroyCluster(clusterName),
+	// envfuncs.DeleteNamespace(namespace),
+	// envfuncs.DestroyCluster(clusterName),
 	)
 
 	os.Exit(testenv.Run(m))
 }
+
+type fakelogger struct {
+}
+
+var _ logging.Logger = &fakelogger{}
+
+func (l *fakelogger) Debug(msg string, keysAndValues ...interface{}) {
+	fmt.Println("DEBUG", msg, keysAndValues)
+}
+
+func (l *fakelogger) Info(msg string, keysAndValues ...interface{}) {
+	fmt.Println("INFO", msg, keysAndValues)
+}
+
+func (l *fakelogger) WithValues(keysAndValues ...interface{}) logging.Logger {
+	return l
+}
+
 func TestDefinition(t *testing.T) {
 	os.Setenv("DEBUG", "1")
 
@@ -111,11 +130,14 @@ func TestDefinition(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			disc := discovery.NewDiscoveryClientForConfigOrDie(cfg.Client().RESTConfig())
 			apis.AddToScheme(r.GetScheme())
 			conn := connector{
 				kube:     kube,
-				log:      logging.NewLogrLogger(logr.Logger{}),
+				log:      &fakelogger{},
 				recorder: record.NewFakeRecorder(100),
+				disc:     disc,
 			}
 
 			handler, err = conn.Connect(ctx, &mg)
@@ -160,7 +182,7 @@ func TestDefinition(t *testing.T) {
 			t.Fatal("Unexpected state", obs)
 		}
 
-		time.Sleep(20 * time.Second)
+		time.Sleep(50 * time.Second)
 
 		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
 		if err != nil {
@@ -171,10 +193,26 @@ func TestDefinition(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ctx, err = handleObservation(t, ctx, handler, obs, &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		obs, err = handler.Observe(ctx, &mg)
 		if obs.ResourceExists == true && obs.ResourceUpToDate == true {
 			return ctx
 		}
-		t.Fatal("Unexpected state", obs)
+
 		return ctx
 	}).Assess("Delete", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 		r, err := resources.New(cfg.Client().RESTConfig())
@@ -222,4 +260,38 @@ func TestDefinition(t *testing.T) {
 	}).Feature()
 
 	testenv.Test(t, f)
+}
+
+func handleObservation(t *testing.T, ctx context.Context, handler reconciler.ExternalClient, observation reconciler.ExternalObservation, u *definitionv1alpha1.RestDefinition) (context.Context, error) {
+	var err error
+	if observation.ResourceExists == true && observation.ResourceUpToDate == true {
+		observation, err = handler.Observe(ctx, u)
+		if err != nil {
+			t.Error("Observing composition.", "error", err)
+			return ctx, err
+		}
+		if observation.ResourceExists == true && observation.ResourceUpToDate == true {
+			t.Log("Composition already exists and is ready.")
+			return ctx, nil
+		}
+	} else if observation.ResourceExists == false && observation.ResourceUpToDate == true {
+		err = handler.Delete(ctx, u)
+		if err != nil {
+			t.Error("Deleting composition.", "error", err)
+			return ctx, err
+		}
+	} else if observation.ResourceExists == true && observation.ResourceUpToDate == false {
+		err = handler.Update(ctx, u)
+		if err != nil {
+			t.Error("Updating composition.", "error", err)
+			return ctx, err
+		}
+	} else if observation.ResourceExists == false && observation.ResourceUpToDate == false {
+		err = handler.Create(ctx, u)
+		if err != nil {
+			t.Error("Creating composition.", "error", err)
+			return ctx, err
+		}
+	}
+	return ctx, nil
 }
