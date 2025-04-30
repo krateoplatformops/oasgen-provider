@@ -2,12 +2,16 @@ package kube
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/avast/retry-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -129,4 +133,55 @@ func GetFromReference(ctx context.Context, kube client.Client, ref v1.ObjectRefe
 
 func Get(ctx context.Context, kube client.Client, obj client.Object) error {
 	return kube.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+}
+
+func CountRestResourcesWithGroup(ctx context.Context, kube client.Client, discovery discovery.DiscoveryInterface, group string) (auth bool, rest int, err error) {
+	_, apiResourceList, err := discovery.ServerGroupsAndResources()
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to discover API resources: %v", err)
+	}
+
+	if len(apiResourceList) == 0 {
+		return false, 0, fmt.Errorf("no API resources found")
+	}
+	auth = false
+	rest = 0
+
+	for _, apiResource := range apiResourceList {
+		gv, err := schema.ParseGroupVersion(apiResource.GroupVersion)
+		if err != nil {
+			return auth, 0, fmt.Errorf("failed to parse group version: %v", err)
+		}
+
+		if gv.Group == group {
+			// list the resources of each gvk
+			li := unstructured.UnstructuredList{}
+
+			for _, resource := range apiResource.APIResources {
+				if resource.Kind == "" {
+					continue
+				}
+				li.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   gv.Group,
+					Version: gv.Version,
+					Kind:    resource.Kind,
+				})
+
+				if strings.HasSuffix(resource.Kind, "Auth") {
+					auth = true
+				} else {
+					err = kube.List(ctx, &li)
+					if err != nil {
+						if !strings.Contains(err.Error(), "no matches for") {
+							return auth, 0, fmt.Errorf("failed to list resources: %v", err)
+						}
+					}
+
+					rest += len(li.Items)
+				}
+			}
+		}
+	}
+
+	return auth, rest, nil
 }

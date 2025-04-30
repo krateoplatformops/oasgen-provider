@@ -2,7 +2,6 @@ package filegetter
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -178,8 +177,6 @@ func TestGetFile(t *testing.T) {
 			}
 
 			err := filegetter.GetFile(context.Background(), dst, tc.src, tc.auth)
-
-			fmt.Println("source:", tc.src)
 
 			if tc.expectError && err == nil {
 				t.Errorf("Expected an error, but got none")

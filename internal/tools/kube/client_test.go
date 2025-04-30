@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/discovery"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -452,6 +453,81 @@ func TestGetFromReference(t *testing.T) {
 
 		if tmp.GetName() != "test-deployment" || tmp.GetNamespace() != "demo-system" {
 			t.Fatalf("retrieved deployment does not match expected values")
+		}
+
+		return ctx
+	}).Feature()
+
+	testenv.Test(t, f)
+}
+func TestCountResourcesWithGroup(t *testing.T) {
+
+	os.Setenv("DEBUG", "1")
+
+	f := features.New("CountRestResourcesWithGroup").
+		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			return ctx
+		}).Assess("CountRestResourcesWithGroup", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		kube, err := client.New(cfg.Client().RESTConfig(), client.Options{})
+		if err != nil {
+			t.Fatalf("failed to create client: %v", err)
+		}
+
+		// Create a resource to count
+		res := &appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-deployment",
+				Namespace: "demo-system",
+				Labels: map[string]string{
+					"group": "test-group",
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: func(i int32) *int32 { return &i }(1),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "test-deployment",
+					},
+				},
+				Template: v1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": "test-deployment",
+						},
+					},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{
+							{
+								Name:  "test-container",
+								Image: "nginx",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Apply the resource
+		err = Apply(ctx, kube, res, ApplyOptions{})
+		if err != nil {
+			t.Fatalf("failed to apply deployment: %v", err)
+		}
+
+		discovery := discovery.NewDiscoveryClientForConfigOrDie(cfg.Client().RESTConfig())
+
+		// Count resources in the group
+		_, count, err := CountRestResourcesWithGroup(ctx, kube, discovery, "apps")
+		if err != nil {
+			t.Fatalf("failed to count resources: %v", err)
+		}
+
+		// Verify the count is as expected
+		if count == 0 {
+			t.Fatalf("expected at least one resource in the group, got %d", count)
 		}
 
 		return ctx

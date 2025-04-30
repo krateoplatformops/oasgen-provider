@@ -60,26 +60,11 @@ func TestMain(m *testing.M) {
 	testenv = env.New()
 
 	testenv.Setup(
-		envfuncs.CreateClusterWithConfig(kind.NewProvider(), clusterName, filepath.Join(manifestsPath, "kind.yaml")),
+		envfuncs.CreateCluster(kind.NewProvider(), clusterName),
 		envfuncs.SetupCRDs(crdPath, "swaggergen.krateo.io_restdefinitions.yaml"),
 		e2e.CreateNamespace(namespace),
 		e2e.CreateNamespace("demo-system"),
 		e2e.CreateNamespace("krateo-system"),
-
-		func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
-			r, err := resources.New(cfg.Client().RESTConfig())
-			if err != nil {
-				return ctx, err
-			}
-			err = decoder.DecodeEachFile(ctx, os.DirFS(filepath.Join(manifestsPath)),
-				"ws-deployment.yaml",
-				decoder.CreateIgnoreAlreadyExists(r))
-			if err != nil {
-				return ctx, err
-			}
-			time.Sleep(10 * time.Second)
-			return ctx, nil
-		},
 	).Finish(
 		envfuncs.DeleteNamespace(namespace),
 		envfuncs.DestroyCluster(clusterName),

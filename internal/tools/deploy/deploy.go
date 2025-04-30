@@ -32,6 +32,7 @@ type UndeployOptions struct {
 	RBACFolderPath         string
 	Log                    func(msg string, keysAndValues ...any)
 	SkipCRD                bool
+	SkipDeploy             bool
 	DeploymentTemplatePath string
 	ConfigmapTemplatePath  string
 }
@@ -267,7 +268,7 @@ func Deploy(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 
 	cmNSName := types.NamespacedName{
 		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + ConfigmapResourceSuffix,
+		Name:      opts.NamespacedName.Name + ControllerResourceSuffix,
 	}
 	cm := corev1.ConfigMap{}
 	err = templates.CreateK8sObject(&cm, opts.GVR, cmNSName, opts.ConfigmapTemplatePath,
@@ -366,6 +367,11 @@ func Undeploy(ctx context.Context, kube client.Client, opts UndeployOptions) err
 		}
 	}
 
+	if opts.SkipDeploy {
+		opts.Log("Skipping deploy deletion")
+		return nil
+	}
+
 	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.AuthenticationGVRs, opts.RBACFolderPath)
 	if err != nil {
 		opts.Log("Error creating RBAC resources", "error", err)
@@ -393,7 +399,7 @@ func Undeploy(ctx context.Context, kube client.Client, opts UndeployOptions) err
 	}
 	cmNSName := types.NamespacedName{
 		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + ConfigmapResourceSuffix,
+		Name:      opts.NamespacedName.Name + ControllerResourceSuffix,
 	}
 	cm := corev1.ConfigMap{}
 	err = templates.CreateK8sObject(&cm, opts.GVR, cmNSName, opts.ConfigmapTemplatePath,
@@ -442,7 +448,7 @@ func Lookup(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 
 	cmNSName := types.NamespacedName{
 		Namespace: opts.NamespacedName.Namespace,
-		Name:      opts.NamespacedName.Name + ConfigmapResourceSuffix,
+		Name:      opts.NamespacedName.Name + ControllerResourceSuffix,
 	}
 	cm := corev1.ConfigMap{}
 	err = templates.CreateK8sObject(&cm, opts.GVR, cmNSName, opts.ConfigmapTemplatePath,
