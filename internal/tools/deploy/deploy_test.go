@@ -8,8 +8,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/krateoplatformops/snowplow/plumbing/e2e"
-	xenv "github.com/krateoplatformops/snowplow/plumbing/env"
+	"github.com/krateoplatformops/plumbing/e2e"
+	xenv "github.com/krateoplatformops/plumbing/env"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"

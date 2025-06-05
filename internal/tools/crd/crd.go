@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/avast/retry-go"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsscheme "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -19,30 +18,27 @@ func Uninstall(ctx context.Context, kube client.Client, gr schema.GroupResource)
 		return err
 	}
 
-	return retry.Do(
-		func() error {
-			obj := apiextensionsv1.CustomResourceDefinition{}
-			err := kube.Get(ctx, client.ObjectKey{Name: gr.String()}, &obj, &client.GetOptions{})
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					return nil
-				}
-
-				return err
-			}
-
-			err = kube.Delete(ctx, &obj, &client.DeleteOptions{})
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					return nil
-				}
-
-				return err
-			}
-
+	obj := apiextensionsv1.CustomResourceDefinition{}
+	err := kube.Get(ctx, client.ObjectKey{Name: gr.String()}, &obj, &client.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
 			return nil
-		},
-	)
+		}
+
+		return err
+	}
+
+	err = kube.Delete(ctx, &obj, &client.DeleteOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
+
 }
 
 func Lookup(ctx context.Context, kube client.Client, gvr schema.GroupVersionResource) (bool, error) {

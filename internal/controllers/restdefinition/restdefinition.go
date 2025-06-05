@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"net/http"
 	"os"
@@ -13,8 +14,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 
+	"github.com/krateoplatformops/plumbing/env"
 	rtv1 "github.com/krateoplatformops/provider-runtime/apis/common/v1"
-	"github.com/krateoplatformops/snowplow/plumbing/env"
 
 	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/krateoplatformops/provider-runtime/pkg/controller"
@@ -51,6 +52,11 @@ import (
 )
 
 const (
+	reconcileGracePeriod = 1 * time.Minute
+	reconcileTimeout     = 4 * time.Minute
+)
+
+const (
 	errNotRestDefinition = "managed resource is not a RestDefinition"
 	resourceVersion      = "v1alpha1"
 
@@ -71,7 +77,13 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 
 	recorder := mgr.GetEventRecorderFor(name)
 
-	discovery, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	cfg := mgr.GetConfig()
+	cli, err := client.New(cfg, client.Options{})
+	if err != nil {
+		return fmt.Errorf("failed to create kube client: %w", err)
+	}
+
+	discovery, err := discovery.NewDiscoveryClientForConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create discovery client: %w", err)
 	}
@@ -79,11 +91,13 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	r := reconciler.NewReconciler(mgr,
 		resource.ManagedKind(definitionv1alpha1.RestDefinitionGroupVersionKind),
 		reconciler.WithExternalConnecter(&connector{
-			kube:     mgr.GetClient(),
+			kube:     cli,
 			log:      log,
 			recorder: recorder,
 			disc:     discovery,
 		}),
+		reconciler.WithTimeout(reconcileTimeout),
+		reconciler.WithCreationGracePeriod(reconcileGracePeriod),
 		reconciler.WithPollInterval(o.PollInterval),
 		reconciler.WithLogger(log),
 		reconciler.WithRecorder(event.NewAPIRecorder(recorder)))

@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/plurals"
-	"github.com/krateoplatformops/snowplow/plumbing/e2e"
-	xenv "github.com/krateoplatformops/snowplow/plumbing/env"
+	"github.com/krateoplatformops/plumbing/e2e"
+	xenv "github.com/krateoplatformops/plumbing/env"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"

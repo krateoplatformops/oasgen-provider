@@ -15,9 +15,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 
-	// hasher "github.com/krateoplatformops/core-provider/internal/tools/hash"
-	"github.com/krateoplatformops/snowplow/plumbing/e2e"
-	xenv "github.com/krateoplatformops/snowplow/plumbing/env"
+	"github.com/krateoplatformops/plumbing/e2e"
+	xenv "github.com/krateoplatformops/plumbing/env"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/e2e-framework/pkg/env"
