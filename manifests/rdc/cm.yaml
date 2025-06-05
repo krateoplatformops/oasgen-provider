@@ -10,7 +10,6 @@ data:
       COMPOSITION_CONTROLLER_SA_NAME: {{ .composition_controller_sa_name }}
       COMPOSITION_CONTROLLER_SA_NAMESPACE: {{ .composition_controller_sa_namespace }}
       HOME: /tmp # home should be set to /tmp or any other writable directory to avoid permission issues with helm https://github.com/helm/helm/issues/8038
-      URL_PLURALS: http://snowplow.demo-system.svc.cluster.local:8081/api-info/namespaces/{{ .namespace }}/plurals
 kind: ConfigMap
 metadata:
   name: rdc-configmap

@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/controllers"
-	"github.com/krateoplatformops/snowplow/plumbing/env"
+	"github.com/krateoplatformops/plumbing/env"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/krateoplatformops/oasgen-provider/apis"
 	"github.com/krateoplatformops/provider-runtime/pkg/controller"
@@ -29,12 +30,11 @@ func main() {
 	envVarPrefix := fmt.Sprintf("%s_PROVIDER", strcase.UpperSnakeCase(providerName))
 
 	debug := flag.Bool("debug", env.Bool(fmt.Sprintf("%s_DEBUG", envVarPrefix), false), "Run with debug logging.")
-	namespace := flag.String("namespace", env.String(fmt.Sprintf("%s_NAMESPACE", envVarPrefix), ""), "Watch resources only in this namespace.")
 	syncPeriod := flag.Duration("sync", env.Duration(fmt.Sprintf("%s_SYNC", envVarPrefix), time.Hour*1), "Controller manager sync period such as 300ms, 1.5h, or 2h45m")
 	pollInterval := flag.Duration("poll", env.Duration(fmt.Sprintf("%s_POLL_INTERVAL", envVarPrefix), time.Minute*3), "Poll interval controls how often an individual resource should be checked for drift.")
-	maxReconcileRate := flag.Int("max-reconcile-rate", env.Int(fmt.Sprintf("%s_MAX_RECONCILE_RATE", envVarPrefix), 3), "The global maximum rate per second at which resources may checked for drift from the desired state.")
+	maxReconcileRate := flag.Int("max-reconcile-rate", env.Int(fmt.Sprintf("%s_MAX_RECONCILE_RATE", envVarPrefix), 3), "The number of concurrent reconciles for each controller. This is the maximum number of resources that can be reconciled at the same time.")
 	leaderElection := flag.Bool("leader-election", env.Bool(fmt.Sprintf("%s_LEADER_ELECTION", envVarPrefix), false), "Use leader election for the controller manager.")
-	maxErrorRetryInterval := flag.Duration("max-error-retry-interval", env.Duration(fmt.Sprintf("%s_MAX_ERROR_RETRY_INTERVAL", envVarPrefix), 0*time.Minute), "The maximum interval between retries when an error occurs. This should be less than the half of the poll interval.")
+	maxErrorRetryInterval := flag.Duration("max-error-retry-interval", env.Duration(fmt.Sprintf("%s_MAX_ERROR_RETRY_INTERVAL", envVarPrefix), 1*time.Minute), "The maximum interval between retries when an error occurs. This should be less than the half of the poll interval.")
 	minErrorRetryInterval := flag.Duration("min-error-retry-interval", env.Duration(fmt.Sprintf("%s_MIN_ERROR_RETRY_INTERVAL", envVarPrefix), 1*time.Second), "The minimum interval between retries when an error occurs. This should be less than max-error-retry-interval.")
 
 	flag.Parse()
@@ -72,19 +72,15 @@ func main() {
 		log.Fatalf("Cannot get API server rest config: %v", err)
 	}
 
-	co := cache.Options{
-		SyncPeriod: syncPeriod,
-	}
-	if len(*namespace) > 0 {
-		co.DefaultNamespaces = map[string]cache.Config{
-			*namespace: {},
-		}
-	}
-
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		LeaderElection:   *leaderElection,
 		LeaderElectionID: fmt.Sprintf("leader-election-%s-provider", strcase.KebabCase(providerName)),
-		Cache:            co,
+		Cache: cache.Options{
+			SyncPeriod: syncPeriod,
+		},
+		Metrics: metricsserver.Options{
+			BindAddress: ":8080",
+		},
 	})
 	if err != nil {
 		log.Fatalf("Cannot create controller manager: %v", err)

@@ -16,10 +16,10 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/objects"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/plurals"
 
+	"github.com/krateoplatformops/plumbing/e2e"
+	xenv "github.com/krateoplatformops/plumbing/env"
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
-	"github.com/krateoplatformops/snowplow/plumbing/e2e"
-	xenv "github.com/krateoplatformops/snowplow/plumbing/env"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -67,8 +67,8 @@ func TestMain(m *testing.M) {
 		e2e.CreateNamespace("demo-system"),
 		e2e.CreateNamespace("krateo-system"),
 	).Finish(
-	// envfuncs.DeleteNamespace(namespace),
-	// envfuncs.DestroyCluster(clusterName),
+		envfuncs.DeleteNamespace(namespace),
+		envfuncs.DestroyCluster(clusterName),
 	)
 
 	os.Exit(testenv.Run(m))
