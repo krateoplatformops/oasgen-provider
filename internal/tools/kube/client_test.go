@@ -534,3 +534,63 @@ func TestCountResourcesWithGroup(t *testing.T) {
 
 	testenv.Test(t, f)
 }
+func TestCountRestDefinitionsWithGroup(t *testing.T) {
+
+	os.Setenv("DEBUG", "1")
+
+	f := features.New("CountRestDefinitionsWithGroup").
+		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			return ctx
+		}).Assess("CountRestDefinitionsWithGroup", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		kube, err := client.New(cfg.Client().RESTConfig(), client.Options{})
+		if err != nil {
+			t.Fatalf("failed to create client: %v", err)
+		}
+
+		discovery := discovery.NewDiscoveryClientForConfigOrDie(cfg.Client().RESTConfig())
+
+		// Test counting definitions in the "apps" group
+		auth, count, err := CountRestDefinitionsWithGroup(ctx, kube, discovery, "apps")
+		if err != nil {
+			t.Fatalf("failed to count definitions: %v", err)
+		}
+
+		// Verify the count is as expected (apps group should have Deployment, ReplicaSet, etc.)
+		if count == 0 {
+			t.Fatalf("expected at least one definition in the apps group, got %d", count)
+		}
+
+		// Test with core group (empty string)
+		auth2, count2, err := CountRestDefinitionsWithGroup(ctx, kube, discovery, "")
+		if err != nil {
+			t.Fatalf("failed to count definitions for core group: %v", err)
+		}
+
+		// Core group should have Pod, Service, ConfigMap, etc.
+		if count2 == 0 {
+			t.Fatalf("expected at least one definition in the core group, got %d", count2)
+		}
+
+		// Test with non-existent group
+		auth3, count3, err := CountRestDefinitionsWithGroup(ctx, kube, discovery, "non-existent-group")
+		if err != nil {
+			t.Fatalf("failed to count definitions for non-existent group: %v", err)
+		}
+
+		// Non-existent group should have 0 definitions
+		if count3 != 0 {
+			t.Fatalf("expected 0 definitions in non-existent group, got %d", count3)
+		}
+
+		if auth3 {
+			t.Fatalf("expected auth to be false for non-existent group")
+		}
+
+		// Verify auth is boolean (should not cause test failure, just verify type)
+		_ = auth && auth2 && auth3
+
+		return ctx
+	}).Feature()
+
+	testenv.Test(t, f)
+}
