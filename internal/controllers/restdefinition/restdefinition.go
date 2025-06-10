@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"time"
 
-	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -125,63 +125,14 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 	RDCtemplateConfigmapPath = env.String("RDC_TEMPLATE_CONFIGMAP_PATH", RDCtemplateConfigmapPath)
 	RDCrbacConfigFolder = env.String("RDC_RBAC_CONFIG_FOLDER", RDCrbacConfigFolder)
 
-	var err error
-	swaggerPath := cr.Spec.OASPath
-	basePath := "/tmp/swaggergen-provider"
-	err = os.MkdirAll(basePath, os.ModePerm)
-	defer os.RemoveAll(basePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	filegetter := &filegetter.Filegetter{
-		Client:     http.DefaultClient,
-		KubeClient: c.kube,
-	}
-
-	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download file: %w", err)
-	}
-
-	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	d, err := libopenapi.NewDocument(contents)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	doc, modelErrors := d.BuildV3Model()
-	if len(modelErrors) > 0 {
-		return nil, fmt.Errorf("failed to build model: %w", errors.Join(modelErrors...))
-	}
-	if doc == nil {
-		return nil, fmt.Errorf("failed to build model")
-	}
-
-	// Resolve model references
-	resolvingErrors := doc.Index.GetResolver().Resolve()
-	errs := []error{}
-	for i := range resolvingErrors {
-		c.log.Debug("Resolving error", "error", resolvingErrors[i].Error())
-		errs = append(errs, resolvingErrors[i].ErrorRef)
-	}
-	if len(resolvingErrors) > 0 {
-		return nil, fmt.Errorf("failed to resolve model references: %w", errors.Join(errs...))
-	}
-
 	log := logger.Logger{
 		Verbose: meta.IsVerbose(cr),
-		Logger:  c.log,
+		Logger:  c.log.WithValues("name", cr.Name, "namespace", cr.Namespace),
 	}
 
 	return &external{
 		kube: c.kube,
 		log:  &log,
-		doc:  doc,
 		rec:  c.recorder,
 		disc: c.disc,
 	}, nil
@@ -192,7 +143,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 type external struct {
 	kube client.Client
 	log  logging.Logger
-	doc  *libopenapi.DocumentModel[v3.Document]
+	// doc  *libopenapi.DocumentModel[v3.Document]
 	rec  record.EventRecorder
 	disc discovery.DiscoveryInterface
 }
@@ -208,13 +159,29 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		Version: resourceVersion,
 		Kind:    cr.Spec.Resource.Kind,
 	}
-	authenticationGVRs, err := getAuthenticationGVRs(e.doc, cr)
-	if err != nil {
-		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
-	}
 
 	if meta.WasDeleted(cr) {
 		e.log.Info("RestDefinition was deleted, skipping observation")
+		var authenticationGVRs []schema.GroupVersionResource
+
+		if len(cr.Status.Authentications) == 0 {
+			e.log.Debug("No authentications found in status, trying to get from document")
+			doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+			if err != nil {
+				return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
+			}
+			authenticationGVRs, err = getAuthenticationGVRs(doc, cr)
+			if err != nil {
+				return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
+			}
+		}
+
+		for _, auth := range cr.Status.Authentications {
+			gvk := schema.FromAPIVersionAndKind(auth.APIVersion, auth.Kind)
+			gvr := plurals.ToGroupVersionResource(gvk)
+			authenticationGVRs = append(authenticationGVRs, gvr)
+		}
+
 		err := manageFinalizers(ctx, e.kube, e.disc, authenticationGVRs, cr, e.log.Debug)
 		if err != nil {
 			return reconciler.ExternalObservation{}, fmt.Errorf("managing finalizers: %w", err)
@@ -223,6 +190,15 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 			ResourceExists:   false,
 			ResourceUpToDate: true,
 		}, e.Delete(ctx, cr)
+	}
+
+	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+	if err != nil {
+		return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
+	}
+	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
+	if err != nil {
+		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
 	}
 
 	gvr := plurals.ToGroupVersionResource(gvk)
@@ -329,6 +305,22 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, nil
 	}
 
+	authenticationGVKs, err := getAuthenticationGVKs(doc, cr)
+	if err != nil {
+		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
+	}
+	for _, gvk := range authenticationGVKs {
+		if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+			Kind:       gvk.Kind,
+			APIVersion: gvk.GroupVersion().String(),
+		}) {
+			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
+				Kind:       gvk.Kind,
+				APIVersion: gvk.GroupVersion().String(),
+			})
+		}
+	}
+
 	err = manageFinalizers(ctx, e.kube, e.disc, authenticationGVRs, cr, e.log.Debug)
 	if err != nil {
 		return reconciler.ExternalObservation{}, fmt.Errorf("managing finalizers: %w", err)
@@ -352,6 +344,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
+	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+	if err != nil {
+		return fmt.Errorf("getting document model from CR: %w", err)
+	}
+
 	e.log.Info("Creating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
 	gvk := schema.GroupVersionKind{
@@ -367,7 +364,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !crdOk {
-		gen, errors, err := oas2jsonschema.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
+		gen, errors, err := oas2jsonschema.GenerateByteSchemas(doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
 		if err != nil {
 			return fmt.Errorf("generating byte schemas: %w", err)
 		}
@@ -397,7 +394,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
+		for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
 			authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
 			if err != nil {
 				return fmt.Errorf("generating Auth Schema Name: %w", err)
@@ -423,6 +420,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 						Kind:       gvk.Kind,
 						APIVersion: gvk.GroupVersion().String(),
 					})
+				}
+
+				err = e.kube.Status().Update(ctx, cr)
+				if err != nil {
+					return fmt.Errorf("updating status: %w", err)
 				}
 				continue
 			}
@@ -462,6 +464,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 					APIVersion: gvk.GroupVersion().String(),
 				})
 			}
+
+			err = e.kube.Status().Update(ctx, cr)
+			if err != nil {
+				return fmt.Errorf("updating status: %w", err)
+			}
 		}
 
 		cr.SetConditions(rtv1.Creating())
@@ -475,7 +482,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 
 		return nil
 	}
-	authenticationGVRs, err := getAuthenticationGVRs(e.doc, cr)
+	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
 	if err != nil {
 		return fmt.Errorf("getting authentication GVRs: %w", err)
 	}
@@ -527,6 +534,11 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
+	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+	if err != nil {
+		return fmt.Errorf("getting document model from CR: %w", err)
+	}
+
 	e.log.Info("Updating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
 	gvk := schema.GroupVersionKind{
@@ -536,7 +548,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	}
 	gvr := plurals.ToGroupVersionResource(gvk)
 
-	authenticationGVRs, err := getAuthenticationGVRs(e.doc, cr)
+	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
 	if err != nil {
 		return fmt.Errorf("getting authentication GVRs: %w", err)
 	}
@@ -590,9 +602,25 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 
 	e.log.Info("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
-	authenticationGVRs, err := getAuthenticationGVRs(e.doc, cr)
-	if err != nil {
-		return fmt.Errorf("getting authentication GVRs: %w", err)
+
+	var authenticationGVRs []schema.GroupVersionResource
+
+	if len(cr.Status.Authentications) == 0 {
+		e.log.Debug("No authentications found in status, trying to get from document")
+		doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+		if err != nil {
+			return fmt.Errorf("getting document model from CR: %w", err)
+		}
+		authenticationGVRs, err = getAuthenticationGVRs(doc, cr)
+		if err != nil {
+			return fmt.Errorf("getting authentication GVRs: %w", err)
+		}
+	}
+
+	for _, auth := range cr.Status.Authentications {
+		gvk := schema.FromAPIVersionAndKind(auth.APIVersion, auth.Kind)
+		gvr := plurals.ToGroupVersionResource(gvk)
+		authenticationGVRs = append(authenticationGVRs, gvr)
 	}
 
 	gvr := plurals.ToGroupVersionResource(schema.GroupVersionKind{
@@ -617,28 +645,23 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
 	}
 
-	err = deploy.Undeploy(ctx, e.kube, opts)
+	err := deploy.Undeploy(ctx, e.kube, opts)
 	if err != nil {
 		return fmt.Errorf("uninstalling controller: %w", err)
 	}
 
+	// Check if CRD exists and if there are any RestResources with the same group
 	for _, gvr := range authenticationGVRs {
 		crdOk, err := crd.Lookup(ctx, e.kube, gvr)
 		if err != nil {
 			return fmt.Errorf("looking up CRD: %w", err)
 		}
 		if crdOk {
-			authExist, rrCount, err := kube.CountRestResourcesWithGroup(ctx, e.kube, e.disc, gvr.Group)
+			authExist, rrCount, err := kube.CountRestDefinitionsWithGroup(ctx, e.kube, e.disc, gvr.Group)
 			if err != nil {
 				return fmt.Errorf("counting resources: %w", err)
 			}
-			if rrCount > 0 {
-				e.log.Debug("Skipping CRD deletion, RestResources still exist",
-					"Group", gvr.Group, "Count", rrCount)
-				continue
-			}
-
-			if authExist {
+			if rrCount == 1 && authExist {
 				e.log.Info("CRD exists, deleting", "Group:", gvr.Group, "Resource:", gvr.Resource)
 				err = crd.Uninstall(ctx, e.kube, schema.GroupResource{
 					Group:    gvr.Group,
@@ -647,6 +670,10 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 				if err != nil {
 					return fmt.Errorf("uninstalling authentication CRD: %w", err)
 				}
+
+			} else if rrCount > 1 {
+				e.log.Debug("Skipping CRD deletion, RestDefinitions that reference this auth still exist",
+					"Group", gvr.Group, "Count", rrCount)
 			}
 		}
 	}
@@ -681,6 +708,23 @@ func getAuthenticationGVRs(doc *libopenapi.DocumentModel[v3.Document], cr *defin
 	return authenticationGVRs, nil
 }
 
+func getAuthenticationGVKs(doc *libopenapi.DocumentModel[v3.Document], cr *definitionv1alpha1.RestDefinition) ([]schema.GroupVersionKind, error) {
+	var authenticationGVKs []schema.GroupVersionKind
+	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
+		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
+		if err != nil {
+			return nil, fmt.Errorf("generating Auth Schema Name: %w", err)
+		}
+		gvk := schema.GroupVersionKind{
+			Group:   cr.Spec.ResourceGroup,
+			Version: resourceVersion,
+			Kind:    text.CapitaliseFirstLetter(authSchemaName),
+		}
+
+		authenticationGVKs = append(authenticationGVKs, gvk)
+	}
+	return authenticationGVKs, nil
+}
 func manageFinalizers(ctx context.Context, kubecli client.Client, disc discovery.DiscoveryInterface, authenticationGVRs []schema.GroupVersionResource, cr *definitionv1alpha1.RestDefinition, log func(msg string, keysAndValues ...any)) error {
 	var n int
 	var finalizer string
@@ -729,4 +773,54 @@ func manageFinalizers(ctx context.Context, kubecli client.Client, disc discovery
 		}
 	}
 	return nil
+}
+
+func getDocumentModelFromCR(ctx context.Context, kube client.Client, cr *definitionv1alpha1.RestDefinition) (*libopenapi.DocumentModel[v3.Document], error) {
+	var err error
+	swaggerPath := cr.Spec.OASPath
+	basePath := "/tmp/swaggergen-provider"
+	err = os.MkdirAll(basePath, os.ModePerm)
+	defer os.RemoveAll(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	filegetter := &filegetter.Filegetter{
+		Client:     http.DefaultClient,
+		KubeClient: kube,
+	}
+
+	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file: %w", err)
+	}
+
+	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	d, err := libopenapi.NewDocument(contents)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	doc, modelErrors := d.BuildV3Model()
+	if len(modelErrors) > 0 {
+		return nil, fmt.Errorf("failed to build model: %w", errors.Join(modelErrors...))
+	}
+	if doc == nil {
+		return nil, fmt.Errorf("failed to build model")
+	}
+
+	// Resolve model references
+	resolvingErrors := doc.Index.GetResolver().Resolve()
+	errs := []error{}
+	for i := range resolvingErrors {
+		errs = append(errs, resolvingErrors[i].ErrorRef)
+	}
+	if len(resolvingErrors) > 0 {
+		return nil, fmt.Errorf("failed to resolve model references: %w", errors.Join(errs...))
+	}
+	return doc, nil
 }

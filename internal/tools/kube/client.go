@@ -185,3 +185,35 @@ func CountRestResourcesWithGroup(ctx context.Context, kube client.Client, discov
 
 	return auth, rest, nil
 }
+
+func CountRestDefinitionsWithGroup(ctx context.Context, kube client.Client, discovery discovery.DiscoveryInterface, group string) (auth bool, rest int, err error) {
+	_, apiResourceList, err := discovery.ServerGroupsAndResources()
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to discover API resources: %v", err)
+	}
+
+	if len(apiResourceList) == 0 {
+		return false, 0, fmt.Errorf("no API resources found")
+	}
+
+	count := 0
+	for _, apiResource := range apiResourceList {
+		gv, err := schema.ParseGroupVersion(apiResource.GroupVersion)
+		if err != nil {
+			return false, 0, fmt.Errorf("failed to parse group version: %v", err)
+		}
+		if gv.Group == group {
+			for _, resource := range apiResource.APIResources {
+				if resource.Kind == "" {
+					continue
+				}
+				if strings.HasSuffix(resource.Kind, "Auth") {
+					auth = true
+				} else if !strings.HasSuffix(resource.Name, "/status") {
+					count += 1
+				}
+			}
+		}
+	}
+	return auth, count, nil
+}
