@@ -1,25 +1,15 @@
 # Comprehensive Guide to Provider Generation with Krateo Operator Generator (KOG)
 
-## Summary
+## Table of Contents
 
 - [Comprehensive Guide to Provider Generation with Krateo Operator Generator (KOG)](#comprehensive-guide-to-provider-generation-with-krateo-operator-generator-kog)
-  - [Summary](#summary)
+  - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
-  - [Simple Case: External API are compatible with K8s resurce management](#simple-case-external-api-are-compatible-with-k8s-resurce-management)
-    - [Step 1: Prepare Your OpenAPI Specification](#step-1-prepare-your-openapi-specification)
-    - [Step 2: Prepare Kubernetes Environment](#step-2-prepare-kubernetes-environment)
-    - [Step 3: Create RestDefinition for GitHub Repositories](#step-3-create-restdefinition-for-github-repositories)
-      - [Wait for the CRD and controller to be created](#wait-for-the-crd-and-controller-to-be-created)
-      - [Handling Schema Validation Issues](#handling-schema-validation-issues)
-        - [Solution 1: Simplify Complex Types (Recommended)](#solution-1-simplify-complex-types-recommended)
-        - [Solution 2: Use AdditionalProperties (Flexible but Less Safe)](#solution-2-use-additionalproperties-flexible-but-less-safe)
-    - [Step 4: Verification Steps](#step-4-verification-steps)
-    - [Step 5: Create the Custom Resources](#step-5-create-the-custom-resources)
-    - [Step 6: Patch the Custom Resource](#step-6-patch-the-custom-resource)
-    - [Step 7: Delete the Custom Resource](#step-7-delete-the-custom-resource)
+  - [Simple Case: External APIs Compatible with K8s Resource Management](#simple-case-external-apis-compatible-with-k8s-resource-management)
+  - [Extended Example: External API that requires a webservice to handle external API calls](#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls)
   - [Best Practices](#best-practices)
   - [Troubleshooting](#troubleshooting)
-  - [Next Steps](#next-steps)
+
 
 
 ## Prerequisites
@@ -27,7 +17,8 @@
 - `kubectl` configured to access your cluster
 - OpenAPI Specification (OAS) 3.0+ for your target API
 
-## Simple Case: External API are compatible with K8s resurce management
+## Simple Case: External APIs Compatible with K8s Resource Management
+
 This guide provides a step-by-step approach to generating a provider for managing GitHub repositories using the Krateo Operator Generator (KOG). It assumes you have a basic understanding of Kubernetes and OpenAPI specifications.
 
 ### Step 1: Prepare Your OpenAPI Specification
@@ -37,7 +28,7 @@ This guide provides a step-by-step approach to generating a provider for managin
    
 2. **Scope your OAS** to only include necessary endpoints:
    - Recommended for large APIs to reduce complexity
-   - Create separate files for different resource types (e.g., `repositories.yaml`, `collaborator.yaml`)
+   - Create separate files for different resource types (e.g., `repositories.yaml`, `teamrepo.yaml`)
 
 3. **Add authentication** information if missing from original OAS:
    ```yaml
@@ -55,7 +46,7 @@ This guide provides a step-by-step approach to generating a provider for managin
    kubectl create namespace gh-system
    ```
 
-2. Store your OAS as a ConfigMap: (in this example, we use a sample OAS for GitHub repositories stored in `samples/cheatsheet/assets/repo.yaml` of this repository)
+2. Store your OAS as a ConfigMap: (In this example, we use a sample OAS for GitHub repositories stored in `samples/cheatsheet/assets/repo.yaml` of this repository)
    ```bash
    kubectl create configmap repo --from-file=samples/cheatsheet/assets/repo.yaml -n gh-system
    ```
@@ -71,7 +62,7 @@ metadata:
   namespace: gh-system
 spec:
   oasPath: configmap://gh-system/repo/repo.yaml
-  resourceGroup: github.krateo.io
+  resourceGroup: github.kog.krateo.io
   resource: 
     kind: Repo
     identifiers:
@@ -94,7 +85,7 @@ spec:
 EOF
 ```
 
-#### Wait for the CRD and controller to be created
+#### Wait for the CRD and Controller to be Created
 You can check the status of the creation by running:
 
 ```bash
@@ -128,25 +119,25 @@ title:
 
 1. Check CRD creation:
    ```bash
-   kubectl get crds | grep github.krateo.io 
+   kubectl get crds | grep github.kog.krateo.io 
    ```
 
-   you should see:
+   You should see:
    ```text
-    bearerauths.github.krateo.io           2025-06-13T08:28:06Z
-    repoes.github.krateo.io                2025-06-13T08:28:06Z
+    bearerauths.github.kog.krateo.io           2025-06-13T08:28:06Z
+    repoes.github.kog.krateo.io                2025-06-13T08:28:06Z
    ```
 
-  If you see `bearerauths` and `repoes`, the CRDs are created successfully. The second CRD is the one representing the `repo` object. The first one is the `bearerauth` object, which is used to authenticate the requests to the GitHub API.
+  If you see `bearerauths` and `repoes`, the CRDs have been created successfully. The second CRD represents the `repo` object. The first one is the `bearerauth` object, which is used to authenticate requests to the GitHub API.
 
 1. Verify controller pod:
    ```bash
    kubectl get deploy -n gh-system
    ```
 
-You should see a deploy, named `gh-repo-controller`, that is responsible for managing the `Repo` resources.
+You should see a deployment named `gh-repo-controller`, which is responsible for managing the `Repo` resources.
 
-   If you see the deploy, you can check the logs of the controller pod to see if it is running correctly:
+   If you see the deployment, you can check the logs of the controller pod to see if it is running correctly:
    ```bash
    kubectl logs deploy/gh-repo-controller -n gh-system
    ```
@@ -157,21 +148,21 @@ You should see a deploy, named `gh-repo-controller`, that is responsible for man
    kubectl describe restdefinition gh-repo -n gh-system
    ```
 
-At this point you have a running operator able to handle GitHub repositories. You can create, update, and delete a repository using the custom resource.
+At this point you have a running operator able to handle GitHub repositories. You can create, update, and delete repositories using the custom resource.
 
 ### Step 5: Create the Custom Resources
 
-Create a custom resource for the `bearerauth` object. This is used to authenticate the requests to the GitHub API. The `bearerauth` object contains the reference to the token that is used to authenticate the requests. The token is stored in a Kubernetes secret.
+Create a custom resource for the `bearerauth` object. This is used to authenticate requests to the GitHub API. The `bearerauth` object contains a reference to the token that is used to authenticate the requests. The token is stored in a Kubernetes secret.
 
 So first, create a secret with your GitHub token: (generate a personal access token with the necessary permissions from your GitHub account settings)
 
 ```bash
-kubectl create secret generic gh-token --from-literal=<token> -n gh-system 
+kubectl create secret generic gh-token --from-literal=token=<token> -n gh-system 
 ```
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.krateo.io/v1alpha1
+apiVersion: github.kog.krateo.io/v1alpha1
 kind: BearerAuth
 metadata:
   name: gh-bearer
@@ -184,11 +175,11 @@ spec:
 EOF
 ```
 
-Create a custom resource for the `Repo` object. This is used to create, update, and delete issues in the GitHub API. The `Repo` object contains the reference to the `bearerauth` object that is used to authenticate the requests.
+Create a custom resource for the `Repo` object. This is used to create, update, and delete repositories in the GitHub API. The `Repo` object contains the reference to the `bearerauth` object that is used to authenticate the requests.
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.krateo.io/v1alpha1
+apiVersion: github.kog.krateo.io/v1alpha1
 kind: Repo
 metadata:
   name: gh-repo-1
@@ -204,24 +195,13 @@ spec:
 EOF
 ```
 
-You will expect that the the controller creates a repository in your GitHub account with the name `krateo-test-repo` under the organization `krateoplatformops-test`. You can check the status of the repository by running:
+You will expect that the controller creates a repository in your GitHub account with the name `krateo-test-repo` under the organization `krateoplatformops-test`. You can check the status of the repository by running:
 
 ```bash
-kubectl describe repo.github.krateo.io/gh-repo-1 -n gh-system
+kubectl describe repo.github.kog.krateo.io/gh-repo-1 -n gh-system
 ```
 
-You should see the status of the repository creation, and eventually the errors (if any) that occurred during the creation process.
-
-eg
-```text
-Events:
-  Type     Reason                         Age                  From  Message
-  ----     ------                         ----                 ----  -------
-  Warning  CannotObserveExternalResource  11m (x3 over 19m)          error making request: Get "https://api.github.com/repos/krateoplatformops-test/krateo-test-repo": http2: Transport: cannot retry err [http2: Transport received Server's graceful shutdown GOAWAY] after Request.Body was written; define Request.GetBody to avoid this error
-  Warning  CannotCreateExternalResource   8m3s (x30 over 23m)        unexpected status: 403: invalid status code: 403
-```
-
-You should instead see a successful creation event, which indicates that the repository was created successfully.
+You should see a successful creation event, which indicates that the repository was created successfully.
 
 ``` text
 Events:
@@ -237,7 +217,7 @@ To update the repository, you can patch the `Repo` custom resource. For example,
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.krateo.io/v1alpha1
+apiVersion: github.kog.krateo.io/v1alpha1
 kind: Repo
 metadata:
   name: gh-repo-1
@@ -267,7 +247,7 @@ Events:
 To delete the repository, you can delete the `Repo` custom resource:
 
 ```bash
-kubectl delete repo.github.krateo.io gh-repo-1 -n gh-system
+kubectl delete repo.github.kog.krateo.io gh-repo-1 -n gh-system
 ```
 
 This will trigger the controller to delete the corresponding repository in GitHub.
@@ -286,41 +266,26 @@ Events:
   Normal   DeletedExternalResource      repo/gh-repo-1        Successfully requested deletion of external resource
 ```
 
-## Best Practices
-
-1. **Incremental Development**: Start with a small subset of endpoints
-2. **Monitoring**: Set up alerts for the `rest-dynamic-controller` pods
-3. **Documentation**: Maintain a changelog for your OAS modifications
-
-## Troubleshooting
-
-- **CRD not created**: Check RestDefinition status and controller logs
-- **Authentication issues**: Verify securitySchemes in OAS match actual API requirements
-- **Type errors**: Ensure all fields have proper type definitions
-
-## Next Steps
-
-1. Create corresponding RestDefinition for repositories
-2. Implement admission webhooks for additional validation
-3. Set up RBAC for your custom resources
-
 ## Extended Example: External API that requires a webservice to handle external API calls
-This example demonstrates how to create a Krateo provider for managing GitHub repositories using an external web service to handle API calls. This is useful when the API isn't directly compatible with Kubernetes resource management or requires additional processing.
-An API to be compatible with Kubernetes resource management, should create, update, and delete resources in a way that is similar to Kubernetes resources. This means that the API should support the same operations as Kubernetes resources, such as create, update, delete, and get. If the API does not support these operations or requires additional processing, you can use an external web service to handle the API calls.
-This example assumes you have a basic understanding of Kubernetes, OpenAPI specifications, and web services development.
 
-Notes that in this example, we will develop a webservice that will handle the API calls to the GitHub API. The web service will be responsible for creating, updating, and deleting repositories in GitHub. The web service will be implemented using Go, but you can use any programming language and framework that you are comfortable with.
+This example demonstrates how to create a Krateo provider for managing GitHub repositories using an external web service to handle API calls. This approach is useful when the API isn't directly compatible with Kubernetes resource management or requires additional processing.
 
-### Step 1: Prepare Your OpenAPI Specification
+For an API to be compatible with Kubernetes resource management, it should create, update, and delete resources in a way that is similar to Kubernetes resources. This means the API should support the same operations as Kubernetes resources, such as create, update, delete, and get. If the API doesn't support these operations or requires additional processing, you can use an external web service to handle the API calls.
+
+This example assumes you have a basic understanding of Kubernetes, OpenAPI specifications, and web service development.
+
+**Note:** In this example, we'll develop a web service that handles API calls to the GitHub API. The web service will be responsible for creating, updating, and deleting repositories in GitHub. While this example uses Go, you can use any programming language and framework you're comfortable with.
+
+## Step 1: Prepare Your OpenAPI Specification
 
 1. **Obtain or generate** the OAS for your target API
    - Example: GitHub API OAS available at [GitHub's REST API description](https://github.com/github/rest-api-description)
    
 2. **Scope your OAS** to only include necessary endpoints:
    - Recommended for large APIs to reduce complexity
-   - Create separate files for different resource types (e.g., `repositories.yaml`, `collaborator.yaml`)
+   - Create separate files for different resource types (e.g., `repositories.yaml`, `teamrepo.yaml`)
 
-3. **Add authentication** information if missing from original OAS:
+3. **Add authentication** information if missing from the original OAS:
    ```yaml
    components:
      securitySchemes:
@@ -330,99 +295,110 @@ Notes that in this example, we will develop a webservice that will handle the AP
    ```
 
 ### Step 2: Prepare Kubernetes Environment
+
 1. Create a dedicated namespace:
    ```bash
    kubectl create namespace gh-system
    ```
-2. Store your OAS as a ConfigMap: (in this example, we use a sample OAS for GitHub collaborators stored in `samples/cheatsheet/assets` of this repository)
+
+2. Store your OAS as a ConfigMap (in this example, we use a sample OAS for GitHub teamrepos stored in assets of this repository):
    ```bash
-   kubectl create configmap collaborator --from-file=samples/cheatsheet/assets/collaborator_no_ws.yaml -n gh-system
+   kubectl create configmap teamrepo --from-file=samples/cheatsheet/assets/teamrepo_no_ws.yaml -n gh-system
    ```
 
 ### Step 3: Create RestDefinition for GitHub Repositories
+
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: swaggergen.krateo.io/v1alpha1
 kind: RestDefinition
 metadata:
-  name: gh-collaborator
+  name: gh-teamrepo
   namespace: gh-system
 spec:
-  oasPath: configmap://gh-system/collaborator/collaborator_no_ws.yaml
-  resourceGroup: github.krateo.io
+  oasPath: configmap://gh-system/teamrepo/teamrepo_no_ws.yaml
+  resourceGroup: github.kog.krateo.io
   resource: 
-    kind: Collaborator
+    kind: TeamRepo
     identifiers:
-      - id
-      - permissions
-      - html_url
+      - id 
+      - name
+      - full_name
+      - permission
     verbsDescription:
     - action: create
       method: PUT
-      path: /repos/{owner}/{repo}/collaborators/{username}
+      path: /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}
     - action: delete
       method: DELETE
-      path: /repos/{owner}/{repo}/collaborators/{username}
+      path: /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}
     - action: get
       method: GET
-      path: /repository/{owner}/{repo}/collaborators/{username}/permission
+      path: /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}
     - action: update
       method: PUT
-      path: /repos/{owner}/{repo}/collaborators/{username}
+      path: /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}
 EOF
 ```
 
-#### Wait for the CRD and controller to be created
-You can check the status of the creation by running:
+### Wait for the CRD and Controller to be Created
+
+You can check the creation status by running:
 
 ```bash
-kubectl wait restdefinition gh-collaborator --for condition=Ready=True --namespace gh-system --timeout=600s
+kubectl wait restdefinition gh-teamrepo --for condition=Ready=True --namespace gh-system --timeout=600s
 ```
 
 ### Step 4: Verification Steps
-1. Check CRD creation:
+
+1. **Check CRD creation:**
    ```bash
-   kubectl get crds | grep github.krateo.io 
+   kubectl get crds | grep github.kog.krateo.io 
    ```
 
-   you should see:
+   You should see:
    ```text
-    bearerauths.github.krateo.io           2025-06-13T08:28:06Z
-    collaborators.github.krateo.io         2025-06-13T08:28:06Z
+   bearerauths.github.kog.krateo.io           2025-06-13T08:28:06Z
+   teamrepos.github.kog.krateo.io             2025-06-13T08:28:06Z
    ```
 
-  If you see `bearerauths` and `collaborators`, the CRDs are created successfully. The second CRD is the one representing the `collaborator` object. The first one is the `bearerauth` object, which is used to authenticate the requests to the GitHub API.
+   If you see `bearerauths` and `teamrepos`, the CRDs are created successfully. The second CRD represents the `teamrepo` object, while the first one is the `bearerauth` object used to authenticate requests to the GitHub API.
 
-  Notes: if you have previously created the `repo` RestDefinition, you will see the `repoes.github.krateo.io` CRD as well but the `bearerauths.github.krateo.io` CRD is the same as the one created for the `repo` RestDefinition because it is shared between the two RestDefinitions becuse the group specified in the `RestDefinition` is the same as well as the authentication scheme.
-1. Verify controller deploy:
+   **Note:** If you've previously created the `repo` RestDefinition, you'll also see the `repoes.github.kog.krateo.io` CRD. However, the `bearerauths.github.kog.krateo.io` CRD is shared between RestDefinitions because they use the same group and authentication scheme.
+
+2. **Verify controller deployment:**
    ```bash
    kubectl get deploy -n gh-system
    ```
-You should see a deploy, named `gh-collaborator-controller`, that is responsible for managing the `Collaborator` resources.
-If you see the deploy, you can check the logs of the controller pod to see if it is running correctly:
-```bash
-kubectl logs deploy/gh-collaborator-controller -n gh-system
-```
+   
+   You should see a deployment named `gh-teamrepo-controller` responsible for managing the `teamrepo` resources.
+   
+   If you see the deployment, check the controller pod logs to verify it's running correctly:
+   ```bash
+   kubectl logs deploy/gh-teamrepo-controller -n gh-system
+   ```
 
-2. Check RestDefinition status:
+3. **Check RestDefinition status:**
    ```bash
    kubectl get restdefinition -n gh-system
-   kubectl describe restdefinition gh-collaborator -n gh-system
+   kubectl describe restdefinition gh-teamrepo -n gh-system
    ```
-At this point you have a running operator able to handle GitHub collaborators. You can create, update, and delete a collaborator using the custom resource.
+
+At this point, you have a running operator capable of handling GitHub teamrepos. You can create, update, and delete teamrepos using the custom resource.
 
 ### Step 5: Create the Custom Resources
 
-Create a custom resource for the `bearerauth` object. (You can skip the secret and bearerAuth creation if you have completed the `repo` tutorial in the previous section) This is used to authenticate the requests to the GitHub API. The `bearerauth` object contains the reference to the token that is used to authenticate the requests. The token is stored in a Kubernetes secret.
-So first, create a secret with your GitHub token: (generate a personal access token with the necessary permissions from your GitHub account settings) 
+Create a custom resource for the `bearerauth` object. (You can skip the secret and bearerAuth creation if you've completed the `repo` tutorial in the previous section.) This is used to authenticate requests to the GitHub API. The `bearerauth` object contains a reference to the token used for authentication, which is stored in a Kubernetes secret.
+
+First, create a secret with your GitHub token (generate a personal access token with the necessary permissions from your GitHub account settings):
 
 ```bash
-kubectl create secret generic gh-token --from-literal=<token> -n gh-system 
+kubectl create secret generic gh-token --from-literal=token=<your-token> -n gh-system 
 ```
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.krateo.io/v1alpha1
+apiVersion: github.kog.krateo.io/v1alpha1
 kind: BearerAuth
 metadata:
   name: gh-bearer
@@ -435,49 +411,60 @@ spec:
 EOF
 ```
 
-Create a custom resource for the `Collaborator` object. This is used to create, update, and delete collaborators in the GitHub API. The `Collaborator` object contains the reference to the `bearerauth` object that is used to authenticate the requests.
+Create a custom resource for the `teamrepo` object. This is used to create, update, and delete teamrepos in the GitHub API. The `teamrepo` object contains a reference to the `bearerauth` object used for authentication:
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.krateo.io/v1alpha1
-kind: Collaborator
+apiVersion: github.kog.krateo.io/v1alpha1
+kind: TeamRepo
 metadata:
-  name: add-collaborator
+  name: test-teamrepo
   namespace: gh-system
-  annotations:
-    krateo.io/connector-verbose: "true"
 spec:
   authenticationRefs:
     bearerAuthRef: gh-bearer
+  org: krateoplatformops-test
   owner: krateoplatformops-test
-  repo: test-collaborator
-  username: octocat
-  permission: pull
+  team_slug: prova
+  repo: test-teamrepo
+  permission: admin
 EOF
 ```
 
-You will expect that the controller creates a collaborator in your GitHub repository with the name `octocat` and the permission `pull`. You can check the status of the collaborator by running:
+The controller should add the GitHub team "prova" to the repository "test-teamrepo" in the organization "krateoplatformops-test" with "admin" permission. Check the teamrepo creation status by running:
 
 ```bash
-kubectl describe collaborator.github.krateo.io/add-collaborator -n gh-system
+kubectl describe teamrepo.github.kog.krateo.io/test-teamrepo -n gh-system
 ```
 
-You should see the status of the collaborator creation, and eventually the errors (if any) that occurred during the creation process.
+You should see the teamrepo creation status and any errors that occurred during the process.
 
-In this case, you should see an event for the Collaborator resource indicating that the external resource was created successfully:
+In this case, you should see that the teamrepo was created successfully with status `Ready`: `True`, but you should also notice that the `Message` field states "Resource is assumed to be up-to-date. Returned body is nil."
 
 ```text
-  Normal   UpdatedExternalResource       85s (x2 over 4m56s)          Successfully requested update of external resource
-  Normal   CreatedExternalResource       21s (x11 over 14m)           Successfully requested creation of external resource
+...
+Status:
+  Conditions:
+    Last Transition Time:  2025-06-18T14:13:03Z
+    Message:               Resource is assumed to be up-to-date. Returned body is nil.
+    Reason:                Available
+    Status:                True
+    Type:                  Ready
+Events:
+  Type    Reason                   Age   From  Message
+  ----    ------                   ----  ----  -------
+  Normal  CreatedExternalResource  86s         Successfully requested creation of external resource
 ```
 
-But you should also notice that Resource never goes to `Ready` state, because the controller is not able to check if the resource is created successfully or not, because the `get` API does not match with the `create` api. 
+This message indicates that the controller was able to create the teamrepo in GitHub, but the response body from the GitHub API is nil. This is expected behavior as described [here](https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#check-team-permissions-for-a-repository). According to the GitHub API documentation, the response body for this endpoint is empty when the request is successful but the accept header isn't set to `application/vnd.github.v3+json`. This is a known limitation of the GitHub API, and it's not possible to change the accept header for requests made by the `rest-dynamic-controller` directly.
 
-### Step 6: Create the Web Service for Collaborator Management
+To add the header to the request, we need to implement a web service that handles API calls to the GitHub API. The web service will be responsible for adding the header to the request and returning the response body, since the `rest-dynamic-controller` doesn't support adding headers to requests made to external APIs.
 
-At this point, we need to implement a web service that will handle the API calls to the GitHub API. The web service in this case will be responsible only for getting the collaborator information, because the `create` and `delete` operations are handled directly by the controller. 
+### Step 6: Create the Web Service for TeamRepo Management
 
-To handle this case we have implemented a web service that will handle the `get` operation for the collaborator, you can check out the implementation at this link: [Github Plugin for rest-dynamic-controller](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/internal/handlers/repo/repo.go). You can also check the [README](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/internal/handlers/repo/repo.go) for more information on how to run the web service.
+At this point, we need to implement a web service that handles API calls to the GitHub API. In this case, the web service will only be responsible for the `get` operation for teamrepos, because the `create`, `delete`, and `update` operations are handled directly by the controller.
+
+To handle this case, we've implemented a web service that handles the `get` operation for teamrepos. You can check the implementation at this link: [GitHub Plugin for rest-dynamic-controller](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/internal/handlers/repo/repo.go). You can also check the [README](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/README.md) for more information on running the web service.
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -518,26 +505,44 @@ spec:
 EOF
 ```
 
-Now we need to tell to `rest-dynamic-controller` to use the web service to handle the `get` operation for the collaborator. We can do that by adding the webservice URL to the OpenAPI specification of the `Collaborator` RestDefinition. We can do that by adding the `servers` field to the endpoint of the OpenAPI specification (https://swagger.io/docs/specification/v3_0/api-host-and-base-path/#overriding-servers): In this case the url will be `http://github-provider-plugin-krateo.default.svc.cluster.local:8081` because the web service is running in the `default` namespace and the service name is `github-provider-plugin-krateo`.
+### Step 7: Update the RestDefinition to Use the Web Service
 
-So let's create a new configmap with the updated OpenAPI specification:
+Now we need to tell the `rest-dynamic-controller` to use the web service to handle the `get` operation for teamrepos. We can do this by adding the webservice URL to the OpenAPI specification of the `teamrepo` RestDefinition. We can accomplish this by adding the `servers` field to the endpoint in the OpenAPI specification (https://swagger.io/docs/specification/v3_0/api-host-and-base-path/#overriding-servers). In this case, the URL will be `http://github-provider-plugin-krateo.default.svc.cluster.local:8080` because the web service is running in the `default` namespace with the service name `github-provider-plugin-krateo`.
+
+Let's create a new configmap with the updated OpenAPI specification:
+
 ```bash
-kubectl create configmap collaborator-ws --from-file=samples/cheatsheet/assets/collaborator_ws.yaml -n gh-system
+kubectl create configmap teamrepo-ws --from-file=samples/cheatsheet/assets/teamrepo_ws.yaml -n gh-system
 ```
 
+As you can see, the new OpenAPI specification also includes another endpoint for the `get` operation that points to the web service URL:
+
+```yaml
+...
+paths:
+  "/teamrepository/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}":
+    get:
+      servers:
+      - url: http://github-provider-plugin-krateo.default.svc.cluster.local:8080
+...
+```
+
+This means that when the `rest-dynamic-controller` handles the `get` operation for teamrepos, it will call the web service instead of the GitHub API directly. The web service will then add the necessary headers to the request and return the response body.
+
 Now we need to update the `RestDefinition` to use the new configmap:
+
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: swaggergen.krateo.io/v1alpha1
 kind: RestDefinition
 metadata:
-  name: gh-collaborator
+  name: gh-teamrepo
   namespace: gh-system
 spec:
-  oasPath: configmap://gh-system/collaborator-ws/collaborator_ws.yaml
-  resourceGroup: github.krateo.io
+  oasPath: configmap://gh-system/teamrepo-ws/teamrepo_ws.yaml
+  resourceGroup: github.kog.krateo.io
   resource: 
-    kind: Collaborator
+    kind: TeamRepo
     identifiers:
       - id
       - permissions
@@ -545,22 +550,98 @@ spec:
     verbsDescription:
     - action: create
       method: PUT
-      path: /repos/{owner}/{repo}/collaborators/{username}
+      path: /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}
     - action: delete
       method: DELETE
-      path: /repos/{owner}/{repo}/collaborators/{username}
+      path: /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}
     - action: get
       method: GET
-      path: /repository/{owner}/{repo}/collaborators/{username}/permission
+      path: /teamrepository/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}
     - action: update
       method: PUT
-      path: /repos/{owner}/{repo}/collaborators/{username}
+      path: /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}
 EOF
 ```
 
-We expect that the controller will update the RestDefinition and start using the web service to handle the `get` operation for the collaborator. You can check the status of the RestDefinition by running:
+We expect the controller to update the RestDefinition and start using the web service to handle the `get` operation for teamrepos. Check the RestDefinition status by running:
 
 ```bash
-kubectl describe restdefinition gh-collaborator -n gh-system
+kubectl describe restdefinition gh-teamrepo -n gh-system
 ```
-You should see the status of the RestDefinition update, and eventually the errors (if any) that occurred during the update process.
+
+You should see that the message field is now empty, which means the RestDefinition is ready and correctly observed by the controller.
+
+To check if the remote resource changes along with the custom resource, you can run the following command to change the teamrepo's permission:
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: github.kog.krateo.io/v1alpha1
+kind: TeamRepo
+metadata:
+  name: test-teamrepo
+  namespace: gh-system
+spec:
+  authenticationRefs:
+    bearerAuthRef: gh-bearer
+  org: krateoplatformops-test
+  owner: krateoplatformops-test
+  team_slug: prova
+  repo: test-teamrepo
+  permission: pull
+EOF
+```
+
+After a few seconds, you should see that the teamrepo's permission is updated in GitHub. Check the teamrepo status by running:
+
+```bash
+kubectl describe teamrepo.github.kog.krateo.io/test-teamrepo -n gh-system
+```
+
+You should see that the permission is updated to `pull`, the status is set to `Ready`: `True`, and events indicate that the external resource was updated successfully:
+
+```text
+Events:
+  Type     Reason                         Age                  From  Message
+  ----     ------                         ----                 ----  -------
+  Normal   UpdatedExternalResource        77s (x2 over 80s)             Successfully requested update of external resource
+```
+
+### Step 8: Delete the Custom Resource
+
+To delete the teamrepo, you can delete the `TeamRepo` custom resource:
+
+```bash
+kubectl delete teamrepo.github.kog.krateo.io test-teamrepo -n gh-system
+```
+
+This will trigger the controller to delete the corresponding teamrepo in GitHub.
+
+You should see an event for the TeamRepo resource indicating that the external resource was deleted successfully. Check the deletion status by running:
+
+```bash
+kubectl get events --sort-by='.lastTimestamp' -n gh-system | grep teamrepo/test-teamrepo
+```
+
+```text
+Events:
+  Type     Reason                         Age                  From  Message
+  ----     ------                         ----                 ----  -------
+  Normal   DeletedExternalResource      teamrepo/test-teamrepo        Successfully requested deletion of external resource
+```
+
+This indicates that the teamrepo was deleted successfully from GitHub. You can manually check the GitHub UI to confirm that the teamrepo is no longer present.
+
+## Best Practices
+
+1. **Incremental Development**: Start with a small subset of endpoints
+2. **Monitoring**: Set up alerts for the `rest-dynamic-controller` pods
+3. **Documentation**: Maintain a changelog for your OAS modifications
+   
+## Troubleshooting
+
+- **CRD not created**: Check RestDefinition status and controller logs
+- **Authentication issues**: Verify securitySchemes in OAS match actual API requirements
+- **Type errors**: Ensure all fields have proper type definitions
+
+**Note:** To troubleshoot Krateo controllers, you can add the annotation `krateo.io/connector-verbose: "true"` to the CR you want to debug. This enables verbose logging for the controller and helps you understand what's happening under the hood. For example, adding this to the `RestDefinition` will help you understand what happens when the controller tries to create the CRD and controller for the RestDefinition. Adding it to a `Repo` or `TeamRepo` CR will help you understand what happens when the controller tries to create, update, or delete the external resource, and will log any HTTP requests and responses made to the external API.
+

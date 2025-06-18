@@ -1,0 +1,328 @@
+---
+openapi: 3.0.3
+info:
+  version: 1.1.4
+  title: GitHub v3 REST API
+  description: GitHub's v3 REST API.
+  license:
+    name: MIT
+    url: https://spdx.org/licenses/MIT
+  termsOfService: https://docs.github.com/articles/github-terms-of-service
+  contact:
+    name: Support
+    url: https://support.github.com/contact?tags=dotcom-rest-api
+  x-github-plan: api.github.com
+servers:
+- url: https://api.github.com
+externalDocs:
+  description: GitHub v3 REST API
+  url: https://docs.github.com/rest/
+paths:
+  "/teamrepository/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}":
+    get:
+      servers:
+      - url: http://github-provider-plugin-krateo.default.svc.cluster.local:8080
+      summary: Get the permission of a team in a repository
+      description: Get the permission of a team in a repository
+      operationId: get-team-repo-permission
+      parameters:
+      - "$ref": "#/components/parameters/org"
+      - "$ref": "#/components/parameters/team-slug"
+      - "$ref": "#/components/parameters/owner"
+      - "$ref": "#/components/parameters/repo"
+      responses:
+        '200':
+          description: Alternative response with repository permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/team-repo-permissions'
+                additionalProperties: true
+  "/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}":
+    put:
+      summary: Add or update team repository permissions
+      description: |-
+        To add a repository to a team or update the team's permission on a repository, the authenticated user must have admin access to the repository, and must be able to see the team. The repository must be owned by the organization, or a direct fork of a repository owned by the organization. You will get a `422 Unprocessable Entity` status if you attempt to add a repository to a team that is not owned by the organization. Note that, if you choose not to pass any parameters, you'll need to set `Content-Length` to zero when calling out to this endpoint. For more information, see "[HTTP method](https://docs.github.com/rest/guides/getting-started-with-the-rest-api#http-method)."
+
+        > [!NOTE]
+        > You can also specify a team by `org_id` and `team_id` using the route `PUT /organizations/{org_id}/team/{team_id}/repos/{owner}/{repo}`.
+
+        For more information about the permission levels, see "[Repository permission levels for an organization](https://docs.github.com/github/setting-up-and-managing-organizations-and-teams/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization)".
+      tags:
+      - teams
+      operationId: teams/add-or-update-repo-permissions-in-org
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/teams/teams#add-or-update-team-repository-permissions
+      parameters:
+      - "$ref": "#/components/parameters/org"
+      - "$ref": "#/components/parameters/team-slug"
+      - "$ref": "#/components/parameters/owner"
+      - "$ref": "#/components/parameters/repo"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permission:
+                  type: string
+                  description: 'The permission to grant the team on this repository.
+                    We accept the following permissions to be set: `pull`, `triage`,
+                    `push`, `maintain`, `admin` and you can also specify a custom
+                    repository role name, if the owning organization has defined any.
+                    If no permission is specified, the team''s `permission` attribute
+                    will be used to determine what permission to grant the team on
+                    this repository.'
+            examples:
+              default:
+                summary: Adding a team to an organization repository with the write
+                  role
+                value:
+                  permission: push
+      responses:
+        '204':
+          description: Response
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: teams
+        subcategory: teams
+    delete:
+      summary: Remove a repository from a team
+      description: |-
+        If the authenticated user is an organization owner or a team maintainer, they can remove any repositories from the team. To remove a repository from a team as an organization member, the authenticated user must have admin access to the repository and must be able to see the team. This does not delete the repository, it just removes it from the team.
+
+        > [!NOTE]
+        > You can also specify a team by `org_id` and `team_id` using the route `DELETE /organizations/{org_id}/team/{team_id}/repos/{owner}/{repo}`.
+      tags:
+      - teams
+      operationId: teams/remove-repo-in-org
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/teams/teams#remove-a-repository-from-a-team
+      parameters:
+      - "$ref": "#/components/parameters/org"
+      - "$ref": "#/components/parameters/team-slug"
+      - "$ref": "#/components/parameters/owner"
+      - "$ref": "#/components/parameters/repo"
+      responses:
+        '204':
+          description: Response
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: teams
+        subcategory: teams
+components:
+  securitySchemes:
+    accessToken:
+      type: http
+      scheme: bearer
+  schemas:
+    team-repo-permissions:
+      type: object
+      properties:
+        allow_auto_merge:
+          type: boolean
+        allow_forking:
+          type: boolean
+        allow_merge_commit:
+          type: boolean
+        allow_rebase_merge:
+          type: boolean
+        allow_squash_merge:
+          type: boolean
+        archive_url:
+          type: string
+        archived:
+          type: boolean
+        assignees_url:
+          type: string
+        blobs_url:
+          type: string
+        branches_url:
+          type: string
+        clone_url:
+          type: string
+        collaborators_url:
+          type: string
+        comments_url:
+          type: string
+        commits_url:
+          type: string
+        compare_url:
+          type: string
+        contents_url:
+          type: string
+        contributors_url:
+          type: string
+        created_at:
+          type: string
+        default_branch:
+          type: string
+        delete_branch_on_merge:
+          type: boolean
+        deployments_url:
+          type: string
+        description:
+          type: string
+        disabled:
+          type: boolean
+        downloads_url:
+          type: string
+        events_url:
+          type: string
+        fork:
+          type: boolean
+        forks:
+          type: integer
+        forks_count:
+          type: integer
+        forks_url:
+          type: string
+        full_name:
+          type: string
+        git_commits_url:
+          type: string
+        git_refs_url:
+          type: string
+        git_tags_url:
+          type: string
+        git_url:
+          type: string
+        has_downloads:
+          type: boolean
+        has_issues:
+          type: boolean
+        has_pages:
+          type: boolean
+        has_projects:
+          type: boolean
+        has_wiki:
+          type: boolean
+        homepage:
+          type: string
+        hooks_url:
+          type: string
+        html_url:
+          type: string
+        id:
+          type: integer
+        issue_comment_url:
+          type: string
+        issue_events_url:
+          type: string
+        issues_url:
+          type: string
+        keys_url:
+          type: string
+        labels_url:
+          type: string
+        language:
+          type: string
+        languages_url:
+          type: string
+        license:
+          type: string
+        merges_url:
+          type: string
+        milestones_url:
+          type: string
+        mirror_url:
+          type: string
+        name:
+          type: string
+        node_id:
+          type: string
+        notifications_url:
+          type: string
+        open_issues:
+          type: integer
+        open_issues_count:
+          type: integer
+        owner:
+          type: string
+          description: Added
+        permission:
+          type: string
+          description: Added
+        private:
+          type: boolean
+        pulls_url:
+          type: string
+        pushed_at:
+          type: string
+        releases_url:
+          type: string
+        role_name:
+          type: string
+        size:
+          type: integer
+        ssh_url:
+          type: string
+        stargazers_count:
+          type: integer
+        stargazers_url:
+          type: string
+        statuses_url:
+          type: string
+        subscribers_url:
+          type: string
+        subscription_url:
+          type: string
+        svn_url:
+          type: string
+        tags_url:
+          type: string
+        teams_url:
+          type: string
+        temp_clone_token:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        trees_url:
+          type: string
+        updated_at:
+          type: string
+        url:
+          type: string
+        visibility:
+          type: string
+        watchers:
+          type: integer
+        watchers_count:
+          type: integer
+  parameters:
+    org:
+      name: org
+      description: The organization name. The name is not case sensitive.
+      in: path
+      required: true
+      schema:
+        type: string
+    team-slug:
+      name: team_slug
+      description: The slug of the team name.
+      in: path
+      required: true
+      schema:
+        type: string
+    owner:
+      name: owner
+      description: The account owner of the repository. The name is not case sensitive.
+      in: path
+      required: true
+      schema:
+        type: string
+    repo:
+      name: repo
+      description: The name of the repository without the `.git` extension. The name
+        is not case sensitive.
+      in: path
+      required: true
+      schema:
+        type: string
