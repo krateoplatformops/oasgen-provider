@@ -5,12 +5,11 @@
 - [Comprehensive Guide to Provider Generation with Krateo Operator Generator (KOG)](#comprehensive-guide-to-provider-generation-with-krateo-operator-generator-kog)
   - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
+  - [What to do when the OpenAPI Specification (OAS) is missing/incomplete or not at version 3.0+?](#what-to-do-when-the-openapi-specification-oas-is-missingincomplete-or-not-at-version-30)
   - [Simple Case: External APIs Compatible with K8s Resource Management](#simple-case-external-apis-compatible-with-k8s-resource-management)
   - [Extended Example: External API that requires a plugin to handle external API calls](#extended-example-external-api-that-requires-a-plugin-to-handle-external-api-calls)
   - [Best Practices](#best-practices)
   - [Troubleshooting](#troubleshooting)
-
-
 
 ## Prerequisites
 - Kubernetes cluster with Krateo installed
@@ -332,7 +331,7 @@ This example assumes you have a basic understanding of Kubernetes, OpenAPI speci
 
 **Note:** In this example, we'll develop a web service that handles API calls to the GitHub API. The web service will be responsible for creating, updating, and deleting repositories in GitHub. While this example uses Go, you can use any programming language and framework you're comfortable with.
 
-## Step 1: Prepare Your OpenAPI Specification
+### Step 1: Prepare Your OpenAPI Specification
 
 1. **Obtain or generate** the OAS for your target API
    - Example: GitHub API OAS available at [GitHub's REST API description](https://github.com/github/rest-api-description/blob/main/descriptions/ghes-3.9/ghes-3.9.yaml)
