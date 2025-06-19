@@ -4,19 +4,22 @@ The Krateo OASGen Provider is a Kubernetes controller that generates Custom Reso
 
 ## Summary
 
-- [Summary](#summary)
-- [Glossary](#glossary)
-- [Architecture](#architecture)
-- [Workflow](#workflow)
-- [Requirements](#requirements)
-- [RestDefinition Specifications](#restdefinition-specifications)
-  - [Authentication](#authentication)
-  - [API Endpoints Requirements](#api-endpoints-requirements)
-- [Getting Started](#getting-started)
-- [Example](#example)
-- [Security Features](#security-features)
-- [Best Practices](#best-practices)
-- [Troubleshooting](#troubleshooting)
+- [Krateo OASGen Provider](#krateo-oasgen-provider)
+  - [Summary](#summary)
+  - [Glossary](#glossary)
+  - [Architecture](#architecture)
+  - [Workflow](#workflow)
+  - [Requirements](#requirements)
+  - [RestDefinition Specifications](#restdefinition-specifications)
+    - [CRD Specification](#crd-specification)
+    - [Authentication](#authentication)
+    - [API Endpoints Requirements](#api-endpoints-requirements)
+    - [About RestDefinition Actions](#about-restdefinition-actions)
+  - [How to Install](#how-to-install)
+  - [Examples and Troubleshooting](#examples-and-troubleshooting)
+  - [Security Features](#security-features)
+  - [Best Practices](#best-practices)
+  - [Troubleshooting](#troubleshooting)
 
 ## Glossary
 
@@ -51,6 +54,10 @@ The diagram illustrates how the OASGen Provider processes OpenAPI Specifications
 
 ## RestDefinition Specifications
 
+### CRD Specification
+
+To view the CRD configuration, visit [this link](https://doc.crds.dev/github.com/krateoplatformops/oasgen-provider).
+
 ### Authentication
 
 The provider supports Basic Authentication out of the box and will generate appropriate CRDs if the OAS specifies authentication methods.
@@ -75,78 +82,49 @@ spec:
 2. API responses must contain all fields defined in the CRD
 3. Path parameters and body fields should use consistent naming
 
-## Getting Started
 
-1. Install Krateo BFF:
+### About RestDefinition Actions
+
+Krateo controllers support 4 verbs to provide resource reconciliation:
+
+- **Observe**: This verb observes the resource state in the external system. It fetches the current state of the resource. If the resource does not exist or differs from the desired state, the controller will create or update it accordingly.
+  - `rest-dynamic-controller` supports searching for external resources using two actions:
+    - **findby**: This action finds a resource by its identifiers. The endpoint used for this action must return a list of resources that match the identifiers. This is useful when you want to find a resource based on specific criteria, such as a unique identifier or a combination of fields.
+    - **get**: This action retrieves the current state of a resource. This typically fetches a single resource by its unique identifier.
+- **Create**: This verb creates a new resource in the external system.
+  - `rest-dynamic-controller` supports resource creation using the `create` action. The endpoint used for this action must accept a request body containing the resource data in the format defined by the OAS schema. The request body should be strongly typed to match the OAS schema, ensuring data validation before being sent to the external system. The request body is used by `oasgen-provider` to generate the CRD.
+- **Update**: This verb updates an existing resource in the external system.
+  - `rest-dynamic-controller` supports resource updates using the `update` action. The endpoint used for this action must use the same request body as the `create` action (it can have fewer fields, but not more, because the CRD is generated from the `create` request body).
+- **Delete**: This verb deletes a resource from the external system.
+  - `rest-dynamic-controller` supports resource deletion using the `delete` action. This endpoint should delete the resource from the external system. This means that `rest-dynamic-controller` expects a subsequent call to the `findby` or `get` action will not return the deleted resource. The endpoint should not return an error if the resource does not exist, as it is expected that the resource has already been deleted.
+  
+Any API behavior that does not match these requirements will require a web service wrapper to normalize the API interface. This is common with APIs that do not follow consistent naming conventions or have different response structures.
+To learn more about web service wrappers, please refer to the [cheatsheet](cheatsheet.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
+
+## How to Install
+
+1. Install OASGen Provider:
 ```sh
 helm repo add krateo https://charts.krateo.io
 helm repo update
-helm install bff krateo/bff --namespace krateo-system --create-namespace
-```
-
-2. Install OASGen Provider:
-```sh
 helm install krateo-oasgen-provider krateo/oasgen-provider --namespace krateo-system
 ```
 
-3. Apply a RestDefinition:
-```yaml
-kind: RestDefinition
-apiVersion: swaggergen.krateo.io/v1alpha1
-metadata:
-  name: def-pipelinepermissions
-  namespace: default
-spec: 
-  oasPath: https://raw.githubusercontent.com/krateoplatformops/azuredevops-oas3/main/approvalandchecks/pipelinepermissions.yaml
-  resourceGroup: azure.devops.com
-  resource: 
-    kind: PipelinePermission
-    identifiers:
-      - resourceType
-      - resourceId
-    verbsDescription:
-    - action: findby
-      method: POST
-      path: /{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
-    - action: get
-      method: GET
-      path: /{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
-    - action: update
-      method: PATCH
-      path: /{organization}/{project}/_apis/pipelines/pipelinepermissions/{resourceType}/{resourceId}
-```
+## Examples and Troubleshooting
 
-## Example
+You can see a more practical guide on `core-provider` usage at [this link](cheatsheet.md).
 
-Here's a complete example for managing Azure DevOps Pipeline Permissions:
+## Environment Variables and Flags
 
-1. Apply the RestDefinition (as shown above)
-2. Create a BasicAuth secret:
-```sh
-kubectl create secret generic azdevops-gen --from-literal=token=your-pat-token
-```
-
-3. Apply the PipelinePermission CR:
-```yaml
-kind: PipelinePermission
-apiVersion: azure.devops.com/v1alpha1
-metadata:
-  name: pipelineperm-1
-  namespace: default
-  annotations:
-    krateo.io/connector-verbose: "true"
-spec:
-  authenticationRefs:
-    basicAuthRef: basicauth-azure
-  api-version: 7.0-preview.1
-  organization: yourorg
-  project: yourproject
-  resourceType: environment
-  resourceId: "1"
-  pipelines:
-  - id: 42
-    authorized: false
-```
+| Name                                   | Description                | Default Value | Notes         |
+|:---------------------------------------|:---------------------------|:--------------|:--------------|
+| `OASGEN_PROVIDER_DEBUG`                 | Enables debug logging      | `false`       | Use `--debug` flag |
+| `OASGEN_PROVIDER_SYNC`                  | Sync period for controller manager | `1h`          | Duration |
+| `OASGEN_PROVIDER_POLL_INTERVAL`         | Poll interval for resource drift checks | `5m`          | Duration |
+| `OASGEN_PROVIDER_MAX_RECONCILE_RATE`    | The number of concurrent reconciles for each controller. This is the maximum number of resources that can be reconciled at the same time. | `3`           | Integer |
+| `OASGEN_PROVIDER_LEADER_ELECTION`       | Enables leader election for controller manager | `false`      | Use `--leader-election` flag |
+| `OASGEN_PROVIDER_MAX_ERROR_RETRY_INTERVAL` | Maximum retry interval on errors | `1m`          | Duration |
+| `OASGEN_PROVIDER_MIN_ERROR_RETRY_INTERVAL` | Minimum retry interval on errors | `1s`          | Duration |
 
 ## Security Features
 
@@ -162,20 +140,3 @@ spec:
 3. Use web service wrappers when API interfaces are inconsistent
 4. Regularly update OAS documents to match API changes
 5. Monitor controller logs with `krateo.io/connector-verbose: "true"`
-
-## Troubleshooting
-
-1. **Conversion from OAS 2.0 to 3.0:**
-   - Use [Swagger Editor](https://editor.swagger.io) for conversion
-   - Manually review and correct any conversion issues
-
-2. **Inconsistent API interfaces:**
-   - Create a web service wrapper to normalize interfaces
-   - Example implementations available in [Java](https://github.com/krateoplatformops/azuredevops-oas3-plugin) and [Python](https://github.com/krateoplatformops/github-oas3-plugin)
-
-3. **Authentication issues:**
-   - Verify secret references in BasicAuth CRs
-   - Check network connectivity to API endpoints
-   - Enable verbose logging with annotations
-
-For complete CRD specifications, visit [this link](https://doc.crds.dev/github.com/krateoplatformops/oasgen-provider).

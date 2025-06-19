@@ -641,9 +641,33 @@ This indicates that the teamrepo was deleted successfully from GitHub. You can m
    
 ## Troubleshooting
 
+### Common Issues
+
 - **CRD not created**: Check RestDefinition status and controller logs
 - **Authentication issues**: Verify securitySchemes in OAS match actual API requirements
 - **Type errors**: Ensure all fields have proper type definitions
 
-**Note:** To troubleshoot Krateo controllers, you can add the annotation `krateo.io/connector-verbose: "true"` to the CR you want to debug. This enables verbose logging for the controller and helps you understand what's happening under the hood. For example, adding this to the `RestDefinition` will help you understand what happens when the controller tries to create the CRD and controller for the RestDefinition. Adding it to a `Repo` or `TeamRepo` CR will help you understand what happens when the controller tries to create, update, or delete the external resource, and will log any HTTP requests and responses made to the external API.
+### Detailed Solutions
+
+1. **Conversion from OAS 2.0 to 3.0:**
+   - Use [Swagger Editor](https://editor.swagger.io) for conversion
+   - Manually review and correct any conversion issues
+
+2. **Inconsistent API interfaces:**
+   - Create a web service wrapper to normalize interfaces
+   - Example implementations available in [Java](https://github.com/krateoplatformops/azuredevops-oas3-plugin) and [Python](https://github.com/krateoplatformops/github-oas3-plugin)
+
+3. **Authentication issues:**
+   - Verify secret references in BasicAuth CRs
+   - Check network connectivity to API endpoints
+   - Enable verbose logging with annotations (see below)
+
+### Debug Mode
+
+To troubleshoot Krateo controllers, add the annotation `krateo.io/connector-verbose: "true"` to the CR you want to debug. This enables verbose logging for the controller and helps you understand what's happening under the hood.
+
+**Examples:**
+- Adding this annotation to a `RestDefinition` will help you understand what happens when the controller tries to create the CRD and controller for the RestDefinition
+- Adding it to a `Repo` or `TeamRepo` CR will help you understand what happens when the controller tries to create, update, or delete the external resource, and will log any HTTP requests and responses made to the external API
+
 
