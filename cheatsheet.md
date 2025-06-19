@@ -24,20 +24,20 @@ This guide provides a step-by-step approach to generating a provider for managin
 ### Step 1: Prepare Your OpenAPI Specification
 
 1. **Obtain or generate** the OAS for your target API
-   - Example: GitHub API OAS available at [GitHub's REST API description](https://github.com/github/rest-api-description)
+   - Example: GitHub API OAS available at [GitHub's REST API description](https://github.com/github/rest-api-description/blob/main/descriptions/ghes-3.9/ghes-3.9.yaml)
    
 2. **Scope your OAS** to only include necessary endpoints:
    - Recommended for large APIs to reduce complexity
    - Create separate files for different resource types (e.g., `repositories.yaml`, `teamrepo.yaml`)
 
 3. **Add authentication** information if missing from original OAS:
-   ```yaml
+```diff
    components:
-     securitySchemes:
-       oauth:
-         type: http
-         scheme: bearer
-   ```
++    securitySchemes
++       oauth:
++         type: http
++        scheme: bearer
+```
 
 ### Step 2: Prepare Kubernetes Environment
 
@@ -279,20 +279,20 @@ This example assumes you have a basic understanding of Kubernetes, OpenAPI speci
 ## Step 1: Prepare Your OpenAPI Specification
 
 1. **Obtain or generate** the OAS for your target API
-   - Example: GitHub API OAS available at [GitHub's REST API description](https://github.com/github/rest-api-description)
+   - Example: GitHub API OAS available at [GitHub's REST API description](https://github.com/github/rest-api-description/blob/main/descriptions/ghes-3.9/ghes-3.9.yaml)
    
 2. **Scope your OAS** to only include necessary endpoints:
    - Recommended for large APIs to reduce complexity
    - Create separate files for different resource types (e.g., `repositories.yaml`, `teamrepo.yaml`)
 
 3. **Add authentication** information if missing from the original OAS:
-   ```yaml
-   components:
-     securitySchemes:
-       oauth:
-         type: http
-         scheme: bearer
-   ```
+```diff
+    components:
++     securitySchemes:
++       oauth:
++         type: http
++         scheme: bearer
+```
 
 ### Step 2: Prepare Kubernetes Environment
 
@@ -464,7 +464,9 @@ To add the header to the request, we need to implement a web service that handle
 
 At this point, we need to implement a web service that handles API calls to the GitHub API. In this case, the web service will only be responsible for the `get` operation for teamrepos, because the `create`, `delete`, and `update` operations are handled directly by the controller.
 
-To handle this case, we've implemented a web service that handles the `get` operation for teamrepos. You can check the implementation at this link: [GitHub Plugin for rest-dynamic-controller](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/internal/handlers/repo/repo.go). You can also check the [README](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/README.md) for more information on running the web service.
+To handle this case, we've implemented a web service that handles the `get` operation for teamrepos. You can check the implementation at this link: [GitHub Plugin for rest-dynamic-controller](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/internal/handlers/repo/repo.go). You can also check the [README](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/README.md) for more information on running and why it has been implemented.
+
+**Note:** `rest-dynamic-controller` to check if the CR is up-to-date or not, checks the fields in the CR (spec and status) against the fields in the response body from the external API. It compare the fields at the same level, so if the response fields are more nested than the fields in the CR, it will not be able to compare them correctly. This is why we need to implement a web service that returns the response body with the same structure as the CR. This problem is quite common and a specific solution has been described [here](https://github.com/krateoplatformops/github-rest-dynamic-controller-plugin/blob/main/README.md#2-get-team-permission-in-a-repository)
 
 ```bash
 cat <<EOF | kubectl apply -f -
