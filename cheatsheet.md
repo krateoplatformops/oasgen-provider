@@ -3,7 +3,6 @@
 ## Table of Contents
 
 - [Comprehensive Guide to Provider Generation with Krateo Operator Generator (KOG)](#comprehensive-guide-to-provider-generation-with-krateo-operator-generator-kog)
-  - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
   - [What to do when the OpenAPI Specification (OAS) is missing/incomplete or not at version 3.0+?](#what-to-do-when-the-openapi-specification-oas-is-missingincomplete-or-not-at-version-30)
   - [Simple Case: External APIs Compatible with K8s Resource Management](#simple-case-external-apis-compatible-with-k8s-resource-management)
