@@ -1,0 +1,992 @@
+---
+openapi: 3.0.3
+info:
+  version: 1.1.4
+  title: GitHub v3 REST API
+  description: GitHub's v3 REST API.
+  license:
+    name: MIT
+    url: https://spdx.org/licenses/MIT
+  termsOfService: https://docs.github.com/articles/github-terms-of-service
+  contact:
+    name: Support
+    url: https://support.github.com/contact?tags=dotcom-rest-api
+  x-github-plan: api.github.com
+servers:
+- url: https://api.github.com
+externalDocs:
+  description: GitHub v3 REST API
+  url: https://docs.github.com/rest/
+paths:
+  "/repos/{org}/{name}":
+    delete:
+      summary: Delete a repository
+      description: |-
+        Deleting a repository requires admin access.
+
+        If an organization owner has configured the organization to prevent members from deleting organization-owned
+        repositories, you will get a `403 Forbidden` response.
+
+        OAuth app tokens and personal access tokens (classic) need the `delete_repo` scope to use this endpoint.
+      tags:
+      - repos
+      operationId: repos/delete
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/repos/repos#delete-a-repository
+      parameters:
+      - "$ref": "#/components/parameters/org"
+      - name: name
+        in: path
+        required: true
+        description: The name of the repository.
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Response
+        '403':
+          description: 'If an organization owner has configured the organization to
+            prevent members from deleting organization-owned repositories, a member
+            will get this response:'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  documentation_url:
+                    type: string
+              examples:
+                default:
+                  value:
+                    message: Organization members cannot delete repositories.
+                    documentation_url: https://docs.github.com/rest/repos/repos#delete-a-repository
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: repos
+        subcategory: repos
+    get:
+      summary: Get a repository
+      description: |-
+        The `parent` and `source` objects are present when the repository is a fork. `parent` is the repository this repository was forked from, `source` is the ultimate source for the network.
+
+        > [!NOTE]
+        > In order to see the `security_and_analysis` block for a repository you must have admin permissions for the repository or be an owner or security manager for the organization that owns the repository. For more information, see "[Managing security managers in your organization](https://docs.github.com/organizations/managing-peoples-access-to-your-organization-with-roles/managing-security-managers-in-your-organization)."
+      tags:
+      - repos
+      operationId: repos/get
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/repos/repos#get-a-repository
+      parameters:
+      - "$ref": "#/components/parameters/org"
+      - name: name
+        in: path
+        required: true
+        description: The name of the repository.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/full-repository"
+        '403':
+          "$ref": "#/components/responses/forbidden"
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: repos
+        subcategory: repos
+        patch:
+    patch:
+      summary: Update a repository
+      description: "**Note**: To edit a repository's topics, use the [Replace all
+        repository topics](https://docs.github.com/rest/repos/repos#replace-all-repository-topics)
+        endpoint."
+      tags:
+      - repos
+      operationId: repos/update
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/repos/repos#update-a-repository
+      parameters:
+      - "$ref": "#/components/parameters/org"
+      - name: name
+        in: path
+        required: true
+        description: The name of the repository.
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: The name of the repository.
+                description:
+                  type: string
+                  description: A short description of the repository.
+                homepage:
+                  type: string
+                  description: A URL with more information about the repository.
+                private:
+                  type: boolean
+                  description: "Either `true` to make the repository private or `false`
+                    to make it public. Default: `false`.  \n**Note**: You will get
+                    a `422` error if the organization restricts [changing repository
+                    visibility](https://docs.github.com/articles/repository-permission-levels-for-an-organization#changing-the-visibility-of-repositories)
+                    to organization owners and a non-owner tries to change the value
+                    of private."
+                  default: false
+                visibility:
+                  type: string
+                  description: The visibility of the repository.
+                  enum:
+                  - public
+                  - private
+                has_issues:
+                  type: boolean
+                  description: Either `true` to enable issues for this repository
+                    or `false` to disable them.
+                  default: true
+                has_projects:
+                  type: boolean
+                  description: Either `true` to enable projects for this repository
+                    or `false` to disable them. **Note:** If you're creating a repository
+                    in an organization that has disabled repository projects, the
+                    default is `false`, and if you pass `true`, the API returns an
+                    error.
+                  default: true
+                has_wiki:
+                  type: boolean
+                  description: Either `true` to enable the wiki for this repository
+                    or `false` to disable it.
+                  default: true
+                is_template:
+                  type: boolean
+                  description: Either `true` to make this repo available as a template
+                    repository or `false` to prevent it.
+                  default: false
+                allow_squash_merge:
+                  type: boolean
+                  description: Either `true` to allow squash-merging pull requests,
+                    or `false` to prevent squash-merging.
+                  default: true
+                allow_merge_commit:
+                  type: boolean
+                  description: Either `true` to allow merging pull requests with a
+                    merge commit, or `false` to prevent merging pull requests with
+                    merge commits.
+                  default: true
+                allow_rebase_merge:
+                  type: boolean
+                  description: Either `true` to allow rebase-merging pull requests,
+                    or `false` to prevent rebase-merging.
+                  default: true
+                allow_auto_merge:
+                  type: boolean
+                  description: Either `true` to allow auto-merge on pull requests,
+                    or `false` to disallow auto-merge.
+                  default: false
+                delete_branch_on_merge:
+                  type: boolean
+                  description: Either `true` to allow automatically deleting head
+                    branches when pull requests are merged, or `false` to prevent
+                    automatic deletion. **The authenticated user must be an organization
+                    owner to set this property to `true`.**
+                  default: false
+                use_squash_pr_title_as_default:
+                  type: boolean
+                  description: Either `true` to allow squash-merge commits to use
+                    pull request title, or `false` to use commit message. **This property
+                    has been deprecated. Please use `squash_merge_commit_title` instead.
+                  default: false
+                  deprecated: true
+                squash_merge_commit_title:
+                  type: string
+                  enum:
+                  - PR_TITLE
+                  - COMMIT_OR_PR_TITLE
+                  description: |-
+                    Required when using `squash_merge_commit_message`.
+
+                    The default value for a squash merge commit title:
+
+                    - `PR_TITLE` - default to the pull request's title.
+                    - `COMMIT_OR_PR_TITLE` - default to the commit's title (if only one commit) or the pull request's title (when more than one commit).
+                squash_merge_commit_message:
+                  type: string
+                  enum:
+                  - PR_BODY
+                  - COMMIT_MESSAGES
+                  - BLANK
+                  description: |-
+                    The default value for a squash merge commit message:
+
+                    - `PR_BODY` - default to the pull request's body.
+                    - `COMMIT_MESSAGES` - default to the branch's commit messages.
+                    - `BLANK` - default to a blank commit message.
+                merge_commit_title:
+                  type: string
+                  enum:
+                  - PR_TITLE
+                  - MERGE_MESSAGE
+                  description: |-
+                    Required when using `merge_commit_message`.
+
+                    The default value for a merge commit title.
+
+                    - `PR_TITLE` - default to the pull request's title.
+                    - `MERGE_MESSAGE` - default to the classic title for a merge message (e.g., Merge pull request #123 from branch-name).
+                merge_commit_message:
+                  type: string
+                  enum:
+                  - PR_BODY
+                  - PR_TITLE
+                  - BLANK
+                  description: |-
+                    The default value for a merge commit message.
+
+                    - `PR_TITLE` - default to the pull request's title.
+                    - `PR_BODY` - default to the pull request's body.
+                    - `BLANK` - default to a blank commit message.     
+            examples:
+              default:
+                value:
+                  name: Hello-World
+                  description: This is your first repository
+                  homepage: https://github.com
+                  private: true
+                  has_issues: true
+                  has_projects: true
+                  has_wiki: true
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/full-repository"
+              #examples:
+              #  default:
+              #    "$ref": "#/components/examples/full-repository"
+        #'307':
+        #  "$ref": "#/components/responses/temporary_redirect"
+        #'403':
+        #  "$ref": "#/components/responses/forbidden"
+        #'422':
+        #  "$ref": "#/components/responses/validation_failed"
+        #'404':
+        #s  "$ref": "#/components/responses/not_found"
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: repos
+        subcategory: repos
+
+  "/orgs/{org}/repos":
+    post:
+      summary: Create an organization repository
+      description: |-
+        Creates a new repository in the specified organization. The authenticated user must be a member of the organization.
+
+        OAuth app tokens and personal access tokens (classic) need the `public_repo` or `repo` scope to create a public repository, and `repo` scope to create a private repository.
+      tags:
+      - repos
+      operationId: repos/create-in-org
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/repos/repos#create-an-organization-repository
+      parameters:
+      - "$ref": "#/components/parameters/org"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: The name of the repository.
+                description:
+                  type: string
+                  description: A short description of the repository.
+                homepage:
+                  type: string
+                  description: A URL with more information about the repository.
+                private:
+                  type: boolean
+                  description: Whether the repository is private.
+                  default: false
+                visibility:
+                  type: string
+                  description: The visibility of the repository.
+                  enum:
+                  - public
+                  - private
+                has_issues:
+                  type: boolean
+                  description: Either `true` to enable issues for this repository
+                    or `false` to disable them.
+                  default: true
+                has_projects:
+                  type: boolean
+                  description: Either `true` to enable projects for this repository
+                    or `false` to disable them. **Note:** If you're creating a repository
+                    in an organization that has disabled repository projects, the
+                    default is `false`, and if you pass `true`, the API returns an
+                    error.
+                  default: true
+                has_wiki:
+                  type: boolean
+                  description: Either `true` to enable the wiki for this repository
+                    or `false` to disable it.
+                  default: true
+                has_downloads:
+                  description: Whether downloads are enabled.
+                  default: true
+                  type: boolean
+                  example: true
+                is_template:
+                  type: boolean
+                  description: Either `true` to make this repo available as a template
+                    repository or `false` to prevent it.
+                  default: false
+                team_id:
+                  type: integer
+                  description: The id of the team that will be granted access to this
+                    repository. This is only valid when creating a repository in an
+                    organization.
+                auto_init:
+                  type: boolean
+                  description: Pass `true` to create an initial commit with empty
+                    README.
+                  default: false
+                gitignore_template:
+                  type: string
+                  description: Desired language or platform [.gitignore template](https://github.com/github/gitignore)
+                    to apply. Use the name of the template without the extension.
+                    For example, "Haskell".
+                license_template:
+                  type: string
+                  description: Choose an [open source license template](https://choosealicense.com/)
+                    that best suits your needs, and then use the [license keyword](https://docs.github.com/articles/licensing-a-repository/#searching-github-by-license-type)
+                    as the `license_template` string. For example, "mit" or "mpl-2.0".
+                allow_squash_merge:
+                  type: boolean
+                  description: Either `true` to allow squash-merging pull requests,
+                    or `false` to prevent squash-merging.
+                  default: true
+                allow_merge_commit:
+                  type: boolean
+                  description: Either `true` to allow merging pull requests with a
+                    merge commit, or `false` to prevent merging pull requests with
+                    merge commits.
+                  default: true
+                allow_rebase_merge:
+                  type: boolean
+                  description: Either `true` to allow rebase-merging pull requests,
+                    or `false` to prevent rebase-merging.
+                  default: true
+                allow_auto_merge:
+                  type: boolean
+                  description: Either `true` to allow auto-merge on pull requests,
+                    or `false` to disallow auto-merge.
+                  default: false
+                delete_branch_on_merge:
+                  type: boolean
+                  description: Either `true` to allow automatically deleting head
+                    branches when pull requests are merged, or `false` to prevent
+                    automatic deletion. **The authenticated user must be an organization
+                    owner to set this property to `true`.**
+                  default: false
+                use_squash_pr_title_as_default:
+                  type: boolean
+                  description: Either `true` to allow squash-merge commits to use
+                    pull request title, or `false` to use commit message. **This property
+                    has been deprecated. Please use `squash_merge_commit_title` instead.
+                  default: false
+                  deprecated: true
+                squash_merge_commit_title:
+                  type: string
+                  enum:
+                  - PR_TITLE
+                  - COMMIT_OR_PR_TITLE
+                  description: |-
+                    Required when using `squash_merge_commit_message`.
+
+                    The default value for a squash merge commit title:
+
+                    - `PR_TITLE` - default to the pull request's title.
+                    - `COMMIT_OR_PR_TITLE` - default to the commit's title (if only one commit) or the pull request's title (when more than one commit).
+                squash_merge_commit_message:
+                  type: string
+                  enum:
+                  - PR_BODY
+                  - COMMIT_MESSAGES
+                  - BLANK
+                  description: |-
+                    The default value for a squash merge commit message:
+
+                    - `PR_BODY` - default to the pull request's body.
+                    - `COMMIT_MESSAGES` - default to the branch's commit messages.
+                    - `BLANK` - default to a blank commit message.
+                merge_commit_title:
+                  type: string
+                  enum:
+                  - PR_TITLE
+                  - MERGE_MESSAGE
+                  description: |-
+                    Required when using `merge_commit_message`.
+
+                    The default value for a merge commit title.
+
+                    - `PR_TITLE` - default to the pull request's title.
+                    - `MERGE_MESSAGE` - default to the classic title for a merge message (e.g., Merge pull request #123 from branch-name).
+                merge_commit_message:
+                  type: string
+                  enum:
+                  - PR_BODY
+                  - PR_TITLE
+                  - BLANK
+                  description: |-
+                    The default value for a merge commit message.
+
+                    - `PR_TITLE` - default to the pull request's title.
+                    - `PR_BODY` - default to the pull request's body.
+                    - `BLANK` - default to a blank commit message.
+                # custom_properties:
+                #   type: object
+                #   description: The custom properties for the new repository. The keys
+                #     are the custom property names, and the values are the corresponding
+                #     custom property values.
+                #   additionalProperties: true
+              required:
+              - name
+            examples:
+              default:
+                value:
+                  name: Hello-World
+                  description: This is your first repository
+                  homepage: https://github.com
+                  private: false
+                  has_issues: true
+                  has_projects: true
+                  has_wiki: true
+      responses:
+        '201':
+          description: Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/full-repository"
+          headers:
+            Location:
+              example: https://api.github.com/repos/octocat/Hello-World
+              schema:
+                type: string
+        '403':
+          "$ref": "#/components/responses/forbidden"
+        '422':
+          "$ref": "#/components/responses/validation_failed"
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: repos
+        subcategory: repos
+components:
+  securitySchemes:
+    accessToken:
+      type: http
+      scheme: bearer
+  parameters:
+    org:
+      name: org
+      description: The organization name. The name is not case sensitive.
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    full-repository:
+      title: Full Repository
+      description: Full Repository
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1296269
+        node_id:
+          type: string
+          example: MDEwOlJlcG9zaXRvcnkxMjk2MjY5
+        name:
+          type: string
+          example: Hello-World
+        full_name:
+          type: string
+          example: octocat/Hello-World
+        owner:
+          type: object
+        private:
+          type: boolean
+        html_url:
+          type: string
+          format: uri
+          example: https://github.com/octocat/Hello-World
+        description:
+          type: string
+          example: This your first repo!
+          nullable: true
+        fork:
+          type: boolean
+        url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World
+        archive_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/{archive_format}{/ref}
+        assignees_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/assignees{/user}
+        blobs_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/git/blobs{/sha}
+        branches_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/branches{/branch}
+        collaborators_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/collaborators{/collaborator}
+        comments_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/comments{/number}
+        commits_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/commits{/sha}
+        compare_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/compare/{base}...{head}
+        contents_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/contents/{+path}
+        contributors_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/contributors
+        deployments_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/deployments
+        downloads_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/downloads
+        events_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/events
+        forks_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/forks
+        git_commits_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/git/commits{/sha}
+        git_refs_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/git/refs{/sha}
+        git_tags_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/git/tags{/sha}
+        git_url:
+          type: string
+          example: git:github.com/octocat/Hello-World.git
+        issue_comment_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/issues/comments{/number}
+        issue_events_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/issues/events{/number}
+        issues_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/issues{/number}
+        keys_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/keys{/key_id}
+        labels_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/labels{/name}
+        languages_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/languages
+        merges_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/merges
+        milestones_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/milestones{/number}
+        notifications_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/notifications{?since,all,participating}
+        pulls_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/pulls{/number}
+        releases_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/releases{/id}
+        ssh_url:
+          type: string
+          example: git@github.com:octocat/Hello-World.git
+        stargazers_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/stargazers
+        statuses_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/statuses/{sha}
+        subscribers_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/subscribers
+        subscription_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/subscription
+        tags_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/tags
+        teams_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/teams
+        trees_url:
+          type: string
+          example: http://api.github.com/repos/octocat/Hello-World/git/trees{/sha}
+        clone_url:
+          type: string
+          example: https://github.com/octocat/Hello-World.git
+        mirror_url:
+          type: string
+          format: uri
+          example: git:git.example.com/octocat/Hello-World
+          nullable: true
+        hooks_url:
+          type: string
+          format: uri
+          example: http://api.github.com/repos/octocat/Hello-World/hooks
+        svn_url:
+          type: string
+          format: uri
+          example: https://svn.github.com/octocat/Hello-World
+        homepage:
+          type: string
+          format: uri
+          example: https://github.com
+          nullable: true
+        language:
+          type: string
+          nullable: true
+        forks_count:
+          type: integer
+          example: 9
+        stargazers_count:
+          type: integer
+          example: 80
+        watchers_count:
+          type: integer
+          example: 80
+        size:
+          description: The size of the repository, in kilobytes. Size is calculated
+            hourly. When a repository is initially created, the size is 0.
+          type: integer
+          example: 108
+        default_branch:
+          type: string
+          example: master
+        open_issues_count:
+          type: integer
+          example: 0
+        is_template:
+          type: boolean
+          example: true
+        topics:
+          type: array
+          items:
+            type: string
+          example:
+          - octocat
+          - atom
+          - electron
+          - API
+        has_issues:
+          type: boolean
+          example: true
+        has_projects:
+          type: boolean
+          example: true
+        has_wiki:
+          type: boolean
+          example: true
+        has_pages:
+          type: boolean
+        has_downloads:
+          type: boolean
+          example: true
+        has_discussions:
+          type: boolean
+          example: true
+        archived:
+          type: boolean
+        disabled:
+          type: boolean
+          description: Returns whether or not this repository disabled.
+        visibility:
+          description: 'The repository visibility: public, private, or internal.'
+          type: string
+          example: public
+        pushed_at:
+          type: string
+          format: date-time
+          example: '2011-01-26T19:06:43Z'
+        created_at:
+          type: string
+          format: date-time
+          example: '2011-01-26T19:01:12Z'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2011-01-26T19:14:43Z'
+        permissions:
+          type: object
+          properties:
+            admin:
+              type: boolean
+            maintain:
+              type: boolean
+            push:
+              type: boolean
+            triage:
+              type: boolean
+            pull:
+              type: boolean
+          required:
+          - admin
+          - pull
+          - push
+        allow_rebase_merge:
+          type: boolean
+          example: true
+        template_repository:
+          type: object
+        temp_clone_token:
+          type: string
+          nullable: true
+        allow_squash_merge:
+          type: boolean
+          example: true
+        allow_auto_merge:
+          type: boolean
+          example: false
+        delete_branch_on_merge:
+          type: boolean
+          example: false
+        allow_merge_commit:
+          type: boolean
+          example: true
+        allow_update_branch:
+          type: boolean
+          example: true
+        use_squash_pr_title_as_default:
+          type: boolean
+          example: false
+        squash_merge_commit_title:
+          type: string
+          example: PR_TITLE
+          enum:
+          - PR_TITLE
+          - COMMIT_OR_PR_TITLE
+          description: |-
+            The default value for a squash merge commit title:
+
+            - `PR_TITLE` - default to the pull request's title.
+            - `COMMIT_OR_PR_TITLE` - default to the commit's title (if only one commit) or the pull request's title (when more than one commit).
+        squash_merge_commit_message:
+          type: string
+          example: PR_BODY
+          enum:
+          - PR_BODY
+          - COMMIT_MESSAGES
+          - BLANK
+          description: |-
+            The default value for a squash merge commit message:
+
+            - `PR_BODY` - default to the pull request's body.
+            - `COMMIT_MESSAGES` - default to the branch's commit messages.
+            - `BLANK` - default to a blank commit message.
+        merge_commit_title:
+          type: string
+          example: PR_TITLE
+          enum:
+          - PR_TITLE
+          - MERGE_MESSAGE
+          description: |-
+            The default value for a merge commit title.
+
+              - `PR_TITLE` - default to the pull request's title.
+              - `MERGE_MESSAGE` - default to the classic title for a merge message (e.g., Merge pull request #123 from branch-name).
+        merge_commit_message:
+          type: string
+          example: PR_BODY
+          enum:
+          - PR_BODY
+          - PR_TITLE
+          - BLANK
+          description: |-
+            The default value for a merge commit message.
+
+            - `PR_TITLE` - default to the pull request's title.
+            - `PR_BODY` - default to the pull request's body.
+            - `BLANK` - default to a blank commit message.
+        allow_forking:
+          type: boolean
+          example: true
+        web_commit_signoff_required:
+          type: boolean
+          example: false
+        subscribers_count:
+          type: integer
+          example: 42
+        network_count:
+          type: integer
+          example: 0
+        license:
+          type: object
+        organization:
+          type: object
+        parent:
+          type: object
+        source:
+          type: object
+        forks:
+          type: integer
+        master_branch:
+          type: string
+        open_issues:
+          type: integer
+        watchers:
+          type: integer
+        anonymous_access_enabled:
+          description: Whether anonymous git access is allowed.
+          default: true
+          type: boolean
+        custom_properties:
+          type: object
+          description: The custom properties that were defined for the repository.
+            The keys are the custom property names, and the values are the corresponding
+            custom property values.
+          additionalProperties: true
+      required:
+      - archive_url
+      - assignees_url
+      - blobs_url
+      - branches_url
+      - collaborators_url
+      - comments_url
+      - commits_url
+      - compare_url
+      - contents_url
+      - contributors_url
+      - deployments_url
+      - description
+      - downloads_url
+      - events_url
+      - fork
+      - forks_url
+      - full_name
+      - git_commits_url
+      - git_refs_url
+      - git_tags_url
+      - hooks_url
+      - html_url
+      - id
+      - node_id
+      - issue_comment_url
+      - issue_events_url
+      - issues_url
+      - keys_url
+      - labels_url
+      - languages_url
+      - merges_url
+      - milestones_url
+      - name
+      - notifications_url
+      - owner
+      - private
+      - pulls_url
+      - releases_url
+      - stargazers_url
+      - statuses_url
+      - subscribers_url
+      - subscription_url
+      - tags_url
+      - teams_url
+      - trees_url
+      - url
+      - clone_url
+      - default_branch
+      - forks
+      - forks_count
+      - git_url
+      - has_issues
+      - has_projects
+      - has_wiki
+      - has_pages
+      - has_discussions
+      - homepage
+      - language
+      - archived
+      - disabled
+      - mirror_url
+      - open_issues
+      - open_issues_count
+      - license
+      - pushed_at
+      - size
+      - ssh_url
+      - stargazers_count
+      - svn_url
+      - watchers
+      - watchers_count
+      - created_at
+      - updated_at
+      - network_count
+      - subscribers_count
+  responses:
+    forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            type: object
+    validation_failed:
+      description: Validation failed, or the endpoint has been spammed.
+      content:
+        application/json:
+          schema:
+            type: object
