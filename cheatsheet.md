@@ -6,7 +6,7 @@
   - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
   - [Simple Case: External APIs Compatible with K8s Resource Management](#simple-case-external-apis-compatible-with-k8s-resource-management)
-  - [Extended Example: External API that requires a webservice to handle external API calls](#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls)
+  - [Extended Example: External API that requires a plugin to handle external API calls](#extended-example-external-api-that-requires-a-plugin-to-handle-external-api-calls)
   - [Best Practices](#best-practices)
   - [Troubleshooting](#troubleshooting)
 
@@ -16,6 +16,55 @@
 - Kubernetes cluster with Krateo installed
 - `kubectl` configured to access your cluster
 - OpenAPI Specification (OAS) 3.0+ for your target API
+
+
+## What to do when the OpenAPI Specification (OAS) is missing/incomplete or not at version 3.0+?
+
+### First Scenario: the service does not provide an OpenAPI Specification (OAS) but it exposes a REST API
+
+In this case, the way to go is to locate the endpoints you want to use in your generated controller from the API documentation of your service and manually create the OpenAPI Specification (OAS) 3.0+ for those endpoints. You can use tools like [Swagger Editor](https://editor.swagger.io/) to create and validate your OAS. This process seems tedious, but it is necessary for oasgen-provider to have a well-defined OAS to generate the CRDs and controllers correctly, and it is also useful for you to have a clear understanding of the API objects you want to manage. 
+
+### Second Scenario: the service does not expose a REST API but you have another way to interact with it (e.g., gRPC, GraphQL, etc.)
+In this case, you can create a web service that acts as a bridge between the Krateo operator and the service you want to manage. The web service should implement the necessary logic to interact with the service and expose a REST API that is compatible with Kubernetes resource management. You can then use the OAS for the web service to generate the CRDs and controllers using oasgen-provider.
+
+
+### About OpenAPI Specification (OAS) 3.0+
+The OAS should include the following information:
+- **Servers**: The `servers` field (at root level of the OAS) should define the base URL for the API endpoints you want to use. This is important for the provider to know where to send requests. Note that you can override the base URL in the RestDefinition if you want to use a different URL for the API endpoints; refer [here](#step-7-update-the-restdefinition-to-use-the-web-service) for more information.
+- **API endpoints (paths)**: It should contain the paths for the API endpoints you want to use, including the HTTP methods (GET, POST, PUT, DELETE) and any parameters required by the endpoints. Note that it is important to specify whether the parameters are required or optional, as this will affect the generated CRDs and controllers. To learn more about how these paths are used by `rest-dynamic-controller`, refer to the [RestDefinition specifications](README.md#about-restdefinition-actions). Note that any endpoint should have predictable behavior, which means that the API should be idempotent and if a POST, PUT, PATCH, or DELETE request is made to an endpoint, this should be reflected in the response of the GET request to the same endpoint. This is important for the provider to know how to handle the requests and responses correctly so that the `rest-dynamic-controller` can manage the resources properly.
+- **Request and response schemas**: It should define the request and response schemas for each endpoint, including the data types and any validation rules.
+- **Authentication**: If the API requires authentication, you should define the security schemes in the `components` section of the OAS. This is important for the provider to know how to authenticate requests to the API. If the API uses OAuth2 or other authentication methods, you should define them in the OAS. You can see supported authentication methods [here](README.md#authentication).
+
+Also note that any modification to the request or response schemas made by the API provider will require you to update the OAS accordingly, as the provider will generate the CRDs and controllers based on the OAS. Also consider removing the RestDefinition and recreating it with the updated OAS to ensure that the provider generates the correct CRDs and controllers (this is not necessary if you do not make changes to the request body or path parameters, as `oasgen-provider` won't need to update the generated CRD).
+
+### Supported authentication methods
+- **Bearer Token**: Use `securitySchemes` in the OAS to define a bearer token scheme. This is common for APIs that require a token for authentication.
+```diff
+openapi: 3.0.3
+servers:
+  - url: https://api.github.com
+paths:
+  ...
+components:
++ securitySchemes:
++   oauth:
++     type: http
++     scheme: bearer
+```
+
+- **Basic Authentication**: If the API uses basic authentication, you can define it in the OAS as follows:
+```diff
+openapi: 3.0.3
+servers:
+  - url: https://api.github.com
+paths:
+  ...
+components:
++ securitySchemes:
++   basic:
++     type: http
++     scheme: basic
+```
 
 ## Simple Case: External APIs Compatible with K8s Resource Management
 
@@ -30,13 +79,18 @@ This guide provides a step-by-step approach to generating a provider for managin
    - Recommended for large APIs to reduce complexity
    - Create separate files for different resource types (e.g., `repositories.yaml`, `teamrepo.yaml`)
 
-3. **Add authentication** information if missing from original OAS:
+3. **Add authentication** information if missing from original OAS: (notes that components is a "root" element in OAS 3+)
 ```diff
-   components:
-+    securitySchemes
-+       oauth:
-+         type: http
-+        scheme: bearer
+openapi: 3.0.3
+servers:
+  - url: https://api.github.com
+paths:
+  ...
+components:
++ securitySchemes:
++   oauth:
++     type: http
++   scheme: bearer
 ```
 
 ### Step 2: Prepare Kubernetes Environment
@@ -52,6 +106,8 @@ This guide provides a step-by-step approach to generating a provider for managin
    ```
 
 ### Step 3: Create RestDefinition for GitHub Repositories
+
+In order to create a RestDefinition for GitHub repositories, you need to define the resource group, resource kind, and the verbs that the controller will support. The `oasPath` should point to the ConfigMap containing your OAS. You can learn more about the `RestDefinition` resource [here](README.md#restdefinition-specifications).
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -266,7 +322,7 @@ Events:
   Normal   DeletedExternalResource      repo/gh-repo-1        Successfully requested deletion of external resource
 ```
 
-## Extended Example: External API that requires a webservice to handle external API calls
+## Extended Example: External API that requires a plugin to handle external API calls
 
 This example demonstrates how to create a Krateo provider for managing GitHub repositories using an external web service to handle API calls. This approach is useful when the API isn't directly compatible with Kubernetes resource management or requires additional processing.
 
@@ -287,11 +343,16 @@ This example assumes you have a basic understanding of Kubernetes, OpenAPI speci
 
 3. **Add authentication** information if missing from the original OAS:
 ```diff
-    components:
-+     securitySchemes:
-+       oauth:
-+         type: http
-+         scheme: bearer
+openapi: 3.0.3
+servers:
+  - url: https://api.github.com
+paths:
+  ...
+components:
++ securitySchemes:
++   oauth:
++     type: http
++   scheme: bearer
 ```
 
 ### Step 2: Prepare Kubernetes Environment
@@ -306,7 +367,9 @@ This example assumes you have a basic understanding of Kubernetes, OpenAPI speci
    kubectl create configmap teamrepo --from-file=samples/cheatsheet/assets/teamrepo_no_ws.yaml -n gh-system
    ```
 
-### Step 3: Create RestDefinition for GitHub Repositories
+### Step 3: Create RestDefinition for GitHub TeamRepos
+
+In order to create a RestDefinition for GitHub teamrepos, you need to define the resource group, resource kind, and the verbs that the controller will support. The `oasPath` should point to the ConfigMap containing your OAS. You can learn more about the `RestDefinition` resource [here](README.md#restdefinition-specifications).
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -509,7 +572,7 @@ EOF
 
 ### Step 7: Update the RestDefinition to Use the Web Service
 
-Now we need to tell the `rest-dynamic-controller` to use the web service to handle the `get` operation for teamrepos. We can do this by adding the webservice URL to the OpenAPI specification of the `teamrepo` RestDefinition. We can accomplish this by adding the `servers` field to the endpoint in the OpenAPI specification (https://swagger.io/docs/specification/v3_0/api-host-and-base-path/#overriding-servers). In this case, the URL will be `http://github-provider-plugin-krateo.default.svc.cluster.local:8080` because the web service is running in the `default` namespace with the service name `github-provider-plugin-krateo`.
+Now we need to tell the `rest-dynamic-controller` to use the web service to handle the `get` operation for teamrepos. We can do this by adding the plugin URL to the OpenAPI specification of the `teamrepo` RestDefinition. We can accomplish this by adding the `servers` field to the endpoint in the OpenAPI specification (https://swagger.io/docs/specification/v3_0/api-host-and-base-path/#overriding-servers). In this case, the URL will be `http://github-provider-plugin-krateo.default.svc.cluster.local:8080` because the web service is running in the `default` namespace with the service name `github-provider-plugin-krateo`.
 
 Let's create a new configmap with the updated OpenAPI specification:
 
@@ -669,5 +732,3 @@ To troubleshoot Krateo controllers, add the annotation `krateo.io/connector-verb
 **Examples:**
 - Adding this annotation to a `RestDefinition` will help you understand what happens when the controller tries to create the CRD and controller for the RestDefinition
 - Adding it to a `Repo` or `TeamRepo` CR will help you understand what happens when the controller tries to create, update, or delete the external resource, and will log any HTTP requests and responses made to the external API
-
-

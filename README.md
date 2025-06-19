@@ -12,14 +12,13 @@ The Krateo OASGen Provider is a Kubernetes controller that generates Custom Reso
   - [Requirements](#requirements)
   - [RestDefinition Specifications](#restdefinition-specifications)
     - [CRD Specification](#crd-specification)
-    - [Authentication](#authentication)
     - [API Endpoints Requirements](#api-endpoints-requirements)
     - [About RestDefinition Actions](#about-restdefinition-actions)
   - [How to Install](#how-to-install)
   - [Examples and Troubleshooting](#examples-and-troubleshooting)
+  - [Environment Variables and Flags](#environment-variables-and-flags)
   - [Security Features](#security-features)
   - [Best Practices](#best-practices)
-  - [Troubleshooting](#troubleshooting)
 
 ## Glossary
 
@@ -27,8 +26,7 @@ The Krateo OASGen Provider is a Kubernetes controller that generates Custom Reso
 - **RestDefinition:** A custom resource that defines how API resources are managed in Kubernetes based on OAS specifications.
 - **RDC (Rest Dynamic Controller):** A controller deployed by the provider to manage resources defined by a RestDefinition.
 - **OAS (OpenAPI Specification):** A standard, language-agnostic interface description for REST APIs.
-- **WebService:** A wrapper service that maintains consistent API interfaces when needed.
-- **BasicAuth:** A simple authentication method using username and password credentials.
+- **Plugin:** A wrapper service that maintains consistent API interfaces when needed. 
 
 ## Architecture
 
@@ -58,23 +56,6 @@ The diagram illustrates how the OASGen Provider processes OpenAPI Specifications
 
 To view the CRD configuration, visit [this link](https://doc.crds.dev/github.com/krateoplatformops/oasgen-provider).
 
-### Authentication
-
-The provider supports Basic Authentication out of the box and will generate appropriate CRDs if the OAS specifies authentication methods.
-
-Example BasicAuth CR:
-```yaml
-kind: BasicAuth
-apiVersion: azure.devops.com/v1alpha1
-metadata:
-  name: basicauth-azure
-spec:
-  username: admin
-  passwordRef:
-    name: azdevops-gen
-    namespace: default
-    key: token
-```
 
 ### API Endpoints Requirements
 
@@ -88,9 +69,9 @@ spec:
 Krateo controllers support 4 verbs to provide resource reconciliation:
 
 - **Observe**: This verb observes the resource state in the external system. It fetches the current state of the resource. If the resource does not exist or differs from the desired state, the controller will create or update it accordingly.
-  - `rest-dynamic-controller` supports searching for external resources using two actions:
-    - **findby**: This action finds a resource by its identifiers. The endpoint used for this action must return a list of resources that match the identifiers. This is useful when you want to find a resource based on specific criteria, such as a unique identifier or a combination of fields.
-    - **get**: This action retrieves the current state of a resource. This typically fetches a single resource by its unique identifier.
+  - `rest-dynamic-controller` supports searching for external resources using two actions (it is advised to specify both actions in the RestDefinition if possible, although it is not mandatory):
+  - **findby**: This action finds a resource by its identifiers. The endpoint used for this action must return a list of resources that match the identifiers. This is useful when you want to find a resource based on specific criteria, such as a unique identifier or a combination of fields.
+  - **get**: This action retrieves the current state of a resource. This typically fetches a single resource by its unique identifier.
 - **Create**: This verb creates a new resource in the external system.
   - `rest-dynamic-controller` supports resource creation using the `create` action. The endpoint used for this action must accept a request body containing the resource data in the format defined by the OAS schema. The request body should be strongly typed to match the OAS schema, ensuring data validation before being sent to the external system. The request body is used by `oasgen-provider` to generate the CRD.
 - **Update**: This verb updates an existing resource in the external system.
@@ -112,7 +93,7 @@ helm install krateo-oasgen-provider krateo/oasgen-provider --namespace krateo-sy
 
 ## Examples and Troubleshooting
 
-You can see a more practical guide on `core-provider` usage at [this link](cheatsheet.md).
+You can see a more practical guide on `oasgen-provider` usage at [this link](cheatsheet.md).
 
 ## Environment Variables and Flags
 
