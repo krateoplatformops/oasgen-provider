@@ -184,7 +184,7 @@ title:
 
   If you see `bearerauths` and `repoes`, the CRDs have been created successfully. The second CRD represents the `repo` object. The first one is the `bearerauth` object, which is used to authenticate requests to the GitHub API.
 
-1. Verify controller pod:
+2. Verify controller pod:
    ```bash
    kubectl get deploy -n gh-system
    ```
@@ -196,7 +196,7 @@ You should see a deployment named `gh-repo-controller`, which is responsible for
    kubectl logs deploy/gh-repo-controller -n gh-system
    ```
 
-2. Check RestDefinition status:
+3. Check RestDefinition status:
    ```bash
    kubectl get restdefinition -n gh-system
    kubectl describe restdefinition gh-repo -n gh-system
@@ -287,6 +287,10 @@ spec:
 EOF
 ```
 This will trigger the controller to update the repository in GitHub with the new description.
+
+```bash
+kubectl describe repo.github.kog.krateo.io/gh-repo-1 -n gh-system
+```{{exec}}
 
 You should see an event for the Repo resource indicating that the external resource was updated successfully:
 
@@ -447,7 +451,7 @@ kubectl wait restdefinition gh-teamrepo --for condition=Ready=True --namespace g
 
 At this point, you have a running operator capable of handling GitHub teamrepos. You can create, update, and delete teamrepos using the custom resource.
 
-### Step 5: Create the Custom Resources
+### Step 5: Create the Custom Resource
 
 Create a custom resource for the `bearerauth` object. (You can skip the secret and bearerAuth creation if you've completed the `repo` tutorial in the previous section.) This is used to authenticate requests to the GitHub API. The `bearerauth` object contains a reference to the token used for authentication, which is stored in a Kubernetes secret.
 
@@ -626,13 +630,17 @@ spec:
 EOF
 ```
 
-We expect the controller to update the RestDefinition and start using the web service to handle the `get` operation for teamrepos. Check the RestDefinition status by running:
+We expect the controller to update the RestDefinition and start using the web service to handle the `get` operation for teamrepos.
+
+At this point, the `rest-dynamic-controller` should be able to handle the `get` operation for teamrepos using the web service. You can check the status of the TeamRepo resource by running:
 
 ```bash
-kubectl describe restdefinition gh-teamrepo -n gh-system
+kubectl describe teamrepo.github.kog.krateo.io/test-teamrepo -n gh-system
 ```
 
-You should see that the message field is now empty, which means the RestDefinition is ready and correctly observed by the controller.
+You should see that the message field is now empty, which means the RestDefinition is ready and correctly observed by the controller. (Notes that you should wait for the reconciliation loop to run, which may take a few minutes.)
+
+### Step 8: Update the Custom Resource
 
 To check if the remote resource changes along with the custom resource, you can run the following command to change the teamrepo's permission:
 
@@ -669,7 +677,7 @@ Events:
   Normal   UpdatedExternalResource        77s (x2 over 80s)             Successfully requested update of external resource
 ```
 
-### Step 8: Delete the Custom Resource
+### Step 9: Delete the Custom Resource
 
 To delete the teamrepo, you can delete the `TeamRepo` custom resource:
 
