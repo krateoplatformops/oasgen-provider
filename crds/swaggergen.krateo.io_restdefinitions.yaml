@@ -24,7 +24,6 @@ spec:
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
-      priority: 10
       type: date
     - jsonPath: .status.resource.apiVersion
       name: API VERSION
@@ -65,7 +64,7 @@ spec:
             properties:
               oasPath:
                 description: |-
-                  Path to the OpenAPI specification. Supports the following formats: (note that the configmap should be in the same namespace as the RestDefinition)
+                  Path to the OpenAPI specification. This value can change over time, for example if the OAS file is updated but be sure to not change the requestbody of the `create` verb.
                   - configmap://<namespace>/<name>/<key>
                   - http(s)://<url>
                 pattern: ^(configmap:\/\/([a-z0-9-]+)\/([a-z0-9-]+)\/([a-zA-Z0-9.-_]+)|https?:\/\/\S+)$
@@ -79,9 +78,17 @@ spec:
                     items:
                       type: string
                     type: array
+                    x-kubernetes-validations:
+                    - message: Identifiers are immutable, you cannot change them once
+                        the CRD has been generated
+                      rule: self == oldSelf
                   kind:
                     description: 'Name: the name of the resource to manage'
                     type: string
+                    x-kubernetes-validations:
+                    - message: Kind is immutable, you cannot change that once the
+                        CRD has been generated
+                      rule: self == oldSelf
                   verbsDescription:
                     description: 'VerbsDescription: the list of verbs to use on this
                       resource'
@@ -119,12 +126,18 @@ spec:
                     type: array
                 required:
                 - kind
+                - verbsDescription
                 type: object
               resourceGroup:
                 description: 'Group: the group of the resource to manage'
                 type: string
+                x-kubernetes-validations:
+                - message: ResourceGroup is immutable, you cannot change that once
+                    the CRD has been generated
+                  rule: self == oldSelf
             required:
             - oasPath
+            - resource
             - resourceGroup
             type: object
           status:
@@ -182,7 +195,7 @@ spec:
                 description: 'Digest: the digest of the managed resources'
                 type: string
               oasPath:
-                description: 'OASPath: the path to the OAS Specification file'
+                description: 'OASPath: the path to the OAS Specification file.'
                 type: string
               resource:
                 description: 'Resource: the resource to manage'
@@ -194,6 +207,8 @@ spec:
                     description: 'Kind: the kind of the resource'
                     type: string
                 type: object
+            required:
+            - oasPath
             type: object
         type: object
     served: true

@@ -8,59 +8,46 @@ import (
 type VerbsDescription struct {
 	// Name of the action to perform when this api is called [create, update, get, delete, findby]
 	// +kubebuilder:validation:Enum=create;update;get;delete;findby
-	// +immutable
 	// +required
 	Action string `json:"action"`
 	// Method: the http method to use [GET, POST, PUT, DELETE, PATCH]
 	// +kubebuilder:validation:Enum=GET;POST;PUT;DELETE;PATCH
-	// +immutable
 	// +required
 	Method string `json:"method"`
 	// Path: the path to the api - has to be the same path as the one in the swagger file you are referencing
-	// +immutable
 	// +required
 	Path string `json:"path"`
 }
 
-type GVK struct {
-	// Group: the group of the resource
-	// +optional
-	Group string `json:"group,omitempty"`
-
-	// Version: the version of the resource
-	// +optional
-	Version string `json:"version,omitempty"`
-
-	// Kind: the kind of the resource
-	// +optional
-	Kind string `json:"kind,omitempty"`
-}
-
 type Resource struct {
 	// Name: the name of the resource to manage
-	// +immutable
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Kind is immutable, you cannot change that once the CRD has been generated"
+	// +required
 	Kind string `json:"kind"`
 	// VerbsDescription: the list of verbs to use on this resource
-	// +optional
+	// +required
 	VerbsDescription []VerbsDescription `json:"verbsDescription"`
 	// Identifiers: the list of fields to use as identifiers - used to populate the status of the resource
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Identifiers are immutable, you cannot change them once the CRD has been generated"
 	// +optional
 	Identifiers []string `json:"identifiers,omitempty"`
 }
 
 // RestDefinitionSpec is the specification of a RestDefinition.
 type RestDefinitionSpec struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^(configmap:\/\/([a-z0-9-]+)\/([a-z0-9-]+)\/([a-zA-Z0-9.-_]+)|https?:\/\/\S+)$`
-	// Path to the OpenAPI specification. Supports the following formats: (note that the configmap should be in the same namespace as the RestDefinition)
+	// Path to the OpenAPI specification. This value can change over time, for example if the OAS file is updated but be sure to not change the requestbody of the `create` verb.
+	// +required
 	// - configmap://<namespace>/<name>/<key>
 	// - http(s)://<url>
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^(configmap:\/\/([a-z0-9-]+)\/([a-z0-9-]+)\/([a-zA-Z0-9.-_]+)|https?:\/\/\S+)$`
 	OASPath string `json:"oasPath"`
 	// Group: the group of the resource to manage
-	// +immutable
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="ResourceGroup is immutable, you cannot change that once the CRD has been generated"
+	// +required
 	ResourceGroup string `json:"resourceGroup"`
 	// The resource to manage
-	// +optional
+	// +required
 	Resource Resource `json:"resource"`
 }
 
@@ -78,8 +65,7 @@ type KindApiVersion struct {
 type RestDefinitionStatus struct {
 	rtv1.ConditionedStatus `json:",inline"`
 
-	// OASPath: the path to the OAS Specification file
-	// +optional
+	// OASPath: the path to the OAS Specification file.
 	OASPath string `json:"oasPath"`
 
 	// Resource: the resource to manage
@@ -99,7 +85,7 @@ type RestDefinitionStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,categories={krateo,restdefinition,core}
 // +kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp",priority=10
+// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="API VERSION",type="string",JSONPath=".status.resource.apiVersion",priority=10
 // +kubebuilder:printcolumn:name="KIND",type="string",JSONPath=".status.resource.kind",priority=10
 // +kubebuilder:printcolumn:name="OAS PATH",type="string",JSONPath=".status.oasPath",priority=10
