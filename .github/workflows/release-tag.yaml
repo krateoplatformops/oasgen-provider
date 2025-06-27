@@ -111,12 +111,6 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ env.GHCR_REPO }}:${{ steps.meta.outputs.version }}
 
-      - uses: googleapis/release-please-action@v4
-        with:
-          # this is a built-in strategy in release-please, see "Action Inputs"
-          # for more options
-          release-type: simple
-
   test:
     runs-on: ubuntu-latest
     steps:
@@ -132,3 +126,11 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+
+  update-crd-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update CRD doc
+        run: |
+          curl -s https://doc.crds.dev/github.com/${{ github.repository }}@${{  github.ref_name }}
