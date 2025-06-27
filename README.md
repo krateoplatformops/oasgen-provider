@@ -74,6 +74,7 @@ Krateo controllers support 4 verbs to provide resource reconciliation:
   - **get**: This action retrieves the current state of a resource. This typically fetches a single resource by its unique identifier.
 - **Create**: This verb creates a new resource in the external system.
   - `rest-dynamic-controller` supports resource creation using the `create` action. The endpoint used for this action must accept a request body containing the resource data in the format defined by the OAS schema. The request body should be strongly typed to match the OAS schema, ensuring data validation before being sent to the external system. The request body is used by `oasgen-provider` to generate the CRD.
+  - this action could return a `202 Accepted` response, indicating that the resource creation is in progress. In this case, the `rest-dynamic-controller` will put the Custom Resource (CR) into a `Pending` state, and the controller will continue to monitor the resource until it is fully created (the `get` or `findby` does not return `404`). Once the resource is created, the controller will update the CR status to `Ready`.
 - **Update**: This verb updates an existing resource in the external system.
   - `rest-dynamic-controller` supports resource updates using the `update` action. The endpoint used for this action must use the same request body as the `create` action (it can have fewer fields, but not more, because the CRD is generated from the `create` request body).
 - **Delete**: This verb deletes a resource from the external system.
