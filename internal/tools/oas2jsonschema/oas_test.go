@@ -3,6 +3,7 @@ package oas2jsonschema
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -150,4 +151,201 @@ func TestGenerateByteSchemas(t *testing.T) {
 		t.Log("CRD generated successfully")
 	}
 
+}
+
+func TestGenerateByteSchemasAdditionalStatusFields(t *testing.T) {
+	t.Run("AdditionalStatusFields are correctly included", func(t *testing.T) {
+		doc, err := libopenapi.NewDocument([]byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths: {}
+components:
+  securitySchemes: {}
+`))
+		if err != nil {
+			t.Fatalf("failed to create document: %v", err)
+		}
+		model, _ := doc.BuildV3Model()
+
+		resource := definitionv1alpha1.Resource{
+			Kind:                   "TestResource",
+			AdditionalStatusFields: []string{"field1", "field2", "anotherField"},
+		}
+		identifiers := []string{"id"}
+
+		gen, _, fatalError := GenerateByteSchemas(model, resource, identifiers)
+		if fatalError != nil {
+			t.Fatalf("fatal error: %v", fatalError)
+		}
+
+		statusSchemaBytes, err := gen.OASStatusJsonSchemaGetter().Get()
+		if err != nil {
+			t.Fatalf("failed to get status schema bytes: %v", err)
+		}
+		if statusSchemaBytes == nil {
+			t.Fatal("status schema bytes are nil")
+		}
+
+		var statusSchema map[string]interface{}
+		err = json.Unmarshal(statusSchemaBytes, &statusSchema)
+		if err != nil {
+			t.Fatalf("failed to unmarshal status schema: %v", err)
+		}
+
+		properties, ok := statusSchema["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatal("status schema does not contain properties map")
+		}
+
+		expectedFields := append(resource.AdditionalStatusFields, identifiers...)
+		for _, field := range expectedFields {
+			prop, ok := properties[field].(map[string]interface{})
+			if !ok {
+				t.Errorf("expected field '%s' not found in status properties", field)
+				continue
+			}
+			fieldType, ok := prop["type"].(string)
+			if !ok || fieldType != "string" {
+				t.Errorf("expected field '%s' to be of type 'string', got '%v'", field, prop["type"])
+			}
+		}
+	})
+
+	t.Run("Empty AdditionalStatusFields array", func(t *testing.T) {
+		doc, err := libopenapi.NewDocument([]byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths: {}
+components:
+  securitySchemes: {}
+ `))
+
+		if err != nil {
+			t.Fatalf("failed to create document: %v", err)
+		}
+		model, _ := doc.BuildV3Model()
+
+		resource := definitionv1alpha1.Resource{
+			Kind:                   "TestResource",
+			AdditionalStatusFields: []string{},
+		}
+		identifiers := []string{"id", "name"}
+
+		gen, _, fatalError := GenerateByteSchemas(model, resource, identifiers)
+		if fatalError != nil {
+			t.Fatalf("fatal error: %v", fatalError)
+		}
+
+		statusSchemaBytes, err := gen.OASStatusJsonSchemaGetter().Get()
+		if err != nil {
+			t.Fatalf("failed to get status schema bytes: %v", err)
+		}
+		if statusSchemaBytes == nil {
+			t.Fatal("status schema bytes are nil")
+		}
+
+		var statusSchema map[string]interface{}
+		err = json.Unmarshal(statusSchemaBytes, &statusSchema)
+		if err != nil {
+			t.Fatalf("failed to unmarshal status schema: %v", err)
+		}
+
+		properties, ok := statusSchema["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatal("status schema does not contain properties map")
+		}
+
+		if len(properties) != len(identifiers) {
+			// since AdditionalStatusFields is empty, we expect only identifiers
+			t.Errorf("expected %d properties, got %d", len(identifiers), len(properties))
+		}
+
+		for _, field := range identifiers {
+			prop, ok := properties[field].(map[string]interface{})
+			if !ok {
+				t.Errorf("expected identifier '%s' not found in status properties", field)
+				continue
+			}
+			fieldType, ok := prop["type"].(string)
+			if !ok || fieldType != "string" {
+				t.Errorf("expected identifier '%s' to be of type 'string', got '%v'", field, prop["type"])
+			}
+		}
+	})
+
+	t.Run("AdditionalStatusFields with duplicate names", func(t *testing.T) {
+		doc, err := libopenapi.NewDocument([]byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths: {}
+components:
+  securitySchemes: {}
+ `))
+
+		if err != nil {
+			t.Fatalf("failed to create document: %v", err)
+		}
+		model, _ := doc.BuildV3Model()
+
+		resource := definitionv1alpha1.Resource{
+			Kind:                   "TestResource",
+			AdditionalStatusFields: []string{"status", "category", "status", "anotherField"},
+		}
+		identifiers := []string{"id"}
+
+		gen, _, fatalError := GenerateByteSchemas(model, resource, identifiers)
+		if fatalError != nil {
+			t.Fatalf("fatal error: %v", fatalError)
+		}
+
+		statusSchemaBytes, err := gen.OASStatusJsonSchemaGetter().Get()
+		if err != nil {
+			t.Fatalf("failed to get status schema bytes: %v", err)
+		}
+		if statusSchemaBytes == nil {
+			t.Fatal("status schema bytes are nil")
+		}
+
+		var statusSchema map[string]interface{}
+		err = json.Unmarshal(statusSchemaBytes, &statusSchema)
+		if err != nil {
+			t.Fatalf("failed to unmarshal status schema: %v", err)
+		}
+
+		properties, ok := statusSchema["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatal("status schema does not contain properties map")
+		}
+
+		// Expect unique fields: "id", "status", "category", "anotherField"
+		// and not duplicates
+		expectedUniqueFields := map[string]bool{
+			"id":           true,
+			"status":       true,
+			"category":     true,
+			"anotherField": true,
+		}
+
+		if len(properties) != len(expectedUniqueFields) {
+			t.Errorf("expected %d unique properties, got %d", len(expectedUniqueFields), len(properties))
+		}
+
+		for field := range expectedUniqueFields {
+			prop, ok := properties[field].(map[string]interface{})
+			if !ok {
+				t.Errorf("expected field '%s' not found in status properties", field)
+				continue
+			}
+			fieldType, ok := prop["type"].(string)
+			if !ok || fieldType != "string" {
+				t.Errorf("expected field '%s' to be of type 'string', got '%v'", field, prop["type"])
+			}
+		}
+	})
 }
