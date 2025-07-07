@@ -72,6 +72,17 @@ spec:
               resource:
                 description: The resource to manage
                 properties:
+                  additionalStatusFields:
+                    description: 'AdditionalStatusFields: the list of fields to use
+                      as additional status fields - used to populate the status of
+                      the resource'
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-validations:
+                    - message: AdditionalStatusFields are immutable, you cannot change
+                        them once the CRD has been generated
+                      rule: self == oldSelf
                   identifiers:
                     description: 'Identifiers: the list of fields to use as identifiers
                       - used to populate the status of the resource'

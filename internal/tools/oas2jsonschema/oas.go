@@ -225,6 +225,12 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		}))
 	}
 
+	for _, field := range resource.AdditionalStatusFields {
+		propMap.Set(field, base.CreateSchemaProxy(&base.Schema{
+			Type: []string{"string"},
+		}))
+	}
+
 	// Create a schema proxy with the properties map
 	schemaProxy := base.CreateSchemaProxy(&base.Schema{
 		Type:       []string{"object"},

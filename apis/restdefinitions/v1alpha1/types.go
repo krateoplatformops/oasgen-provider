@@ -31,6 +31,10 @@ type Resource struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Identifiers are immutable, you cannot change them once the CRD has been generated"
 	// +optional
 	Identifiers []string `json:"identifiers,omitempty"`
+	// AdditionalStatusFields: the list of fields to use as additional status fields - used to populate the status of the resource
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="AdditionalStatusFields are immutable, you cannot change them once the CRD has been generated"
+	// +optional
+	AdditionalStatusFields []string `json:"additionalStatusFields,omitempty"`
 }
 
 // RestDefinitionSpec is the specification of a RestDefinition.
