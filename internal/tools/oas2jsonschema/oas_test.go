@@ -111,6 +111,7 @@ func TestGenerateByteSchemas(t *testing.T) {
 					Method: "DELETE",
 				},
 			},
+			AdditionalStatusFields: []string{"category", "status"},
 		}
 
 		identifiers := []string{"id"}
