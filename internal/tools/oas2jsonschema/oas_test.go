@@ -349,3 +349,597 @@ components:
 		}
 	})
 }
+
+func TestGetPrimaryType(t *testing.T) {
+	tests := []struct {
+		name     string
+		types    []string
+		expected string
+	}{
+		{
+			name:     "Primary type first",
+			types:    []string{"string", "null"},
+			expected: "string",
+		},
+		{
+			name:     "Null first, then primary type",
+			types:    []string{"null", "integer"},
+			expected: "integer",
+		},
+		{
+			name:     "Only null",
+			types:    []string{"null"},
+			expected: "",
+		},
+		{
+			name:     "Empty slice",
+			types:    []string{},
+			expected: "",
+		},
+		{
+			name:     "Multiple primary types (first one wins)",
+			types:    []string{"string", "integer"},
+			expected: "string",
+		},
+		{
+			name:     "Multiple types with null",
+			types:    []string{"null", "string", "integer"},
+			expected: "string",
+		},
+		{
+			name:     "Multiple nulls",
+			types:    []string{"null", "null"},
+			expected: "",
+		},
+		{
+			name:     "Array type",
+			types:    []string{"array", "null"},
+			expected: "array",
+		},
+		{
+			name:     "Object type",
+			types:    []string{"object", "null"},
+			expected: "object",
+		},
+		{
+			name:     "Multiple types with object and null",
+			types:    []string{"object", "null", "string"},
+			expected: "object",
+		},
+		{
+			name:     "Multiple types with array and null",
+			types:    []string{"array", "null", "integer"},
+			expected: "array",
+		},
+		{
+			name:     "Multiple types with mixed nulls",
+			types:    []string{"null", "string", "null", "integer"},
+			expected: "string",
+		},
+		{
+			name:     "Multiple types with mixed nulls and objects",
+			types:    []string{"null", "object", "null", "string"},
+			expected: "object",
+		},
+		{
+			name:     "Multiple types with mixed nulls and arrays",
+			types:    []string{"null", "array", "null", "integer"},
+			expected: "array",
+		},
+		{
+			name:     "Multiple types with mixed nulls and objects and arrays",
+			types:    []string{"null", "object", "array", "null", "string"},
+			expected: "object",
+		},
+		{
+			name:     "Array and object only",
+			types:    []string{"array", "object"},
+			expected: "array",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getPrimaryType(tt.types)
+			if result != tt.expected {
+				t.Errorf("getPrimaryType(%v) = %s; want %s", tt.types, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExtractSchemaForAction(t *testing.T) {
+	tests := []struct {
+		name                     string
+		oasContent               string
+		verbs                    []definitionv1alpha1.VerbsDescription
+		targetAction             string
+		expectedErr              bool
+		expectedSchemaProperties []string
+	}{
+		{
+			name: "Successful GET schema extraction",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items/{id}:
+    get:
+      responses:
+        '200':
+          description: A single item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items/{id}", Method: "GET"},
+			},
+			targetAction:             "get",
+			expectedErr:              false,
+			expectedSchemaProperties: []string{"id", "name"},
+		},
+		{
+			name: "Successful FINDBY schema extraction (array items)",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: List of items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    value:
+                      type: integer
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "findby", Path: "/items", Method: "GET"},
+			},
+			targetAction:             "findby",
+			expectedErr:              false,
+			expectedSchemaProperties: []string{"id", "value"},
+		},
+		{
+			name: "Action not found",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths: {}
+components:
+  securitySchemes: {}
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			targetAction:             "get",
+			expectedErr:              false, // Should return nil schema, nil error
+			expectedSchemaProperties: nil,
+		},
+		{
+			name: "No 200/201 response (only 404)",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '404':
+          description: Not found
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+			},
+			targetAction:             "get",
+			expectedErr:              false, // Should return nil schema, nil error
+			expectedSchemaProperties: nil,
+		},
+		{
+			name: "Missing schema in response content",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: {}
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+			},
+			targetAction:             "get",
+			expectedErr:              false, // Should return nil schema, nil error
+			expectedSchemaProperties: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := libopenapi.NewDocument([]byte(tt.oasContent))
+			if err != nil {
+				t.Fatalf("failed to create document: %v", err)
+			}
+			model, modelErrors := doc.BuildV3Model()
+			if len(modelErrors) > 0 {
+				t.Fatalf("failed to build model: %v", errors.Join(modelErrors...))
+			}
+
+			schema, err := extractSchemaForAction(model, tt.verbs, tt.targetAction)
+
+			if tt.expectedErr {
+				if err == nil {
+					t.Errorf("expected an error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("did not expect an error but got: %v", err)
+				}
+				if tt.expectedSchemaProperties == nil {
+					if schema != nil {
+						t.Errorf("expected nil schema but got non-nil")
+					}
+				} else {
+					if schema == nil {
+						t.Fatalf("expected non-nil schema but got nil")
+					}
+					if schema.Properties == nil && len(tt.expectedSchemaProperties) > 0 {
+						t.Errorf("expected properties but schema.Properties is nil")
+					}
+					for _, prop := range tt.expectedSchemaProperties {
+						if _, ok := schema.Properties.Get(prop); !ok {
+							t.Errorf("expected property '%s' not found in schema", prop)
+						}
+					}
+					if schema.Properties.Len() != len(tt.expectedSchemaProperties) {
+						t.Errorf("expected %d properties, got %d", len(tt.expectedSchemaProperties), schema.Properties.Len())
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestValidateSchemas(t *testing.T) {
+	tests := []struct {
+		name             string
+		oasContent       string
+		verbs            []definitionv1alpha1.VerbsDescription
+		expectedWarnings int
+	}{
+		{
+			name: "No get or findby action",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths: {}
+components:
+  securitySchemes: {}
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Get action with compatible create",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 0,
+		},
+		{
+			name: "Get action with incompatible create (type mismatch)",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: integer
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Get action with compatible findby",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+  /items/find:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "findby", Path: "/items/find", Method: "GET"},
+			},
+			expectedWarnings: 0,
+		},
+		{
+			name: "Get action with incompatible findby (type mismatch)",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+  /items/find:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: integer
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "findby", Path: "/items/find", Method: "GET"},
+			},
+			expectedWarnings: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := libopenapi.NewDocument([]byte(tt.oasContent))
+			if err != nil {
+				t.Fatalf("failed to create document: %v", err)
+			}
+			model, modelErrors := doc.BuildV3Model()
+			if len(modelErrors) > 0 {
+				t.Fatalf("failed to build model: %v", errors.Join(modelErrors...))
+			}
+
+			warnings := validateSchemas(model, tt.verbs)
+			if len(warnings) != tt.expectedWarnings {
+				t.Errorf("expected %d warnings, got %d: %v", tt.expectedWarnings, len(warnings), warnings)
+			}
+		})
+	}
+}
+
+func TestAreTypesCompatible(t *testing.T) {
+	tests := []struct {
+		name     string
+		types1   []string
+		types2   []string
+		expected bool
+	}{
+		{
+			name:     "Identical primary types",
+			types1:   []string{"string"},
+			types2:   []string{"string"},
+			expected: true,
+		},
+		{
+			name:     "Compatible with null (string vs string,null)",
+			types1:   []string{"string"},
+			types2:   []string{"string", "null"},
+			expected: true,
+		},
+		{
+			name:     "Compatible with null (string,null vs string)",
+			types1:   []string{"string", "null"},
+			types2:   []string{"string"},
+			expected: true,
+		},
+		{
+			name:     "Incompatible primary types",
+			types1:   []string{"string"},
+			types2:   []string{"integer"},
+			expected: false,
+		},
+		{
+			name:     "One has primary, other only null (compatible if primary allows null)",
+			types1:   []string{"string", "null"},
+			types2:   []string{"null"},
+			expected: true,
+		},
+		{
+			name:     "One has primary, other only null (incompatible if primary doesn't allow null)",
+			types1:   []string{"string"},
+			types2:   []string{"null"},
+			expected: false,
+		},
+		{
+			name:     "Both only null",
+			types1:   []string{"null"},
+			types2:   []string{"null"},
+			expected: true,
+		},
+		{
+			name:     "One empty, one primary",
+			types1:   []string{},
+			types2:   []string{"string"},
+			expected: false, // An empty type implies "any", but for strict comparison, it's not directly compatible unless the other explicitly allows it.
+		},
+		{
+			name:     "Both empty",
+			types1:   []string{},
+			types2:   []string{},
+			expected: true, // Both "any"
+		},
+		{
+			name:     "String vs Integer,null",
+			types1:   []string{"string"},
+			types2:   []string{"integer", "null"},
+			expected: false,
+		},
+		{
+			name:     "Integer,null vs String",
+			types1:   []string{"integer", "null"},
+			types2:   []string{"string"},
+			expected: false,
+		},
+		{
+			name:     "Object vs Object,null",
+			types1:   []string{"object"},
+			types2:   []string{"object", "null"},
+			expected: true,
+		},
+		{
+			name:     "Array vs Array,null",
+			types1:   []string{"array"},
+			types2:   []string{"array", "null"},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := areTypesCompatible(tt.types1, tt.types2)
+			if result != tt.expected {
+				t.Errorf("areTypesCompatible(%v, %v) = %t; want %t", tt.types1, tt.types2, result, tt.expected)
+			}
+		})
+	}
+}

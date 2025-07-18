@@ -2,6 +2,7 @@ package oas2jsonschema
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
@@ -213,22 +214,52 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		specByteSchema[resource.Kind] = byteSchema
 	}
 
+	// Status schema generation
+
+	if len(resource.Identifiers) == 0 && len(resource.AdditionalStatusFields) == 0 {
+		fmt.Println("No identifiers or additional status fields defined in RestDefinition")
+	}
+
 	var statusByteSchema []byte
 
 	// Create an ordered property map
 	propMap := orderedmap.New[string, *base.SchemaProxy]()
 
-	// Add the identifiers to the properties map
-	for _, identifier := range identifiers {
-		propMap.Set(identifier, base.CreateSchemaProxy(&base.Schema{
-			Type: []string{"string"},
-		}))
-	}
+	allStatusFields := append(identifiers, resource.AdditionalStatusFields...)
 
-	for _, field := range resource.AdditionalStatusFields {
-		propMap.Set(field, base.CreateSchemaProxy(&base.Schema{
-			Type: []string{"string"},
-		}))
+	if len(allStatusFields) > 0 {
+		responseSchema, err := extractSchemaForAction(doc, resource.VerbsDescription, "get")
+		if err != nil { // Note: extractSchemaForAction returns nil, nil if verb is not found
+			errors = append(errors, fmt.Errorf("schema validation warning: %w", err))
+		}
+
+		// fallback to "findby" if "get" is not found
+		if responseSchema == nil {
+			responseSchema, err = extractSchemaForAction(doc, resource.VerbsDescription, "findby")
+			if err != nil { // Note: extractSchemaForAction returns nil, nil if verb is not found
+				errors = append(errors, fmt.Errorf("schema validation warning: %w", err))
+			}
+		}
+
+		if responseSchema == nil {
+			errors = append(errors, fmt.Errorf("failed to find a GET or FINDBY response schema for status generation"))
+		}
+
+		// Add the identifiers and additional status fields to the properties map
+		for _, fieldName := range allStatusFields {
+			if responseSchema != nil {
+				fieldSchemaProxy := responseSchema.Properties.Value(fieldName)
+				if fieldSchemaProxy != nil {
+					propMap.Set(fieldName, fieldSchemaProxy)
+					continue
+				}
+			}
+
+			errors = append(errors, fmt.Errorf("status field '%s' defined in RestDefinition not found in GET response schema, defaulting to string", fieldName))
+			propMap.Set(fieldName, base.CreateSchemaProxy(&base.Schema{
+				Type: []string{"string"},
+			}))
+		}
 	}
 
 	// Create a schema proxy with the properties map
@@ -253,7 +284,244 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		secByteSchema:    secByteSchema,
 	}
 
+	if len(allStatusFields) > 0 {
+		validationErrs := validateSchemas(doc, resource.VerbsDescription)
+		errors = append(errors, validationErrs...)
+	}
+
 	return g, errors, nil
+}
+
+func validateSchemas(doc *libopenapi.DocumentModel[v3.Document], verbs []definitionv1alpha1.VerbsDescription) []error {
+	var errors []error
+
+	// Step 1: Discover Available Actions
+	availableActions := make(map[string]bool)
+	for _, verb := range verbs {
+		availableActions[verb.Action] = true
+	}
+
+	// Step 2: Determine the "Source of Truth" Schema (either "get" or "findby")
+	baseAction := ""
+	if availableActions["get"] {
+		baseAction = "get"
+	} else if availableActions["findby"] {
+		baseAction = "findby"
+	}
+
+	if baseAction == "" {
+		errors = append(errors, fmt.Errorf("schema validation warning: no 'get' or 'findby' action found to serve as a base for schema validation"))
+		return errors
+	}
+
+	// Step 3: Compare Other Actions Against the Source of Truth
+	for _, actionToCompare := range []string{"create", "update"} {
+		if availableActions[actionToCompare] {
+			errors = append(errors, compareActionResponseSchemas(doc, verbs, actionToCompare, baseAction)...)
+		}
+	}
+	if baseAction == "get" && availableActions["findby"] {
+		errors = append(errors, compareActionResponseSchemas(doc, verbs, "findby", baseAction)...)
+	}
+
+	return errors
+}
+
+func compareActionResponseSchemas(doc *libopenapi.DocumentModel[v3.Document], verbs []definitionv1alpha1.VerbsDescription, action1, action2 string) []error {
+	var errors []error
+
+	schema2, err := extractSchemaForAction(doc, verbs, action2)
+	if err != nil {
+		errors = append(errors, fmt.Errorf("schema validation warning: error when calling extractSchemaForAction for action %s: %w", action2, err))
+	}
+	if schema2 == nil {
+		fmt.Printf("Schema for action %s is nil, cannot compare.\n", action2)
+		return errors
+	}
+
+	schema1, err := extractSchemaForAction(doc, verbs, action1)
+	if err != nil {
+		errors = append(errors, fmt.Errorf("schema validation warning: error when calling extractSchemaForAction for action %s: %w", action1, err))
+	}
+	if schema1 == nil {
+		fmt.Printf("Schema for action %s is nil, cannot compare.\n", action1)
+		return errors
+	}
+
+	return compareSchemas(".", schema1, schema2)
+}
+
+// to ensure that the fields in common are type-compatible
+// we just return a list of errors (warnings) if there are any mismatches
+func compareSchemas(path string, schema1, schema2 *base.Schema) []error {
+	var errors []error
+
+	for pair := schema1.Properties.First(); pair != nil; pair = pair.Next() {
+		propName := pair.Key()
+		propSchemaProxy1 := pair.Value()
+
+		propSchemaProxy2 := schema2.Properties.Value(propName)
+		if propSchemaProxy2 == nil {
+			// Field from schema1 doesn't exist in schema2, so we skip it.
+			continue
+		}
+
+		propSchema1, _ := propSchemaProxy1.BuildSchema()
+		propSchema2, _ := propSchemaProxy2.BuildSchema()
+
+		// The type of a property is a []string, not a single string.
+		// This is to allow for types like ["string", "null"]
+		if !areTypesCompatible(propSchema1.Type, propSchema2.Type) {
+			errors = append(errors, fmt.Errorf("schema validation warning: type mismatch for field '%s'. First schema types are '%v', second are '%v'",
+				buildPath(path, propName), propSchema1.Type, propSchema2.Type))
+			fmt.Printf("Schema validation warning: type mismatch for field '%s'. First schema types are '%v', second are '%v'\n",
+				buildPath(path, propName), propSchema1.Type, propSchema2.Type)
+			continue
+		}
+
+		// objects and arrays need recursive comparisons
+		// we should check if the Type is of the following shapes:
+		// ["object", "null"] or ["null", "object"]
+		// ["array", "null"] or ["null", "array"]
+		// Note OASGen does not support multiple types in the same field,
+		// so we do not handle types like ["object", "number", "null"]
+		switch getPrimaryType(propSchema1.Type) {
+		case "object":
+			fmt.Printf("Comparing object schema for field '%s'\n", buildPath(path, propName))
+			errors = append(errors, compareSchemas(buildPath(path, propName), propSchema1, propSchema2)...)
+		case "array":
+			fmt.Printf("Comparing array schema for field '%s'\n", buildPath(path, propName))
+			items1, _ := propSchema1.Items.A.BuildSchema()
+			items2, _ := propSchema2.Items.A.BuildSchema()
+			errors = append(errors, compareSchemas(buildPath(path, propName), items1, items2)...)
+		}
+	}
+
+	return errors
+}
+
+func buildPath(base, field string) string {
+	if base == "." {
+		return field
+	}
+	return fmt.Sprintf("%s.%s", base, field)
+}
+
+// getPrimaryType extracts the first non-"null" type from a slice of types (can be also "object" and "array").
+// If only "null" is present or the slice is empty, it returns an empty string.
+// Note that in the context of OASGen we do not handle type like the following:
+// type: ["string", "number", "null"]
+// meaning that we do not support multiple types in the same field.
+func getPrimaryType(types []string) string {
+	for _, t := range types {
+		if t != "null" {
+			return t
+		}
+	}
+	return ""
+}
+
+// areTypesCompatible checks if two slices of types are compatible based on their primary non-null type.
+// It considers types compatible if:
+//  1. Both have the same primary non-null type.
+//  2. One has a primary non-null type and the other has no primary non-null type (i.e., only "null" or empty),
+//     and the one with the primary type also explicitly allows "null".
+//  3. Both have no primary non-null type (i.e., both are only "null" or empty).
+func areTypesCompatible(types1, types2 []string) bool {
+	primaryType1 := getPrimaryType(types1)
+	primaryType2 := getPrimaryType(types2)
+
+	// Case 1: Both have a primary type. They must be identical.
+	if primaryType1 != "" && primaryType2 != "" {
+		return primaryType1 == primaryType2
+	}
+
+	// Case 2: One has a primary type, the other doesn't.
+	// This is compatible if the one with the primary type also allows null,
+	// or if the one without a primary type is effectively "any" (empty slice).
+	if primaryType1 != "" && primaryType2 == "" {
+		// Check if types1 explicitly allows null
+		for _, t := range types1 {
+			if t == "null" {
+				return true
+			}
+		}
+		return false // types1 has a primary type but doesn't allow null, and types2 is only null/empty
+	}
+
+	if primaryType1 == "" && primaryType2 != "" {
+		// Check if types2 explicitly allows null
+		for _, t := range types2 {
+			if t == "null" {
+				return true
+			}
+		}
+		return false // types2 has a primary type but doesn't allow null, and types1 is only null/empty
+	}
+
+	// Case 3: Both have no primary type (i.e., both are only "null" or empty).
+	return true
+}
+
+func extractSchemaForAction(doc *libopenapi.DocumentModel[v3.Document], verbs []definitionv1alpha1.VerbsDescription, targetAction string) (*base.Schema, error) {
+	for _, verb := range verbs {
+		if !strings.EqualFold(verb.Action, targetAction) {
+			continue
+		}
+
+		fmt.Printf("Processing verb: %s %s\n", verb.Method, verb.Path)
+		fmt.Printf("Target action: %s\n", targetAction)
+
+		path := doc.Model.Paths.PathItems.Value(verb.Path)
+		if path == nil {
+			continue
+		}
+
+		ops := path.GetOperations()
+		if ops == nil {
+			continue
+		}
+
+		op := ops.Value(strings.ToLower(verb.Method))
+		if op == nil {
+			continue
+		}
+
+		if op.Responses == nil {
+			continue
+		}
+
+		// Check for 200 OK or 201 Created
+		for _, code := range []int{http.StatusOK, http.StatusCreated} {
+			resp := op.Responses.Codes.Value(fmt.Sprintf("%d", code))
+			if resp == nil {
+				continue
+			}
+
+			if resp.Content == nil {
+				continue
+			}
+
+			mediaType := resp.Content.Value("application/json")
+			if mediaType == nil || mediaType.Schema == nil {
+				continue
+			}
+
+			schemaProxy := mediaType.Schema
+			s, err := schemaProxy.BuildSchema()
+			if err != nil {
+				return nil, err
+			}
+
+			fmt.Printf("Found schema for action %s\n", targetAction)
+
+			if strings.EqualFold(targetAction, "findby") && s.Items != nil {
+				return s.Items.A.BuildSchema()
+			}
+			return s, nil
+		}
+	}
+	return nil, nil // Verb not found, but not an error
 }
 
 // func PopulateFromAllOf() is a method that populates the schema with the properties from the allOf field.
