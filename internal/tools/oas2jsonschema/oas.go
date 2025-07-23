@@ -362,8 +362,7 @@ func compareActionResponseSchemas(doc *libopenapi.DocumentModel[v3.Document], ve
 		errors = append(errors, fmt.Errorf("schema validation warning: error when calling extractSchemaForAction for action %s: %w", action2, err))
 	}
 	if schema2 == nil {
-		fmt.Printf("Schema for action %s is nil, cannot compare.\n", action2)
-		return errors
+		errors = append(errors, fmt.Errorf("Schema for action %s is nil, cannot compare.\n", action2))
 	}
 
 	schema1, err := extractSchemaForAction(doc, verbs, action1)
@@ -371,8 +370,7 @@ func compareActionResponseSchemas(doc *libopenapi.DocumentModel[v3.Document], ve
 		errors = append(errors, fmt.Errorf("schema validation warning: error when calling extractSchemaForAction for action %s: %w", action1, err))
 	}
 	if schema1 == nil {
-		fmt.Printf("Schema for action %s is nil, cannot compare.\n", action1)
-		return errors
+		errors = append(errors, fmt.Errorf("Schema for action %s is nil, cannot compare.\n", action1))
 	}
 
 	return compareSchemas(".", schema1, schema2)

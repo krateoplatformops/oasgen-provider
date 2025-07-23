@@ -1036,6 +1036,232 @@ paths:
 			},
 			expectedWarnings: 0,
 		},
+		{
+			name: "Schema1 is nil in compareSchemas",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+    post:
+      responses:
+        '404':
+          description: Not Found
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"}, // This will result in schema1 being nil
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Schema2 is nil in compareSchemas",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '404':
+          description: Not Found
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"}, // This will result in schema2 being nil
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Schema1 has properties, Schema2 does not",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      field1:
+                        type: string
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Schema2 has properties, Schema1 does not",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      field1:
+                        type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Array item schema is nil for first schema",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items: # Missing schema for items
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Array item schema is nil for second schema",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      type: string
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items: # Missing schema for items
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
 	}
 
 	for _, tt := range tests {
