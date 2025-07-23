@@ -383,16 +383,42 @@ func compareActionResponseSchemas(doc *libopenapi.DocumentModel[v3.Document], ve
 func compareSchemas(path string, schema1, schema2 *base.Schema) []error {
 	var errors []error
 
-	// Base case: If the schema does not have properties, compare the types directly.
-	// This handles primitives inside arrays for instance
-	// Like: `type: array, items: { type: string }` which does not have properties map.
-	if (schema1.Properties == nil || schema1.Properties.Len() == 0) && (schema2.Properties == nil || schema2.Properties.Len() == 0) {
+	// Handle cases where schemas themselves are nil
+	if schema1 == nil && schema2 == nil {
+		return nil // Both are nil, consider them compatible for this path
+	}
+	if schema1 == nil {
+		return []error{fmt.Errorf("schema validation warning: first schema is nil at path '%s'", path)}
+	}
+	if schema2 == nil {
+		return []error{fmt.Errorf("schema validation warning: second schema is nil at path '%s'", path)}
+	}
+
+	// Base case: If both schemas do not have properties, compare their types directly.
+	// This handles primitives inside arrays or simple top-level primitives.
+	schema1HasProps := schema1.Properties != nil && schema1.Properties.Len() > 0
+	schema2HasProps := schema2.Properties != nil && schema2.Properties.Len() > 0
+
+	// If both schemas do not have properties, we can compare their types directly.
+	if !schema1HasProps && !schema2HasProps {
 		if !areTypesCompatible(schema1.Type, schema2.Type) {
 			errors = append(errors, fmt.Errorf("schema validation warning: type mismatch at path '%s'. First schema types are '%v', second are '%v'", path, schema1.Type, schema2.Type))
 		}
 		return errors
 	}
 
+	// If one has properties and the other doesn't, it's an incompatibility
+	if schema1HasProps && !schema2HasProps {
+		errors = append(errors, fmt.Errorf("schema validation warning: first schema has properties but second does not at path '%s'", path))
+		// We can still try to compare common fields if we want, but for now, just report the error and return.
+		return errors
+	}
+	if !schema1HasProps && schema2HasProps {
+		errors = append(errors, fmt.Errorf("schema validation warning: second schema has properties but first does not at path '%s'", path))
+		return errors
+	}
+
+	// If we reach here, both schemas have properties, so we can iterate.
 	// Loop through properties of schema1 and compare with schema2
 	for pair := schema1.Properties.First(); pair != nil; pair = pair.Next() {
 		propName := pair.Key()
@@ -404,8 +430,17 @@ func compareSchemas(path string, schema1, schema2 *base.Schema) []error {
 			continue
 		}
 
-		propSchema1, _ := propSchemaProxy1.BuildSchema()
-		propSchema2, _ := propSchemaProxy2.BuildSchema()
+		propSchema1, err1 := propSchemaProxy1.BuildSchema()
+		propSchema2, err2 := propSchemaProxy2.BuildSchema()
+
+		if err1 != nil {
+			errors = append(errors, fmt.Errorf("schema validation warning: error building schema for property '%s' in first schema: %w", buildPath(path, propName), err1))
+			continue
+		}
+		if err2 != nil {
+			errors = append(errors, fmt.Errorf("schema validation warning: error building schema for property '%s' in second schema: %w", buildPath(path, propName), err2))
+			continue
+		}
 
 		// currentPath is the path to the current property being compared
 		// It is built by appending the property name to the current path.
@@ -427,9 +462,27 @@ func compareSchemas(path string, schema1, schema2 *base.Schema) []error {
 			errors = append(errors, compareSchemas(currentPath, propSchema1, propSchema2)...)
 		case "array":
 			if propSchema1.Items != nil && propSchema2.Items != nil {
-				items1, _ := propSchema1.Items.A.BuildSchema()
-				items2, _ := propSchema2.Items.A.BuildSchema()
-				errors = append(errors, compareSchemas(currentPath, items1, items2)...)
+				items1, err1 := propSchema1.Items.A.BuildSchema()
+				items2, err2 := propSchema2.Items.A.BuildSchema()
+
+				if err1 != nil {
+					errors = append(errors, fmt.Errorf("schema validation warning: error building schema for array item at path '%s' in first schema: %w", currentPath, err1))
+				}
+				if err2 != nil {
+					errors = append(errors, fmt.Errorf("schema validation warning: error building schema for array item at path '%s' in second schema: %w", currentPath, err2))
+				}
+
+				if items1 != nil && items2 != nil {
+					errors = append(errors, compareSchemas(currentPath, items1, items2)...)
+				} else if items1 == nil && items2 != nil {
+					errors = append(errors, fmt.Errorf("schema validation warning: array item schema is nil for first schema at path '%s'", currentPath))
+				} else if items1 != nil && items2 == nil {
+					errors = append(errors, fmt.Errorf("schema validation warning: array item schema is nil for second schema at path '%s'", currentPath))
+				}
+			} else if propSchema1.Items != nil && propSchema2.Items == nil {
+				errors = append(errors, fmt.Errorf("schema validation warning: second schema has no items for array at path '%s'", currentPath))
+			} else if propSchema1.Items == nil && propSchema2.Items != nil {
+				errors = append(errors, fmt.Errorf("schema validation warning: first schema has no items for array at path '%s'", currentPath))
 			}
 		}
 	}
