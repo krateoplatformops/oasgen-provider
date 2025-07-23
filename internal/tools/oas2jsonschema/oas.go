@@ -23,8 +23,12 @@ type OASSchemaGenerator struct {
 	secByteSchema    map[string][]byte
 }
 
-// GenerateByteSchemas generates the byte schemas for the spec, status and auth schemas. Returns a fatal error and a list of generic errors.
+// GenerateByteSchemas generates the byte schemas for the spec, status and auth schemas.
+// Could return a fatal error and a list of generic errors (non-fatal).
 func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource definitionv1alpha1.Resource, identifiers []string) (g *OASSchemaGenerator, errors []error, fatalError error) {
+
+	// Initialization and first validation checks
+
 	secByteSchema := make(map[string][]byte)
 	var schema *base.Schema
 	bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
@@ -53,8 +57,12 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		}
 	}
 
+	// Spec schema generation
+
 	specByteSchema := make(map[string][]byte)
 	for _, verb := range resource.VerbsDescription {
+
+		// 1. Add 'create' request body
 		if strings.EqualFold(verb.Action, "create") {
 			path := doc.Model.Paths.PathItems.Value(verb.Path)
 			if path == nil {
@@ -68,7 +76,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 
 			op := ops.Value(strings.ToLower(verb.Method))
 			if op == nil {
-				return nil, errors, fmt.Errorf("operation not found for %s", verb.Path)
+				return nil, errors, fmt.Errorf("operation not found for %s on path %s", verb.Method, verb.Path)
 			}
 			if op.RequestBody != nil {
 				bodySchema = op.RequestBody.Content.Value("application/json").Schema
@@ -81,7 +89,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 				return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
 			}
 			if len(schema.Type) > 0 {
-				if schema.Type[0] == "array" {
+				if schema.Type[0] == "array" { // this assumes the shape is like: ["array", "null"] in this order
 					schema.Properties = orderedmap.New[string, *base.SchemaProxy]()
 					schema.Properties.Set("items", base.CreateSchemaProxy(
 						&base.Schema{
@@ -95,6 +103,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			populateFromAllOf(schema)
 		}
 
+		// 2. Add 'AuthenticationRefs'
 		if len(secByteSchema) > 0 {
 			authPair := orderedmap.NewPair("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
 				Type:        []string{"object"},
@@ -155,6 +164,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 				base.CreateSchemaProxy(&base.Schema{Type: []string{"string"}}))
 		}
 
+		// 3. Add 'Parameters' to the schema (path, query, header, etc.)
 		for _, verb := range resource.VerbsDescription {
 			for el := doc.Model.Paths.PathItems.First(); el != nil; el = el.Next() {
 				path := el.Value()
@@ -192,10 +202,12 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			}
 		}
 
+		// If at this point the schema is nil, a fatal error is returned
 		if schema == nil {
 			return nil, errors, fmt.Errorf("schema is nil for %s", verb.Path)
 		}
-		// Add the identifiers to the properties map
+
+		// 4. Add the identifiers to the properties map
 		for _, identifier := range identifiers {
 			_, ok := schema.Properties.Get(identifier)
 			if !ok {
@@ -208,6 +220,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 
 		byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
 		if err != nil {
+			// If there is an error generating the JSON schema, we return it as a fatal error
 			return nil, errors, err
 		}
 
@@ -217,7 +230,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 	// Status schema generation
 
 	if len(resource.Identifiers) == 0 && len(resource.AdditionalStatusFields) == 0 {
-		fmt.Println("No identifiers or additional status fields defined in RestDefinition")
+		fmt.Println("No identifiers or additional status fields defined in RestDefinition (Empty status)")
 	}
 
 	var statusByteSchema []byte
@@ -227,39 +240,40 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 
 	allStatusFields := append(identifiers, resource.AdditionalStatusFields...)
 
-	if len(allStatusFields) > 0 {
-		responseSchema, err := extractSchemaForAction(doc, resource.VerbsDescription, "get")
+	responseSchema, err := extractSchemaForAction(doc, resource.VerbsDescription, "get")
+	if err != nil { // Note: extractSchemaForAction returns nil, nil if verb is not found
+		errors = append(errors, fmt.Errorf("schema validation warning: %w", err))
+	}
+
+	// fallback to "findby" if "get" is not found
+	if responseSchema == nil {
+		responseSchema, err = extractSchemaForAction(doc, resource.VerbsDescription, "findby")
 		if err != nil { // Note: extractSchemaForAction returns nil, nil if verb is not found
 			errors = append(errors, fmt.Errorf("schema validation warning: %w", err))
 		}
+	}
 
-		// fallback to "findby" if "get" is not found
-		if responseSchema == nil {
-			responseSchema, err = extractSchemaForAction(doc, resource.VerbsDescription, "findby")
-			if err != nil { // Note: extractSchemaForAction returns nil, nil if verb is not found
-				errors = append(errors, fmt.Errorf("schema validation warning: %w", err))
+	if responseSchema == nil && len(allStatusFields) > 0 {
+		// It may be that the resource does not have a GET or FINDBY action defined in the OpenAPI spec
+		// In addition, it may be that, in some cases, it make sense to not have a status for this resource
+		errors = append(errors, fmt.Errorf("failed to find a GET or FINDBY response schema for status generation"))
+	}
+
+	// Add the identifiers and additional status fields to the properties map
+	for _, fieldName := range allStatusFields {
+		if responseSchema != nil && responseSchema.Properties != nil {
+			fieldSchemaProxy := responseSchema.Properties.Value(fieldName)
+			if fieldSchemaProxy != nil {
+				propMap.Set(fieldName, fieldSchemaProxy)
+				continue
 			}
 		}
 
-		if responseSchema == nil {
-			errors = append(errors, fmt.Errorf("failed to find a GET or FINDBY response schema for status generation"))
-		}
-
-		// Add the identifiers and additional status fields to the properties map
-		for _, fieldName := range allStatusFields {
-			if responseSchema != nil {
-				fieldSchemaProxy := responseSchema.Properties.Value(fieldName)
-				if fieldSchemaProxy != nil {
-					propMap.Set(fieldName, fieldSchemaProxy)
-					continue
-				}
-			}
-
-			errors = append(errors, fmt.Errorf("status field '%s' defined in RestDefinition not found in GET response schema, defaulting to string", fieldName))
-			propMap.Set(fieldName, base.CreateSchemaProxy(&base.Schema{
-				Type: []string{"string"},
-			}))
-		}
+		errors = append(errors, fmt.Errorf("status field '%s' defined in RestDefinition not found in GET or FINDBY response schema, defaulting to string", fieldName))
+		// Here, instead, a fatal error could be returned (to be decided)
+		propMap.Set(fieldName, base.CreateSchemaProxy(&base.Schema{
+			Type: []string{"string"},
+		}))
 	}
 
 	// Create a schema proxy with the properties map
@@ -284,11 +298,24 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		secByteSchema:    secByteSchema,
 	}
 
+	// could this validation be moved upper in the function? (to be decided)
 	if len(allStatusFields) > 0 {
 		validationErrs := validateSchemas(doc, resource.VerbsDescription)
 		errors = append(errors, validationErrs...)
+
+		// prints to be removed
+		if len(validationErrs) > 0 {
+			fmt.Printf("Schema validation completed with %d validation errors.\n", len(validationErrs))
+			fmt.Println("Errors:")
+			for _, err := range validationErrs {
+				fmt.Println("-", err)
+			}
+		} else {
+			fmt.Println("No schema validation errors found.")
+		}
 	}
 
+	// At this point, g contains the generated schema and any validation errors/warnings but no fatal errors.
 	return g, errors, nil
 }
 
@@ -356,6 +383,17 @@ func compareActionResponseSchemas(doc *libopenapi.DocumentModel[v3.Document], ve
 func compareSchemas(path string, schema1, schema2 *base.Schema) []error {
 	var errors []error
 
+	// Base case: If the schema does not have properties, compare the types directly.
+	// This handles primitives inside arrays for instance
+	// Like: `type: array, items: { type: string }` which does not have properties map.
+	if (schema1.Properties == nil || schema1.Properties.Len() == 0) && (schema2.Properties == nil || schema2.Properties.Len() == 0) {
+		if !areTypesCompatible(schema1.Type, schema2.Type) {
+			errors = append(errors, fmt.Errorf("schema validation warning: type mismatch at path '%s'. First schema types are '%v', second are '%v'", path, schema1.Type, schema2.Type))
+		}
+		return errors
+	}
+
+	// Loop through properties of schema1 and compare with schema2
 	for pair := schema1.Properties.First(); pair != nil; pair = pair.Next() {
 		propName := pair.Key()
 		propSchemaProxy1 := pair.Value()
@@ -369,31 +407,30 @@ func compareSchemas(path string, schema1, schema2 *base.Schema) []error {
 		propSchema1, _ := propSchemaProxy1.BuildSchema()
 		propSchema2, _ := propSchemaProxy2.BuildSchema()
 
-		// The type of a property is a []string, not a single string.
-		// This is to allow for types like ["string", "null"]
+		// currentPath is the path to the current property being compared
+		// It is built by appending the property name to the current path.
+		currentPath := buildPath(path, propName)
+
 		if !areTypesCompatible(propSchema1.Type, propSchema2.Type) {
-			errors = append(errors, fmt.Errorf("schema validation warning: type mismatch for field '%s'. First schema types are '%v', second are '%v'",
-				buildPath(path, propName), propSchema1.Type, propSchema2.Type))
-			fmt.Printf("Schema validation warning: type mismatch for field '%s'. First schema types are '%v', second are '%v'\n",
-				buildPath(path, propName), propSchema1.Type, propSchema2.Type)
+			errors = append(errors, fmt.Errorf("schema validation warning: type mismatch for field '%s'. First schema types are '%v', second are '%v'", currentPath, propSchema1.Type, propSchema2.Type))
 			continue
 		}
 
-		// objects and arrays need recursive comparisons
-		// we should check if the Type is of the following shapes:
-		// ["object", "null"] or ["null", "object"]
-		// ["array", "null"] or ["null", "array"]
-		// Note OASGen does not support multiple types in the same field,
-		// so we do not handle types like ["object", "number", "null"]
+		// If we reached here, the types are compatible but it may be that they are complex types (object or array).
+		// We need to check if they are objects or arrays and handle them accordingly.
+		// So, at this point, they have the shape of:
+		// - ["object", "null"] vs ["object", "null"] or ["object"] vs ["object"]
+		// - ["array", "null"] vs ["array", "null"] or ["array"] vs ["array"]
 		switch getPrimaryType(propSchema1.Type) {
 		case "object":
-			fmt.Printf("Comparing object schema for field '%s'\n", buildPath(path, propName))
-			errors = append(errors, compareSchemas(buildPath(path, propName), propSchema1, propSchema2)...)
+			// recursive call to compareSchemas for nested objects
+			errors = append(errors, compareSchemas(currentPath, propSchema1, propSchema2)...)
 		case "array":
-			fmt.Printf("Comparing array schema for field '%s'\n", buildPath(path, propName))
-			items1, _ := propSchema1.Items.A.BuildSchema()
-			items2, _ := propSchema2.Items.A.BuildSchema()
-			errors = append(errors, compareSchemas(buildPath(path, propName), items1, items2)...)
+			if propSchema1.Items != nil && propSchema2.Items != nil {
+				items1, _ := propSchema1.Items.A.BuildSchema()
+				items2, _ := propSchema2.Items.A.BuildSchema()
+				errors = append(errors, compareSchemas(currentPath, items1, items2)...)
+			}
 		}
 	}
 
@@ -407,11 +444,12 @@ func buildPath(base, field string) string {
 	return fmt.Sprintf("%s.%s", base, field)
 }
 
-// getPrimaryType extracts the first non-"null" type from a slice of types (can be also "object" and "array").
+// getPrimaryType extracts the FIRST non-"null" type from a slice of types (can be also "object" and "array").
 // If only "null" is present or the slice is empty, it returns an empty string.
 // Note that in the context of OASGen we do not handle type like the following:
 // type: ["string", "number", "null"]
 // meaning that we do not support multiple types in the same field.
+// in the case of multiple non-null types, we consider the first one as the primary type.
 func getPrimaryType(types []string) string {
 	for _, t := range types {
 		if t != "null" {
@@ -433,6 +471,13 @@ func areTypesCompatible(types1, types2 []string) bool {
 
 	// Case 1: Both have a primary type. They must be identical.
 	if primaryType1 != "" && primaryType2 != "" {
+		// to be removed
+		fmt.Printf("Comparing primary types: '%s' and '%s'\n", primaryType1, primaryType2)
+		if primaryType1 != primaryType2 {
+			fmt.Printf("Primary types '%s' and '%s' are not compatible.\n", primaryType1, primaryType2)
+		} else {
+			fmt.Printf("Primary types '%s' and '%s' are compatible.\n", primaryType1, primaryType2)
+		}
 		return primaryType1 == primaryType2
 	}
 
@@ -441,25 +486,32 @@ func areTypesCompatible(types1, types2 []string) bool {
 	// or if the one without a primary type is effectively "any" (empty slice).
 	if primaryType1 != "" && primaryType2 == "" {
 		// Check if types1 explicitly allows null
+		fmt.Printf("Primary type 1: '%s', checking if it allows null\n", primaryType1)
 		for _, t := range types1 {
 			if t == "null" {
+				fmt.Printf("Primary type 1 '%s' allows null, compatible with empty types2\n", primaryType1)
 				return true
 			}
 		}
+		fmt.Printf("Primary type 1 '%s' does not allow null, incompatible with empty types2\n", primaryType1)
 		return false // types1 has a primary type but doesn't allow null, and types2 is only null/empty
 	}
 
 	if primaryType1 == "" && primaryType2 != "" {
 		// Check if types2 explicitly allows null
+		fmt.Printf("Primary type 2: '%s', checking if it allows null\n", primaryType2)
 		for _, t := range types2 {
 			if t == "null" {
+				fmt.Printf("Primary type 2 '%s' allows null, compatible with empty types1\n", primaryType2)
 				return true
 			}
 		}
+		fmt.Printf("Primary type 2 '%s' does not allow null, incompatible with empty types1\n", primaryType2)
 		return false // types2 has a primary type but doesn't allow null, and types1 is only null/empty
 	}
 
 	// Case 3: Both have no primary type (i.e., both are only "null" or empty).
+	fmt.Printf("Both types are empty or only 'null', they are compatible.\n")
 	return true
 }
 
@@ -469,6 +521,7 @@ func extractSchemaForAction(doc *libopenapi.DocumentModel[v3.Document], verbs []
 			continue
 		}
 
+		fmt.Printf("==============\n")
 		fmt.Printf("Processing verb: %s %s\n", verb.Method, verb.Path)
 		fmt.Printf("Target action: %s\n", targetAction)
 

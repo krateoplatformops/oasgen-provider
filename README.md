@@ -46,7 +46,6 @@ The diagram illustrates how the OASGen Provider processes OpenAPI Specifications
 ## Requirements
 
 - Kubernetes cluster (v1.20+ recommended)
-- Krateo BFF installed in the `krateo-system` namespace
 - OpenAPI Specification 3.0+ documents for your APIs
 - Network access to API endpoints from the cluster
 
@@ -82,6 +81,50 @@ Krateo controllers support 4 verbs to provide resource reconciliation:
   
 Any API behavior that does not match these requirements will require a web service wrapper to normalize the API interface. This is common with APIs that do not follow consistent naming conventions or have different response structures.
 To learn more about web service wrappers, please refer to the [cheatsheet](cheatsheet.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
+
+### Type-Safe Status Fields
+
+The OASGen Provider automatically generates a `status` subresource for your CRD, providing visibility into the state of the external resource. The fields within the status are derived from two sources in your `RestDefinition`:
+
+- `identifiers`: Fields used to uniquely identify the resource.
+- `additionalStatusFields`: Any other fields you wish to expose in the status.
+
+To ensure type safety, the provider inspects the response schema of the `get` (or `findby` as a fallback) action in your OpenAPI specification. It uses the types defined in the OAS to generate the corresponding fields in the CRD's status schema.
+
+#### String Fallback Mechanism
+
+When the provider cannot find a specified `identifier` or `additionalStatusField` in the OpenAPI response schema, it employs a **string fallback** mechanism:
+1.  The provider logs a warning indicating that the field was not found in the OAS response.
+2.  It generates the status field with `type: string` as a safe default.
+
+#### Kubernetes API Server Validation example
+
+If the response schema of an hypothetical `update` action returns as a response body a field with a type different than the one defined in the CRD, the Kubernetes API server will reject the update request:
+- The controller receives the response body from the external API. 
+- The controller sends the update request for the custom resource's status to the Kubernetes API server. 
+- The API server receives the request and validates it against the CRD's schema.
+- It sees that the update is trying to put a string ("123") into the `status.revision` field.
+- It checks the schema and sees that `status.revision` must be an integer.
+- The validation fails, and the Kubernetes API server rejects the entire status update.
+
+If you check the status of the custom resource, you will see that the `status.conditions` field contains an error message indicating that the update failed due to a schema validation error, like the following:
+```yaml
+status:
+  conditions:
+  - lastTransitionTime: "2025-07-22T12:45:38Z"
+    message: ""
+    reason: Creating
+    status: "False"
+    type: Ready
+  - lastTransitionTime: "2025-07-22T12:53:43Z"
+    message: 'observe failed: Pipeline.azuredevops.kog.krateo.io "test-pipeline-kog-1"
+      is invalid: [status.id: Invalid value: "string": id in body must be of type
+      integer: "string", status.revision: Invalid value: "string": revision in body
+      must be of type integer: "string"]'
+    reason: ReconcileError
+    status: "False"
+    type: Synced
+```
 
 ## How to Install
 

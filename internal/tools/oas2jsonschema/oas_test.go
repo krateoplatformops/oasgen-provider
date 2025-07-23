@@ -826,6 +826,216 @@ paths:
 			},
 			expectedWarnings: 1,
 		},
+		{
+			name: "Incompatible nested object",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      value:
+                        type: string
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      value:
+                        type: integer
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Incompatible array items",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      type: string
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      type: integer
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Compatible get and update",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+    put:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "update", Path: "/items", Method: "PUT"},
+			},
+			expectedWarnings: 0,
+		},
+		{
+			name: "Incompatible get and update",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+    put:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: boolean
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "update", Path: "/items", Method: "PUT"},
+			},
+			expectedWarnings: 1,
+		},
+		{
+			name: "Compatible with nullability mismatch",
+			oasContent: `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type:
+                      - string
+                      - "null"
+    post:
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+`,
+			verbs: []definitionv1alpha1.VerbsDescription{
+				{Action: "get", Path: "/items", Method: "GET"},
+				{Action: "create", Path: "/items", Method: "POST"},
+			},
+			expectedWarnings: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -842,6 +1052,12 @@ paths:
 			warnings := validateSchemas(model, tt.verbs)
 			if len(warnings) != tt.expectedWarnings {
 				t.Errorf("expected %d warnings, got %d: %v", tt.expectedWarnings, len(warnings), warnings)
+			}
+
+			// print all warnings to help debugging
+			t.Logf("All warnings for: %s, with length %d", tt.name, len(warnings))
+			for _, warning := range warnings {
+				t.Logf("Warning: %s", warning)
 			}
 		})
 	}
@@ -939,6 +1155,426 @@ func TestAreTypesCompatible(t *testing.T) {
 			result := areTypesCompatible(tt.types1, tt.types2)
 			if result != tt.expected {
 				t.Errorf("areTypesCompatible(%v, %v) = %t; want %t", tt.types1, tt.types2, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGenerateByteSchemas_ErrorScenarios(t *testing.T) {
+	oasContent := `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /pet:
+    post:
+      summary: Add a new pet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+components:
+  securitySchemes: {}
+`
+	doc, _ := libopenapi.NewDocument([]byte(oasContent))
+	model, _ := doc.BuildV3Model()
+
+	t.Run("Path not found in OAS", func(t *testing.T) {
+		resource := definitionv1alpha1.Resource{
+			Kind: "test-pet",
+			VerbsDescription: []definitionv1alpha1.VerbsDescription{
+				{
+					Action: "create",
+					Path:   "/non-existent-path", // This path does not exist
+					Method: "POST",
+				},
+			},
+		}
+
+		_, _, fatalError := GenerateByteSchemas(model, resource, nil)
+		if fatalError == nil {
+			t.Fatal("expected a fatal error but got none")
+		}
+		if !strings.Contains(fatalError.Error(), "path /non-existent-path not found") {
+			t.Errorf("expected error message to contain 'path /non-existent-path not found', but got: %v", fatalError)
+		}
+	})
+
+	t.Run("Method not found for path", func(t *testing.T) {
+		resource := definitionv1alpha1.Resource{
+			Kind: "test-pet",
+			VerbsDescription: []definitionv1alpha1.VerbsDescription{
+				{
+					Action: "create",
+					Path:   "/pet",
+					Method: "PUT", // This method does not exist for this path
+				},
+			},
+		}
+
+		_, _, fatalError := GenerateByteSchemas(model, resource, nil)
+		if fatalError == nil {
+			t.Fatal("expected a fatal error but got none")
+		}
+		if !strings.Contains(fatalError.Error(), "operation not found for PUT on path /pet") {
+			t.Errorf("expected error message to contain 'operation not found for PUT on path /pet', but got: %v", fatalError)
+		}
+	})
+}
+
+func TestGenerateByteSchemas_ParameterInjection(t *testing.T) {
+	oasContent := `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /pet/{petId}:
+    post:
+      summary: Update a pet
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: api_key
+          in: header
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+components:
+  securitySchemes: {}
+`
+	doc, _ := libopenapi.NewDocument([]byte(oasContent))
+	model, _ := doc.BuildV3Model()
+
+	resource := definitionv1alpha1.Resource{
+		Kind: "test-pet",
+		VerbsDescription: []definitionv1alpha1.VerbsDescription{
+			{
+				Action: "create",
+				Path:   "/pet/{petId}",
+				Method: "POST",
+			},
+		},
+	}
+
+	gen, _, fatalError := GenerateByteSchemas(model, resource, nil)
+	if fatalError != nil {
+		t.Fatalf("fatal error: %v", fatalError)
+	}
+
+	specSchemaBytes, err := gen.OASSpecJsonSchemaGetter().Get()
+	if err != nil {
+		t.Fatalf("failed to get spec schema bytes: %v", err)
+	}
+
+	var specSchema map[string]interface{}
+	err = json.Unmarshal(specSchemaBytes, &specSchema)
+	if err != nil {
+		t.Fatalf("failed to unmarshal spec schema: %v", err)
+	}
+
+	properties, ok := specSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("spec schema does not contain properties map")
+	}
+
+	// Check for request body property
+	if _, ok := properties["name"]; !ok {
+		t.Error("expected field 'name' from request body not found")
+	}
+
+	// Check for path parameter
+	petIdProp, ok := properties["petId"].(map[string]interface{})
+	if !ok {
+		t.Error("expected path parameter 'petId' not found")
+	} else {
+		if petIdProp["description"] != "PARAMETER: path, VERB: Post - " {
+			t.Errorf("incorrect description for petId: got '%s'", petIdProp["description"])
+		}
+	}
+
+	// Check for header parameter
+	apiKeyProp, ok := properties["api_key"].(map[string]interface{})
+	if !ok {
+		t.Error("expected header parameter 'api_key' not found")
+	} else {
+		if apiKeyProp["description"] != "PARAMETER: header, VERB: Post - " {
+			t.Errorf("incorrect description for api_key: got '%s'", apiKeyProp["description"])
+		}
+	}
+}
+
+func TestGenerateByteSchemas_TopLevelArray(t *testing.T) {
+	oasContent := `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      summary: Add multiple pets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+components:
+  securitySchemes: {}
+`
+	doc, _ := libopenapi.NewDocument([]byte(oasContent))
+	model, _ := doc.BuildV3Model()
+
+	resource := definitionv1alpha1.Resource{
+		Kind: "test-pet",
+		VerbsDescription: []definitionv1alpha1.VerbsDescription{
+			{
+				Action: "create",
+				Path:   "/pets",
+				Method: "POST",
+			},
+		},
+	}
+
+	gen, _, fatalError := GenerateByteSchemas(model, resource, nil)
+	if fatalError != nil {
+		t.Fatalf("fatal error: %v", fatalError)
+	}
+
+	specSchemaBytes, err := gen.OASSpecJsonSchemaGetter().Get()
+	if err != nil {
+		t.Fatalf("failed to get spec schema bytes: %v", err)
+	}
+
+	var specSchema map[string]interface{}
+	err = json.Unmarshal(specSchemaBytes, &specSchema)
+	if err != nil {
+		t.Fatalf("failed to unmarshal spec schema: %v", err)
+	}
+
+	if specSchema["type"] != "object" {
+		t.Errorf("expected root type to be 'object', got '%s'", specSchema["type"])
+	}
+
+	properties, ok := specSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("spec schema does not contain properties map")
+	}
+
+	itemsProp, ok := properties["items"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected to find 'items' property")
+	}
+
+	if itemsProp["type"] != "array" {
+		t.Errorf("expected items property to be of type 'array', got '%s'", itemsProp["type"])
+	}
+}
+
+func TestGenerateStatusSchemaFromResponse(t *testing.T) {
+	oasContentWithGet := `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items/{id}:
+    get:
+      summary: Get an item by ID
+      responses:
+        '200':
+          description: A single item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+                  active:
+                    type: boolean
+                  config:
+                    type: object
+                    properties:
+                      key:
+                        type: string
+                  tags:
+                    type: array
+                    items:
+                      type: string
+components:
+  securitySchemes: {}
+`
+	oasContentWithFindby := `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      summary: Find items
+      responses:
+        '200':
+          description: A list of items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+components:
+  securitySchemes: {}
+`
+
+	tests := []struct {
+		name                   string
+		oasContent             string
+		resource               definitionv1alpha1.Resource
+		identifiers            []string
+		expectedProperties     map[string]string
+		expectedWarningCount   int
+		expectedWarningMessage string
+	}{
+		{
+			name:       "Correctly infer types from GET response",
+			oasContent: oasContentWithGet,
+			resource: definitionv1alpha1.Resource{
+				Kind: "TestResource",
+				VerbsDescription: []definitionv1alpha1.VerbsDescription{
+					{Action: "get", Path: "/items/{id}", Method: "GET"},
+				},
+				AdditionalStatusFields: []string{"name", "active", "config", "tags", "missing_field"},
+			},
+			identifiers: []string{"id"},
+			expectedProperties: map[string]string{
+				"id":            "integer",
+				"name":          "string",
+				"active":        "boolean",
+				"config":        "object",
+				"tags":          "array",
+				"missing_field": "string", // Should default to string
+			},
+			expectedWarningCount:   1,
+			expectedWarningMessage: "status field 'missing_field' defined in RestDefinition not found in GET or FINDBY response schema, defaulting to string",
+		},
+		{
+			name:       "Correctly infer types from FINDBY response",
+			oasContent: oasContentWithFindby,
+			resource: definitionv1alpha1.Resource{
+				Kind: "TestResource",
+				VerbsDescription: []definitionv1alpha1.VerbsDescription{
+					{Action: "findby", Path: "/items", Method: "GET"},
+				},
+				AdditionalStatusFields: []string{"name"},
+			},
+			identifiers: []string{"id"},
+			expectedProperties: map[string]string{
+				"id":   "integer",
+				"name": "string",
+			},
+			expectedWarningCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := libopenapi.NewDocument([]byte(tt.oasContent))
+			if err != nil {
+				t.Fatalf("failed to create document: %v", err)
+			}
+			model, modelErrors := doc.BuildV3Model()
+			if len(modelErrors) > 0 {
+				t.Fatalf("failed to build model: %v", errors.Join(modelErrors...))
+			}
+
+			gen, warnings, fatalError := GenerateByteSchemas(model, tt.resource, tt.identifiers)
+			if fatalError != nil {
+				t.Fatalf("fatal error: %v", fatalError)
+			}
+
+			if len(warnings) != tt.expectedWarningCount {
+				t.Errorf("expected %d warnings, got %d: %v", tt.expectedWarningCount, len(warnings), warnings)
+			}
+
+			if tt.expectedWarningCount > 0 {
+				found := false
+				for _, w := range warnings {
+					if strings.Contains(w.Error(), tt.expectedWarningMessage) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected warning message not found: '%s'", tt.expectedWarningMessage)
+				}
+			}
+
+			statusSchemaBytes, err := gen.OASStatusJsonSchemaGetter().Get()
+			if err != nil {
+				t.Fatalf("failed to get status schema bytes: %v", err)
+			}
+
+			var statusSchema map[string]interface{}
+			err = json.Unmarshal(statusSchemaBytes, &statusSchema)
+			if err != nil {
+				t.Fatalf("failed to unmarshal status schema: %v", err)
+			}
+
+			properties, ok := statusSchema["properties"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("status schema does not contain properties map")
+			}
+
+			if len(properties) != len(tt.expectedProperties) {
+				t.Errorf("expected %d properties, got %d", len(tt.expectedProperties), len(properties))
+			}
+
+			for field, expectedType := range tt.expectedProperties {
+				prop, ok := properties[field].(map[string]interface{})
+				if !ok {
+					t.Errorf("expected field '%s' not found in status properties", field)
+					continue
+				}
+				// The type can be a single string or a slice of strings (e.g., ["string", "null"])
+				// For simplicity in this test, we'll just check the first type.
+				var actualType string
+				if typeSlice, ok := prop["type"].([]interface{}); ok && len(typeSlice) > 0 {
+					actualType = typeSlice[0].(string)
+				} else if typeStr, ok := prop["type"].(string); ok {
+					actualType = typeStr
+				}
+
+				if actualType != expectedType {
+					t.Errorf("for field '%s', expected type '%s', got '%s'", field, expectedType, actualType)
+				}
 			}
 		})
 	}
