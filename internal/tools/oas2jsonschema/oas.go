@@ -100,7 +100,9 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 				}
 			}
 
-			populateFromAllOf(schema)
+			//if err := prepareSchemaForCRD(schema); err != nil {
+			//	return nil, errors, fmt.Errorf("preparing status schema for CRD: %w", err)
+			//}
 		}
 
 		// 2. Add 'AuthenticationRefs'
@@ -218,6 +220,11 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			}
 		}
 
+		// 5. Prepare the schema for CRD (convert "number" to "integer", fixing allOf, etc.)
+		if err := prepareSchemaForCRD(schema); err != nil {
+			return nil, errors, fmt.Errorf("preparing status schema for CRD: %w", err)
+		}
+
 		byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
 		if err != nil {
 			// If there is an error generating the JSON schema, we return it as a fatal error
@@ -285,6 +292,11 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 	statusSchema, err := schemaProxy.BuildSchema()
 	if err != nil {
 		return nil, errors, fmt.Errorf("building status schema for %s: %w", identifiers, err)
+	}
+
+	// Prepare the status schema for CRD (convert "number" to "integer", fixing allOf, etc.)
+	if err := prepareSchemaForCRD(statusSchema); err != nil {
+		return nil, errors, fmt.Errorf("preparing status schema for CRD: %w", err)
 	}
 
 	statusByteSchema, err = generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(statusSchema))
@@ -628,10 +640,21 @@ func extractSchemaForAction(doc *libopenapi.DocumentModel[v3.Document], verbs []
 	return nil, nil // Verb not found, but not an error
 }
 
-// func PopulateFromAllOf() is a method that populates the schema with the properties from the allOf field.
-// the recursive function to populate the schema with the properties from the allOf field.
-func populateFromAllOf(schema *base.Schema) error {
-	if len(schema.Type) > 0 && schema.Type[0] == "array" {
+// func prepareSchemaForCRD() is a method that populates the schema with the properties from the allOf field
+// and converts the "number" type to "integer".
+func prepareSchemaForCRD(schema *base.Schema) error {
+
+	fmt.Printf("Preparing schema for CRD, at: %v\n", schema)
+
+	// Conversion of "number" to "integer" type
+	// Needed due to the fact that CRDs discourage the use of float
+	if getPrimaryType(schema.Type) == "number" {
+		fmt.Printf("Found 'number' type in schema, converting to 'integer'.\n")
+		convertNumberToInteger(schema)
+	}
+
+	// Case array type
+	if getPrimaryType(schema.Type) == "array" {
 		if schema.Items != nil {
 			if schema.Items.N == 0 {
 				sch, err := schema.Items.A.BuildSchema()
@@ -639,21 +662,23 @@ func populateFromAllOf(schema *base.Schema) error {
 					return err
 				}
 
-				populateFromAllOf(sch)
+				prepareSchemaForCRD(sch)
 			}
 		}
 		return nil
 	}
+
+	// Case object type
 	for prop := schema.Properties.First(); prop != nil; prop = prop.Next() {
 		sch, err := prop.Value().BuildSchema()
 		if err != nil {
 			return err
 		}
-		populateFromAllOf(sch)
+		prepareSchemaForCRD(sch)
 	}
 	for _, proxy := range schema.AllOf {
 		propSchema, err := proxy.BuildSchema()
-		populateFromAllOf(propSchema)
+		prepareSchemaForCRD(propSchema)
 		if err != nil {
 			return err
 		}
@@ -667,6 +692,15 @@ func populateFromAllOf(schema *base.Schema) error {
 		}
 	}
 	return nil
+}
+
+func convertNumberToInteger(schema *base.Schema) {
+	for i, t := range schema.Type {
+		if t == "number" {
+			schema.Type[i] = "integer"
+			fmt.Printf("Converted 'number' to 'integer' in schema type: %v\n", schema.Type)
+		}
+	}
 }
 
 func (g *OASSchemaGenerator) OASSpecJsonSchemaGetter() crdgen.JsonSchemaGetter {
