@@ -297,6 +297,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		secByteSchema:    secByteSchema,
 	}
 
+	// Non-fatal validation of response schemas of the actions defined in the RestDefinition.
 	// could this validation be moved upper in the function? (to be decided)
 	if len(allStatusFields) > 0 {
 		validationErrs := validateSchemas(doc, resource.VerbsDescription)
