@@ -27,9 +27,8 @@ type OASSchemaGenerator struct {
 // Could return a fatal error and a list of generic errors (non-fatal).
 func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource definitionv1alpha1.Resource, identifiers []string) (g *OASSchemaGenerator, errors []error, fatalError error) {
 
-	// Initialization and first validation checks
+	// 0. Initialization and first validation checks (with fatal errors)
 
-	secByteSchema := make(map[string][]byte)
 	var schema *base.Schema
 	bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
 	if bodySchema == nil {
@@ -45,8 +44,11 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 	if doc.Model.Components.SecuritySchemes == nil {
 		return nil, errors, fmt.Errorf("security schemes not found")
 	}
+
+	secByteSchema := make(map[string][]byte)
+	// Iterate over security schemes found in the OAS (at least 1) and generate auth schemas
 	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
+		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value()) // e.g. "BasicAuth" or "BearerAuth"
 		if err != nil {
 			return nil, errors, fmt.Errorf("auth schema name: %w", err)
 		}
@@ -57,12 +59,13 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 		}
 	}
 
-	// Spec schema generation
+	// 1. Spec schema generation
 
 	specByteSchema := make(map[string][]byte)
-	for _, verb := range resource.VerbsDescription {
 
-		// 1. Add 'create' request body
+	// 1.1. Add 'create' request body
+	// Find 'create' action and get its request body to use as the base for the spec schema.
+	for _, verb := range resource.VerbsDescription {
 		if strings.EqualFold(verb.Action, "create") {
 			path := doc.Model.Paths.PathItems.Value(verb.Path)
 			if path == nil {
@@ -78,9 +81,14 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			if op == nil {
 				return nil, errors, fmt.Errorf("operation not found for %s on path %s", verb.Method, verb.Path)
 			}
-			if op.RequestBody != nil {
-				bodySchema = op.RequestBody.Content.Value("application/json").Schema
+
+			if op.RequestBody != nil && op.RequestBody.Content != nil {
+				contentType := op.RequestBody.Content.Value("application/json")
+				if contentType != nil {
+					bodySchema = contentType.Schema
+				}
 			}
+
 			if bodySchema == nil {
 				return nil, errors, fmt.Errorf("body schema not found for %s", verb.Path)
 			}
@@ -99,64 +107,48 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 					schema.Type = []string{"object"}
 				}
 			}
+			// Found create verb, exit loop.
+			break
+		}
+	}
 
-			//if err := prepareSchemaForCRD(schema); err != nil {
-			//	return nil, errors, fmt.Errorf("preparing status schema for CRD: %w", err)
-			//}
+	// If no 'create' action, initialize an empty schema.
+	// The schema will be empty, but it will be used to add the authenticationRefs and parameters.
+	if schema == nil {
+		bodySchema = base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
+		schema, err = bodySchema.BuildSchema()
+		if err != nil {
+			return nil, errors, fmt.Errorf("building schema")
+		}
+	}
+
+	// 1.2. Add 'AuthenticationRefs'
+	// If there are security schemes defined in the OAS, we add the 'authenticationRefs' property
+	if len(secByteSchema) > 0 {
+
+		authPair := orderedmap.NewPair("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
+			Type:        []string{"object"},
+			Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
+		req := []string{
+			"authenticationRefs",
 		}
 
-		// 2. Add 'AuthenticationRefs'
-		if len(secByteSchema) > 0 {
-			authPair := orderedmap.NewPair("authenticationRefs", base.CreateSchemaProxy(&base.Schema{
-				Type:        []string{"object"},
-				Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set."}))
-			req := []string{
-				"authenticationRefs",
-			}
-
-			if schema == nil {
-				om := orderedmap.New[string, *base.SchemaProxy]()
-				om.Set(authPair.Key(), authPair.Value())
-				schemaproxy := base.CreateSchemaProxy(&base.Schema{
-					Type:       []string{"object"},
-					Properties: om,
-					Required:   req,
-				})
-				schema, err = schemaproxy.BuildSchema()
-				if err != nil {
-					return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
-				}
-
-			} else {
-				if schema.Properties == nil {
-					schema.Properties = orderedmap.New[string, *base.SchemaProxy]()
-				}
-				schema.Properties.Set(authPair.Key(), authPair.Value())
-				schema.Required = req
-			}
+		if schema.Properties == nil {
+			schema.Properties = orderedmap.New[string, *base.SchemaProxy]()
 		}
+
+		schema.Properties.Set(authPair.Key(), authPair.Value())
+		schema.Required = req
+
 		for key := range secByteSchema {
 			authSchemaProxy := schema.Properties.Value("authenticationRefs")
 			if authSchemaProxy == nil {
-				return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
+				return nil, errors, fmt.Errorf("internal error: authenticationRefs proxy not found")
 			}
 
 			sch, err := authSchemaProxy.BuildSchema()
 			if err != nil {
-				return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
-			}
-
-			if sch == nil {
-				authSchemaProxy = base.CreateSchemaProxy(&base.Schema{
-					Type:        []string{"object"},
-					Description: "AuthenticationRefs represent the reference to a CR containing the authentication information. One authentication method must be set.",
-					Properties:  orderedmap.New[string, *base.SchemaProxy](),
-					Required:    []string{"authenticationRefs"},
-				})
-				sch, err = authSchemaProxy.BuildSchema()
-				if err != nil {
-					return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
-				}
+				return nil, errors, fmt.Errorf("building authenticationRefs schema: %w", err)
 			}
 
 			if sch.Properties == nil {
@@ -165,79 +157,74 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 			sch.Properties.Set(fmt.Sprintf("%sRef", text.FirstToLower(key)),
 				base.CreateSchemaProxy(&base.Schema{Type: []string{"string"}}))
 		}
-
-		// 3. Add 'Parameters' to the schema (path, query, header, etc.)
-		for _, verb := range resource.VerbsDescription {
-			for el := doc.Model.Paths.PathItems.First(); el != nil; el = el.Next() {
-				path := el.Value()
-				ops := path.GetOperations()
-				if ops == nil {
-					continue
-				}
-			}
-			path := doc.Model.Paths.PathItems.Value(verb.Path)
-			if path == nil {
-				return nil, errors, fmt.Errorf("path %s not found", verb.Path)
-			}
-			ops := path.GetOperations()
-			if ops == nil {
-				continue
-			}
-			for op := ops.First(); op != nil; op = op.Next() {
-				for _, param := range op.Value().Parameters {
-					if _, ok := schema.Properties.Get(param.Name); ok {
-						errors = append(errors, fmt.Errorf("parameter %s already exists in schema", param.Name))
-						continue
-					}
-
-					schema.Properties.Set(param.Name, param.Schema)
-					schemaProxyParam := schema.Properties.Value(param.Name)
-					if schemaProxyParam == nil {
-						return nil, errors, fmt.Errorf("schema proxy for %s is nil", param.Name)
-					}
-					schemaParam, err := schemaProxyParam.BuildSchema()
-					if err != nil {
-						return nil, errors, fmt.Errorf("building schema for %s: %w", verb.Path, err)
-					}
-					schemaParam.Description = fmt.Sprintf("PARAMETER: %s, VERB: %s - %s", param.In, text.CapitaliseFirstLetter(op.Key()), param.Description)
-				}
-			}
-		}
-
-		// If at this point the schema is nil, a fatal error is returned
-		if schema == nil {
-			return nil, errors, fmt.Errorf("schema is nil for %s", verb.Path)
-		}
-
-		// 4. Add the identifiers to the properties map
-		for _, identifier := range identifiers {
-			_, ok := schema.Properties.Get(identifier)
-			if !ok {
-				schema.Properties.Set(identifier, base.CreateSchemaProxy(&base.Schema{
-					Description: fmt.Sprintf("IDENTIFIER: %s", identifier),
-					Type:        []string{"string"},
-				}))
-			}
-		}
-
-		// 5. Prepare the schema for CRD (convert "number" to "integer", fixing allOf, etc.)
-		if err := prepareSchemaForCRD(schema); err != nil {
-			return nil, errors, fmt.Errorf("preparing status schema for CRD: %w", err)
-		}
-
-		byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
-		if err != nil {
-			// If there is an error generating the JSON schema, we return it as a fatal error
-			return nil, errors, err
-		}
-
-		specByteSchema[resource.Kind] = byteSchema
 	}
 
-	// Status schema generation
+	// 1.3. Add 'Parameters' to the schema (path, query, header, etc.) for every verb set in the RestDefinition.
+	for _, verb := range resource.VerbsDescription {
+		path := doc.Model.Paths.PathItems.Value(verb.Path)
+		if path == nil {
+			// This path was not found, it could be an error made while writing the RestDefinition
+			return nil, errors, fmt.Errorf("path %s set in RestDefinition not found in OpenAPI spec", verb.Path)
+		}
+		ops := path.GetOperations()
+		if ops == nil {
+			continue
+		}
+		for op := ops.First(); op != nil; op = op.Next() {
+			for _, param := range op.Value().Parameters {
+				if _, ok := schema.Properties.Get(param.Name); ok {
+					// If the parameter already exists in the schema, we skip it and add a warning to the non-fatal errors slice.
+					errors = append(errors, fmt.Errorf("parameter %s already exists in schema, skipping", param.Name))
+					continue
+				}
+
+				schema.Properties.Set(param.Name, param.Schema)
+				schemaProxyParam := schema.Properties.Value(param.Name)
+				if schemaProxyParam == nil {
+					return nil, errors, fmt.Errorf("schema proxy for %s is nil", param.Name)
+				}
+				schemaParam, err := schemaProxyParam.BuildSchema()
+				if err != nil {
+					return nil, errors, fmt.Errorf("building schema for parameter %s: %w", param.Name, err)
+				}
+				schemaParam.Description = fmt.Sprintf("PARAMETER: %s, VERB: %s - %s", param.In, text.CapitaliseFirstLetter(op.Key()), param.Description)
+			}
+		}
+	}
+
+	// If at this point the schema is nil, a fatal error is returned
+	if schema == nil {
+		return nil, errors, fmt.Errorf("schema is nil after processing verbs")
+	}
+
+	// 1.4. Add the identifiers to the properties map
+	for _, identifier := range identifiers {
+		_, ok := schema.Properties.Get(identifier)
+		if !ok {
+			schema.Properties.Set(identifier, base.CreateSchemaProxy(&base.Schema{
+				Description: fmt.Sprintf("IDENTIFIER: %s", identifier),
+				Type:        []string{"string"},
+			}))
+		}
+	}
+
+	// 1.5. Prepare the spec schema for CRD (convert "number" to "integer", fixing allOf, etc.)
+	if err := prepareSchemaForCRD(schema); err != nil {
+		return nil, errors, fmt.Errorf("preparing spec schema for CRD: %w", err)
+	}
+
+	byteSchema, err := generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
+	if err != nil {
+		// If there is an error generating the JSON schema, we return it as a fatal error
+		return nil, errors, err
+	}
+
+	specByteSchema[resource.Kind] = byteSchema
+
+	// 2. Status schema generation
 
 	if len(resource.Identifiers) == 0 && len(resource.AdditionalStatusFields) == 0 {
-		fmt.Println("No identifiers or additional status fields defined in RestDefinition (Empty status)")
+		errors = append(errors, fmt.Errorf("no identifiers or additional status fields defined in RestDefinition, skipping status schema generation"))
 	}
 
 	var statusByteSchema []byte
@@ -313,6 +300,8 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 	// could this validation be moved upper in the function? (to be decided)
 	if len(allStatusFields) > 0 {
 		validationErrs := validateSchemas(doc, resource.VerbsDescription)
+
+		// append validation errors to the "general" errors slice
 		errors = append(errors, validationErrs...)
 
 		// prints to be removed
@@ -372,19 +361,24 @@ func compareActionResponseSchemas(doc *libopenapi.DocumentModel[v3.Document], ve
 	schema2, err := extractSchemaForAction(doc, verbs, action2)
 	if err != nil {
 		errors = append(errors, fmt.Errorf("schema validation warning: error when calling extractSchemaForAction for action %s: %w", action2, err))
+		return errors
 	}
 	if schema2 == nil {
-		errors = append(errors, fmt.Errorf("Schema for action %s is nil, cannot compare.\n", action2))
+		errors = append(errors, fmt.Errorf("schema for action %s is nil, cannot compare", action2))
+		return errors
 	}
 
 	schema1, err := extractSchemaForAction(doc, verbs, action1)
 	if err != nil {
 		errors = append(errors, fmt.Errorf("schema validation warning: error when calling extractSchemaForAction for action %s: %w", action1, err))
+		return errors
 	}
 	if schema1 == nil {
-		errors = append(errors, fmt.Errorf("Schema for action %s is nil, cannot compare.\n", action1))
+		errors = append(errors, fmt.Errorf("schema for action %s is nil, cannot compare", action1))
+		return errors
 	}
 
+	// If we reach here, both schemas are not nil, so we can compare them.
 	return compareSchemas(".", schema1, schema2)
 }
 
@@ -534,13 +528,6 @@ func areTypesCompatible(types1, types2 []string) bool {
 
 	// Case 1: Both have a primary type. They must be identical.
 	if primaryType1 != "" && primaryType2 != "" {
-		// to be removed
-		fmt.Printf("Comparing primary types: '%s' and '%s'\n", primaryType1, primaryType2)
-		if primaryType1 != primaryType2 {
-			fmt.Printf("Primary types '%s' and '%s' are not compatible.\n", primaryType1, primaryType2)
-		} else {
-			fmt.Printf("Primary types '%s' and '%s' are compatible.\n", primaryType1, primaryType2)
-		}
 		return primaryType1 == primaryType2
 	}
 
@@ -549,32 +536,25 @@ func areTypesCompatible(types1, types2 []string) bool {
 	// or if the one without a primary type is effectively "any" (empty slice).
 	if primaryType1 != "" && primaryType2 == "" {
 		// Check if types1 explicitly allows null
-		fmt.Printf("Primary type 1: '%s', checking if it allows null\n", primaryType1)
 		for _, t := range types1 {
 			if t == "null" {
-				fmt.Printf("Primary type 1 '%s' allows null, compatible with empty types2\n", primaryType1)
 				return true
 			}
 		}
-		fmt.Printf("Primary type 1 '%s' does not allow null, incompatible with empty types2\n", primaryType1)
 		return false // types1 has a primary type but doesn't allow null, and types2 is only null/empty
 	}
 
 	if primaryType1 == "" && primaryType2 != "" {
 		// Check if types2 explicitly allows null
-		fmt.Printf("Primary type 2: '%s', checking if it allows null\n", primaryType2)
 		for _, t := range types2 {
 			if t == "null" {
-				fmt.Printf("Primary type 2 '%s' allows null, compatible with empty types1\n", primaryType2)
 				return true
 			}
 		}
-		fmt.Printf("Primary type 2 '%s' does not allow null, incompatible with empty types1\n", primaryType2)
 		return false // types2 has a primary type but doesn't allow null, and types1 is only null/empty
 	}
 
 	// Case 3: Both have no primary type (i.e., both are only "null" or empty).
-	fmt.Printf("Both types are empty or only 'null', they are compatible.\n")
 	return true
 }
 
@@ -583,10 +563,6 @@ func extractSchemaForAction(doc *libopenapi.DocumentModel[v3.Document], verbs []
 		if !strings.EqualFold(verb.Action, targetAction) {
 			continue
 		}
-
-		fmt.Printf("==============\n")
-		fmt.Printf("Processing verb: %s %s\n", verb.Method, verb.Path)
-		fmt.Printf("Target action: %s\n", targetAction)
 
 		path := doc.Model.Paths.PathItems.Value(verb.Path)
 		if path == nil {
@@ -608,6 +584,7 @@ func extractSchemaForAction(doc *libopenapi.DocumentModel[v3.Document], verbs []
 		}
 
 		// Check for 200 OK or 201 Created
+		// Currently 202 is not considered
 		for _, code := range []int{http.StatusOK, http.StatusCreated} {
 			resp := op.Responses.Codes.Value(fmt.Sprintf("%d", code))
 			if resp == nil {
@@ -629,8 +606,6 @@ func extractSchemaForAction(doc *libopenapi.DocumentModel[v3.Document], verbs []
 				return nil, err
 			}
 
-			fmt.Printf("Found schema for action %s\n", targetAction)
-
 			if strings.EqualFold(targetAction, "findby") && s.Items != nil {
 				return s.Items.A.BuildSchema()
 			}
@@ -644,12 +619,9 @@ func extractSchemaForAction(doc *libopenapi.DocumentModel[v3.Document], verbs []
 // and converts the "number" type to "integer".
 func prepareSchemaForCRD(schema *base.Schema) error {
 
-	fmt.Printf("Preparing schema for CRD, at: %v\n", schema)
-
 	// Conversion of "number" to "integer" type
 	// Needed due to the fact that CRDs discourage the use of float
 	if getPrimaryType(schema.Type) == "number" {
-		fmt.Printf("Found 'number' type in schema, converting to 'integer'.\n")
 		convertNumberToInteger(schema)
 	}
 
@@ -661,7 +633,6 @@ func prepareSchemaForCRD(schema *base.Schema) error {
 				if err != nil {
 					return err
 				}
-
 				prepareSchemaForCRD(sch)
 			}
 		}
@@ -698,7 +669,6 @@ func convertNumberToInteger(schema *base.Schema) {
 	for i, t := range schema.Type {
 		if t == "number" {
 			schema.Type[i] = "integer"
-			fmt.Printf("Converted 'number' to 'integer' in schema type: %v\n", schema.Type)
 		}
 	}
 }

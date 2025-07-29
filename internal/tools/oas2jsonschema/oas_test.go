@@ -1451,9 +1451,37 @@ components:
 			t.Errorf("expected error message to contain 'operation not found for PUT on path /pet', but got: %v", fatalError)
 		}
 	})
+
+	t.Run("Path in RestDefinition not found in OAS", func(t *testing.T) {
+		resource := definitionv1alpha1.Resource{
+			Kind: "test-pet",
+			VerbsDescription: []definitionv1alpha1.VerbsDescription{
+				{
+					Action: "create",
+					Path:   "/pet",
+					Method: "POST",
+				},
+				{
+					Action: "delete",
+					Path:   "/non-existent-path", // This path does not exist in the OAS
+					Method: "DELETE",
+				},
+			},
+		}
+
+		_, _, fatalError := GenerateByteSchemas(model, resource, nil)
+		// we expect a fatal error here because the DELETE operation is not defined in the OAS
+		if fatalError == nil {
+			t.Fatal("expected a fatal error but got none")
+		}
+		if !strings.Contains(fatalError.Error(), "path /non-existent-path set in RestDefinition not found in OpenAPI spec") {
+			t.Errorf("expected error message to contain 'path /non-existent-path set in RestDefinition not found in OpenAPI spec', but got: %v", fatalError)
+		}
+
+	})
 }
 
-func TestGenerateByteSchemas_ParameterInjection(t *testing.T) {
+func TestGenerateByteSchemas_Parameters(t *testing.T) {
 	oasContent := `
 openapi: 3.0.0
 info:
@@ -1542,6 +1570,99 @@ components:
 		if apiKeyProp["description"] != "PARAMETER: header, VERB: Post - " {
 			t.Errorf("incorrect description for api_key: got '%s'", apiKeyProp["description"])
 		}
+	}
+}
+
+func TestGenerateByteSchemas_CreateWithoutRequestBody(t *testing.T) {
+	oasContent := `
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /pet:
+    post:
+      summary: Add a new pet
+  /pet/{petId}:
+    delete:
+      summary: Deletes a pet
+      parameters:
+        - name: api_key
+          in: header
+          schema:
+            type: string
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+`
+	doc, _ := libopenapi.NewDocument([]byte(oasContent))
+	model, _ := doc.BuildV3Model()
+
+	resource := definitionv1alpha1.Resource{
+		Kind: "test-pet",
+		VerbsDescription: []definitionv1alpha1.VerbsDescription{
+			{
+				Action: "create",
+				Path:   "/pet",
+				Method: "POST",
+			},
+			{
+				Action: "delete",
+				Path:   "/pet/{petId}",
+				Method: "DELETE",
+			},
+		},
+	}
+
+	gen, _, fatalError := GenerateByteSchemas(model, resource, nil)
+	if fatalError != nil {
+		t.Fatalf("fatal error: %v", fatalError)
+	}
+
+	specSchemaBytes, err := gen.OASSpecJsonSchemaGetter().Get()
+	if err != nil {
+		t.Fatalf("failed to get spec schema bytes: %v", err)
+	}
+
+	var specSchema map[string]interface{}
+	err = json.Unmarshal(specSchemaBytes, &specSchema)
+	if err != nil {
+		t.Fatalf("failed to unmarshal spec schema: %v", err)
+	}
+
+	properties, ok := specSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("spec schema does not contain properties map")
+	}
+
+	// Check for authenticationRefs
+	authRefs, ok := properties["authenticationRefs"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected 'authenticationRefs' property")
+	}
+
+	authProps, ok := authRefs["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("authenticationRefs does not have properties")
+	}
+
+	if _, ok := authProps["basicAuthRef"]; !ok {
+		t.Error("expected 'basicAuthRef' in authenticationRefs")
+	}
+
+	// Check for parameters from the delete verb
+	if _, ok := properties["petId"]; !ok {
+		t.Error("expected path parameter 'petId' not found")
+	}
+	if _, ok := properties["api_key"]; !ok {
+		t.Error("expected header parameter 'api_key' not found")
 	}
 }
 
