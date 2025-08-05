@@ -52,3 +52,5 @@ cover.out
 /.vendor-new
 .tool-versions
 **/*.xpkg
+
+coverage.txt
