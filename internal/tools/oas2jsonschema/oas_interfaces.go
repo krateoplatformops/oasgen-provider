@@ -99,3 +99,12 @@ type Operation interface {
 	GetRequestBody() RequestBodyInfo
 	GetResponses() map[int]ResponseInfo
 }
+
+// GenerationResult holds the output of the schema generation process.
+type GenerationResult struct {
+	SpecSchema   []byte
+	StatusSchema []byte
+	AuthSchemas  map[string][]byte
+	Warnings     []error
+}
+
