@@ -1,0 +1,1 @@
+package oas2jsonschema

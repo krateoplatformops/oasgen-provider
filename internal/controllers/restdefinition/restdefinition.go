@@ -39,7 +39,6 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deploy"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/filegetter"
-	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/kube"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/oas2jsonschema"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/objects"
@@ -95,6 +94,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 			log:      log,
 			recorder: recorder,
 			disc:     discovery,
+			parser:   oas2jsonschema.NewLibOASParser(),
 		}),
 		reconciler.WithTimeout(reconcileTimeout),
 		reconciler.WithCreationGracePeriod(reconcileGracePeriod),
@@ -114,6 +114,7 @@ type connector struct {
 	log      logging.Logger
 	recorder record.EventRecorder
 	disc     discovery.DiscoveryInterface
+	parser   oas2jsonschema.Parser
 }
 
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconciler.ExternalClient, error) {
@@ -131,21 +132,22 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 	}
 
 	return &external{
-		kube: c.kube,
-		log:  &log,
-		rec:  c.recorder,
-		disc: c.disc,
+		kube:   c.kube,
+		log:    &log,
+		rec:    c.recorder,
+		disc:   c.disc,
+		parser: c.parser,
 	}, nil
 }
 
 // An ExternalClient observes, then either creates, updates, or deletes an
 // external resource to ensure it reflects the managed resource's desired state.
 type external struct {
-	kube client.Client
-	log  logging.Logger
-	// doc  *libopenapi.DocumentModel[v3.Document]
-	rec  record.EventRecorder
-	disc discovery.DiscoveryInterface
+	kube   client.Client
+	log    logging.Logger
+	rec    record.EventRecorder
+	disc   discovery.DiscoveryInterface
+	parser oas2jsonschema.Parser
 }
 
 func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler.ExternalObservation, error) {
@@ -166,14 +168,11 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 
 		if len(cr.Status.Authentications) == 0 {
 			e.log.Debug("No authentications found in status, trying to get from document")
-			doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+			doc, err := getDocumentModelFromCRnew(ctx, e.kube, cr)
 			if err != nil {
 				return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
 			}
-			authenticationGVRs, err = getAuthenticationGVRs(doc, cr)
-			if err != nil {
-				return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
-			}
+			authenticationGVRs = getAuthenticationGVRs(doc, cr)
 		}
 
 		for _, auth := range cr.Status.Authentications {
@@ -192,14 +191,11 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, e.Delete(ctx, cr)
 	}
 
-	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+	doc, err := e.getDocumentModelFromCRnew(ctx, cr)
 	if err != nil {
 		return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
 	}
-	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
-	if err != nil {
-		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
-	}
+	authenticationGVRs := getAuthenticationGVRs(doc, cr)
 
 	gvr := plurals.ToGroupVersionResource(gvk)
 	e.log.Info("Observing RestDefinition", "gvr", gvr.String())
@@ -305,10 +301,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, nil
 	}
 
-	authenticationGVKs, err := getAuthenticationGVKs(doc, cr)
-	if err != nil {
-		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
-	}
+	authenticationGVKs := getAuthenticationGVKs(doc, cr)
 	for _, gvk := range authenticationGVKs {
 		if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
 			Kind:       gvk.Kind,
@@ -344,11 +337,6 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
-	if err != nil {
-		return fmt.Errorf("getting document model from CR: %w", err)
-	}
-
 	e.log.Info("Creating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
 	gvk := schema.GroupVersionKind{
@@ -364,12 +352,21 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !crdOk {
-		gen, errors, err := oas2jsonschema.GenerateByteSchemas(doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
+		doc, err := e.getDocumentModelFromCRnew(ctx, cr)
 		if err != nil {
-			return fmt.Errorf("generating byte schemas: %w", err)
+			return fmt.Errorf("getting document model from CR: %w", err)
 		}
-		for _, er := range errors {
-			e.log.Debug("Generating Byte Schemas", "Error:", er)
+
+		generator := oas2jsonschema.NewOASSchemaGenerator(doc, oas2jsonschema.DefaultGeneratorConfig())
+		result, err := generator.Generate(cr.Spec.Resource, cr.Spec.Resource.Identifiers)
+		if err != nil {
+			return fmt.Errorf("generating schemas: %w", err)
+		}
+		for _, er := range result.ValidationWarnings {
+			e.log.Debug("Schema validation warning", "Error", er)
+		}
+		for _, er := range result.GenerationWarnings {
+			e.log.Debug("Schema generation warning", "Error", er)
 		}
 
 		resource := crdgen.Generate(ctx, crdgen.Options{
@@ -377,8 +374,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			WorkDir:                fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
 			GVK:                    gvk,
 			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restresources", "rr"},
-			SpecJsonSchemaGetter:   gen.OASSpecJsonSchemaGetter(),
-			StatusJsonSchemaGetter: gen.OASStatusJsonSchemaGetter(),
+			SpecJsonSchemaGetter:   result.OASSpecJsonSchemaGetter(),
+			StatusJsonSchemaGetter: result.OASStatusJsonSchemaGetter(),
 		})
 		if resource.Err != nil {
 			return fmt.Errorf("generating CRD: %w", resource.Err)
@@ -394,11 +391,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-			authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
-			if err != nil {
-				return fmt.Errorf("generating Auth Schema Name: %w", err)
-			}
+		for authSchemaName := range result.AuthCRDSchemas {
 			gvk := schema.GroupVersionKind{
 				Group:   cr.Spec.ResourceGroup,
 				Version: resourceVersion,
@@ -434,7 +427,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 				WorkDir:                fmt.Sprintf("gen-crds/%s", authSchemaName),
 				GVK:                    gvk,
 				Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restauths", "ra"},
-				SpecJsonSchemaGetter:   gen.OASAuthJsonSchemaGetter(authSchemaName),
+				SpecJsonSchemaGetter:   result.OASAuthCRDSchemaGetter(authSchemaName),
 				StatusJsonSchemaGetter: oas2jsonschema.StaticJsonSchemaGetter(),
 			})
 
@@ -482,10 +475,12 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 
 		return nil
 	}
-	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
+
+	doc, err := e.getDocumentModelFromCRnew(ctx, cr)
 	if err != nil {
-		return fmt.Errorf("getting authentication GVRs: %w", err)
+		return fmt.Errorf("getting document model from CR: %w", err)
 	}
+	authenticationGVRs := getAuthenticationGVRs(doc, cr)
 	opts := deploy.DeployOptions{
 		AuthenticationGVRs:     authenticationGVRs,
 		RBACFolderPath:         RDCrbacConfigFolder,
@@ -534,7 +529,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+	doc, err := getDocumentModelFromCRnew(ctx, e.kube, cr)
 	if err != nil {
 		return fmt.Errorf("getting document model from CR: %w", err)
 	}
@@ -548,10 +543,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	}
 	gvr := plurals.ToGroupVersionResource(gvk)
 
-	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
-	if err != nil {
-		return fmt.Errorf("getting authentication GVRs: %w", err)
-	}
+	authenticationGVRs := getAuthenticationGVRs(doc, cr)
 
 	opts := deploy.DeployOptions{
 		AuthenticationGVRs:     authenticationGVRs,
@@ -607,14 +599,11 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 
 	if len(cr.Status.Authentications) == 0 {
 		e.log.Debug("No authentications found in status, trying to get from document")
-		doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
+		doc, err := getDocumentModelFromCRnew(ctx, e.kube, cr)
 		if err != nil {
 			return fmt.Errorf("getting document model from CR: %w", err)
 		}
-		authenticationGVRs, err = getAuthenticationGVRs(doc, cr)
-		if err != nil {
-			return fmt.Errorf("getting authentication GVRs: %w", err)
-		}
+		authenticationGVRs = getAuthenticationGVRs(doc, cr)
 	}
 
 	for _, auth := range cr.Status.Authentications {
@@ -690,41 +679,32 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	return err
 }
 
-func getAuthenticationGVRs(doc *libopenapi.DocumentModel[v3.Document], cr *definitionv1alpha1.RestDefinition) ([]schema.GroupVersionResource, error) {
+func getAuthenticationGVRs(doc oas2jsonschema.OASDocument, cr *definitionv1alpha1.RestDefinition) []schema.GroupVersionResource {
 	var authenticationGVRs []schema.GroupVersionResource
-	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
-		if err != nil {
-			return nil, fmt.Errorf("generating Auth Schema Name: %w", err)
-		}
+	for _, scheme := range doc.SecuritySchemes() {
 		gvk := schema.GroupVersionKind{
 			Group:   cr.Spec.ResourceGroup,
 			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(authSchemaName),
+			Kind:    text.CapitaliseFirstLetter(scheme.Name),
 		}
-
 		authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
 	}
-	return authenticationGVRs, nil
+	return authenticationGVRs
 }
 
-func getAuthenticationGVKs(doc *libopenapi.DocumentModel[v3.Document], cr *definitionv1alpha1.RestDefinition) ([]schema.GroupVersionKind, error) {
+func getAuthenticationGVKs(doc oas2jsonschema.OASDocument, cr *definitionv1alpha1.RestDefinition) []schema.GroupVersionKind {
 	var authenticationGVKs []schema.GroupVersionKind
-	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
-		if err != nil {
-			return nil, fmt.Errorf("generating Auth Schema Name: %w", err)
-		}
+	for _, scheme := range doc.SecuritySchemes() {
 		gvk := schema.GroupVersionKind{
 			Group:   cr.Spec.ResourceGroup,
 			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(authSchemaName),
+			Kind:    text.CapitaliseFirstLetter(scheme.Name),
 		}
-
 		authenticationGVKs = append(authenticationGVKs, gvk)
 	}
-	return authenticationGVKs, nil
+	return authenticationGVKs
 }
+
 func manageFinalizers(ctx context.Context, kubecli client.Client, disc discovery.DiscoveryInterface, authenticationGVRs []schema.GroupVersionResource, cr *definitionv1alpha1.RestDefinition, log func(msg string, keysAndValues ...any)) error {
 	var n int
 	var finalizer string
@@ -823,4 +803,58 @@ func getDocumentModelFromCR(ctx context.Context, kube client.Client, cr *definit
 		return nil, fmt.Errorf("failed to resolve model references: %w", errors.Join(errs...))
 	}
 	return doc, nil
+}
+
+func (e *external) getDocumentModelFromCRnew(ctx context.Context, cr *definitionv1alpha1.RestDefinition) (oas2jsonschema.OASDocument, error) {
+	swaggerPath := cr.Spec.OASPath
+	basePath := "/tmp/swaggergen-provider"
+	err := os.MkdirAll(basePath, os.ModePerm)
+	defer os.RemoveAll(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	filegetter := &filegetter.Filegetter{
+		Client:     http.DefaultClient,
+		KubeClient: e.kube,
+	}
+
+	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file: %w", err)
+	}
+
+	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	return e.parser.Parse(contents)
+}
+
+func getDocumentModelFromCRnew(ctx context.Context, kube client.Client, cr *definitionv1alpha1.RestDefinition) (oas2jsonschema.OASDocument, error) {
+	swaggerPath := cr.Spec.OASPath
+	basePath := "/tmp/swaggergen-provider"
+	err := os.MkdirAll(basePath, os.ModePerm)
+	defer os.RemoveAll(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	filegetter := &filegetter.Filegetter{
+		Client:     http.DefaultClient,
+		KubeClient: kube,
+	}
+
+	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file: %w", err)
+	}
+
+	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	return oas2jsonschema.Parse(contents)
 }

@@ -481,14 +481,14 @@ func TestExtractSchemaForAction(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name          string
-		config        *GeneratorConfig
-		verbs         []definitionv1alpha1.VerbsDescription
-		targetAction  string
-		expectErr     bool
-		expectNil     bool
-		expectArray   bool // True if we expect the .Items schema from a list
-		expectedError string
+		name           string
+		config         *GeneratorConfig
+		verbs          []definitionv1alpha1.VerbsDescription
+		targetAction   string
+		expectErr      bool
+		expectNil      bool
+		expectArray    bool // True if we expect the .Items schema from a list
+		expectedError  string
 		expectedSchema *Schema
 	}{
 		{
@@ -497,8 +497,8 @@ func TestExtractSchemaForAction(t *testing.T) {
 			verbs: []definitionv1alpha1.VerbsDescription{
 				{Action: ActionGet, Path: "/items", Method: "get"},
 			},
-			targetAction: ActionGet,
-			expectNil:    false,
+			targetAction:   ActionGet,
+			expectNil:      false,
 			expectedSchema: itemSchema,
 		},
 		{
@@ -507,9 +507,9 @@ func TestExtractSchemaForAction(t *testing.T) {
 			verbs: []definitionv1alpha1.VerbsDescription{
 				{Action: ActionFindBy, Path: "/items/search", Method: "get"},
 			},
-			targetAction: ActionFindBy,
-			expectNil:    false,
-			expectArray:  true,
+			targetAction:   ActionFindBy,
+			expectNil:      false,
+			expectArray:    true,
 			expectedSchema: itemSchema,
 		},
 		{
@@ -543,8 +543,8 @@ func TestExtractSchemaForAction(t *testing.T) {
 			verbs: []definitionv1alpha1.VerbsDescription{
 				{Action: ActionGet, Path: "/items/alt", Method: "get"},
 			},
-			targetAction: ActionGet,
-			expectNil:    false,
+			targetAction:   ActionGet,
+			expectNil:      false,
 			expectedSchema: altSchema,
 		},
 	}
@@ -619,7 +619,6 @@ func TestDetermineBaseAction(t *testing.T) {
 	}
 }
 
-// TestCompareSchemas_NilCases
 func TestCompareSchemas_NilCases(t *testing.T) {
 	t.Run("should return no error if both schemas are nil", func(t *testing.T) {
 		errs := compareSchemas(".", nil, nil)
@@ -693,4 +692,116 @@ func TestCompareSchemas_ArrayCases(t *testing.T) {
 		assert.Equal(t, CodeMissingArrayItems, errs[0].(SchemaValidationError).Code)
 		assert.Contains(t, errs[0].Error(), "first schema has no items for array")
 	})
+}
+
+func TestValidateSchemas_Complex(t *testing.T) {
+	// Define a complex, nested schema to serve as the base
+	complexSchemaBase := &Schema{
+		Type: []string{"object"},
+		Properties: []Property{
+			{Name: "id", Schema: &Schema{Type: []string{"integer"}}},
+			{Name: "status", Schema: &Schema{Type: []string{"string"}}},
+			{Name: "user", Schema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+					{Name: "profile", Schema: &Schema{
+						Type: []string{"object"},
+						Properties: []Property{
+							{Name: "email", Schema: &Schema{Type: []string{"string"}}},
+						},
+					}},
+				},
+			}},
+			{Name: "tags", Schema: &Schema{
+				Type: []string{"array"},
+				Items: &Schema{
+					Type: []string{"object"},
+					Properties: []Property{
+						{Name: "key", Schema: &Schema{Type: []string{"string"}}},
+						{Name: "value", Schema: &Schema{Type: []string{"string"}}},
+					},
+				},
+			}},
+		},
+	}
+
+	// Define a second schema with multiple, deeply nested errors
+	complexSchemaWithErrors := &Schema{
+		Type: []string{"object"},
+		Properties: []Property{
+			{Name: "id", Schema: &Schema{Type: []string{"integer"}}},
+			{Name: "status", Schema: &Schema{Type: []string{"boolean"}}}, // Error 1: Mismatch at root
+			{Name: "user", Schema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+					{Name: "profile", Schema: &Schema{
+						Type: []string{"object"},
+						Properties: []Property{
+							{Name: "email", Schema: &Schema{Type: []string{"integer"}}}, // Error 2: Mismatch in nested object
+						},
+					}},
+				},
+			}},
+			{Name: "tags", Schema: &Schema{
+				Type: []string{"array"},
+				Items: &Schema{
+					Type: []string{"object"},
+					Properties: []Property{
+						{Name: "key", Schema: &Schema{Type: []string{"string"}}},
+						{Name: "value", Schema: &Schema{Type: []string{"boolean"}}}, // Error 3: Mismatch in array of objects
+					},
+				},
+			}},
+		},
+	}
+
+	doc := &mockOASDocument{
+		Paths: map[string]*mockPathItem{
+			"/complex": {
+				Ops: map[string]Operation{
+					"get": &mockOperation{
+						Responses: map[int]ResponseInfo{200: {Content: map[string]*Schema{"application/json": complexSchemaBase}}},
+					},
+					"post": &mockOperation{
+						Responses: map[int]ResponseInfo{201: {Content: map[string]*Schema{"application/json": complexSchemaWithErrors}}},
+					},
+				},
+			},
+		},
+	}
+
+	verbs := []definitionv1alpha1.VerbsDescription{
+		{Action: ActionGet, Path: "/complex", Method: "get"},
+		{Action: ActionCreate, Path: "/complex", Method: "post"},
+	}
+
+	// Act
+	errs := validateSchemas(doc, verbs, DefaultGeneratorConfig())
+
+	// Assert
+	assert.NotEmpty(t, errs, "Expected validation errors, but got none")
+	assert.Len(t, errs, 3, "Expected exactly 3 validation errors")
+
+	// Check for specific errors
+	expectedErrors := map[string]ValidationCode{
+		"status":        CodeTypeMismatch,
+		"user.profile.email": CodeTypeMismatch,
+		"tags.value":    CodeTypeMismatch,
+	}
+
+	foundErrors := make(map[string]bool)
+	for _, err := range errs {
+		validationErr, ok := err.(SchemaValidationError)
+		assert.True(t, ok, "Error is not of type SchemaValidationError")
+
+		for path, code := range expectedErrors {
+			if validationErr.Path == path && validationErr.Code == code {
+				foundErrors[path] = true
+			}
+		}
+	}
+
+	assert.Len(t, foundErrors, 3, "Did not find all expected errors")
 }

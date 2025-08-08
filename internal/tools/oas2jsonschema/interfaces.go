@@ -1,5 +1,10 @@
 package oas2jsonschema
 
+// Parser defines the interface for parsing an OpenAPI specification.
+type Parser interface {
+	Parse(content []byte) (OASDocument, error)
+}
+
 // OASDocument defines the contract for accessing an OpenAPI specification.
 type OASDocument interface {
 	FindPath(path string) (PathItem, bool)

@@ -1,6 +1,7 @@
 package oas2jsonschema
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/pb33f/libopenapi"
@@ -8,6 +9,59 @@ import (
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 )
+
+// --- Parser Implementation ---
+
+type libOASParser struct{}
+
+// NewLibOASParser creates a new parser that uses the libopenapi library.
+func NewLibOASParser() Parser {
+	return &libOASParser{}
+}
+
+// Parse takes raw OpenAPI specification content and returns a document
+// that conforms to the OASDocument interface.
+func (p *libOASParser) Parse(content []byte) (OASDocument, error) {
+	d, err := libopenapi.NewDocument(content)
+	if err != nil {
+		return nil, ParserError{
+			Code:    CodeDocumentCreationError,
+			Message: "failed to create new libopenapi document",
+			Err:     err,
+		}
+	}
+
+	doc, modelErrors := d.BuildV3Model()
+	if len(modelErrors) > 0 {
+		return nil, ParserError{
+			Code:    CodeModelBuildError,
+			Message: "failed to build V3 model",
+			Err:     errors.Join(modelErrors...),
+		}
+	}
+	if doc == nil {
+		return nil, ParserError{
+			Code:    CodeModelBuildError,
+			Message: "resulting document was nil after building model",
+		}
+	}
+
+	// Resolve model references
+	resolvingErrors := doc.Index.GetResolver().Resolve()
+	if len(resolvingErrors) > 0 {
+		var errs []error
+		for i := range resolvingErrors {
+			errs = append(errs, resolvingErrors[i].ErrorRef)
+		}
+		return nil, ParserError{
+			Code:    CodeModelResolutionError,
+			Message: "failed to resolve model references",
+			Err:     errors.Join(errs...),
+		}
+	}
+
+	return NewLibOASDocumentAdapter(doc), nil
+}
 
 // --- Adapter Implementation ---
 
