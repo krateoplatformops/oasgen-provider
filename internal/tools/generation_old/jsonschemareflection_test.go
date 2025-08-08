@@ -1,4 +1,4 @@
-package generation_test
+package generation_test_old
 
 import (
 	"reflect"

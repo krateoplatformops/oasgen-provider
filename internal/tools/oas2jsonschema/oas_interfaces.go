@@ -1,16 +1,22 @@
 package oas2jsonschema
 
+import (
+	rtv1 "github.com/krateoplatformops/provider-runtime/apis/common/v1"
+)
+
 // GeneratorConfig holds configuration options for the schema generator.
 type GeneratorConfig struct {
-	AcceptedMIMETypes []string
-	SuccessCodes      []int
+	AcceptedMIMETypes        []string
+	SuccessCodes             []int
+	IncludeIdentifiersInSpec bool
 }
 
 // DefaultGeneratorConfig returns a new GeneratorConfig with default values.
 func DefaultGeneratorConfig() *GeneratorConfig {
 	return &GeneratorConfig{
-		AcceptedMIMETypes: []string{"application/json"},
-		SuccessCodes:      []int{200, 201},
+		AcceptedMIMETypes:        []string{"application/json"},
+		SuccessCodes:             []int{200, 201},
+		IncludeIdentifiersInSpec: false,
 	}
 }
 
@@ -49,7 +55,7 @@ const (
 // SecuritySchemeInfo is a library-agnostic representation of a security scheme.
 // It mirrors the structure of an OpenAPI security scheme.
 // In this Go code, it is a "sum type" that captures different security scheme types.
-// The 'Type' field is the high-level category (e.g., 'http', 'apiKey').
+// The 'Type' field is the high-level category (e.g., 'http', 'apiKey', 'oauth2', 'openIdConnect').
 // The 'Scheme' field is a sub-detail used only when Type is 'http' (e.g., 'basic', 'bearer').
 // Other fields like 'In' and 'ParamName' are used for other types (e.g., 'apiKey').
 type SecuritySchemeInfo struct {
@@ -104,7 +110,15 @@ type Operation interface {
 type GenerationResult struct {
 	SpecSchema   []byte
 	StatusSchema []byte
-	AuthSchemas  map[string][]byte
+	AuthCRDSchemas  map[string][]byte
 	Warnings     []error
 }
 
+type BasicAuth struct {
+	Username    string                 `json:"username"`
+	PasswordRef rtv1.SecretKeySelector `json:"passwordRef"`
+}
+
+type BearerAuth struct {
+	TokenRef rtv1.SecretKeySelector `json:"tokenRef"`
+}

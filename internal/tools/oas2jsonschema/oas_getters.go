@@ -36,23 +36,23 @@ func (a *oasStatusJsonSchemaGetter) Get() ([]byte, error) {
 	return a.result.StatusSchema, nil
 }
 
-// OASAuthJsonSchemaGetter returns a JsonSchemaGetter for a specific auth schema.
-func (r *GenerationResult) OASAuthJsonSchemaGetter(secSchemaName string) crdgen.JsonSchemaGetter {
-	return &oasAuthJsonSchemaGetter{
+// OASAuthCRDSchemaGetter returns a JsonSchemaGetter for a specific auth schema.
+func (r *GenerationResult) OASAuthCRDSchemaGetter(secSchemaName string) crdgen.JsonSchemaGetter {
+	return &oasAuthCRDSchemaGetter{
 		result:        r,
 		secSchemaName: secSchemaName,
 	}
 }
 
-var _ crdgen.JsonSchemaGetter = (*oasAuthJsonSchemaGetter)(nil)
+var _ crdgen.JsonSchemaGetter = (*oasAuthCRDSchemaGetter)(nil)
 
-type oasAuthJsonSchemaGetter struct {
+type oasAuthCRDSchemaGetter struct {
 	result        *GenerationResult
 	secSchemaName string
 }
 
-func (a *oasAuthJsonSchemaGetter) Get() ([]byte, error) {
-	return a.result.AuthSchemas[a.secSchemaName], nil
+func (a *oasAuthCRDSchemaGetter) Get() ([]byte, error) {
+	return a.result.AuthCRDSchemas[a.secSchemaName], nil
 }
 
 // StaticJsonSchemaGetter returns a getter that returns nil.

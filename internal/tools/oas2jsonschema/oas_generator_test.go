@@ -296,7 +296,7 @@ func TestGenerateStatusSchema(t *testing.T) {
 								200: {
 									Content: map[string]*Schema{
 										"application/json": {
-											Type:  []string{"array"},
+											Type: []string{"array"},
 											Items: &Schema{ // findby returns an array of items
 												Type: []string{"object"},
 												Properties: []Property{
@@ -366,6 +366,159 @@ func TestGenerateStatusSchema(t *testing.T) {
     }`
 		if !strings.Contains(schemaStr, expected) {
 			t.Errorf("Expected non_existent_field to default to string, but it didn't. Got:\n%s", schemaStr)
+		}
+	})
+}
+
+func TestPrepareSchemaForCRD(t *testing.T) {
+	t.Run("should correctly merge properties from allOf", func(t *testing.T) {
+		schema := &Schema{
+			AllOf: []*Schema{
+				{
+					Properties: []Property{
+						{Name: "prop1", Schema: &Schema{Type: []string{"string"}}},
+					},
+				},
+				{
+					Properties: []Property{
+						{Name: "prop2", Schema: &Schema{Type: []string{"number"}}},
+					},
+				},
+			},
+		}
+
+		err := prepareSchemaForCRD(schema)
+
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		if len(schema.Properties) != 2 {
+			t.Fatalf("Expected 2 properties, but got %d", len(schema.Properties))
+		}
+
+		prop1Found := false
+		prop2Found := false
+		for _, p := range schema.Properties {
+			if p.Name == "prop1" {
+				prop1Found = true
+			}
+			if p.Name == "prop2" {
+				prop2Found = true
+				if p.Schema.Type[0] != "integer" {
+					t.Errorf("Expected prop2 to be of type 'integer', but got '%s'", p.Schema.Type[0])
+				}
+			}
+		}
+
+		if !prop1Found || !prop2Found {
+			t.Errorf("Expected to find both prop1 and prop2, but prop1Found=%v, prop2Found=%v", prop1Found, prop2Found)
+		}
+	})
+
+	t.Run("should recursively prepare schemas in arrays", func(t *testing.T) {
+		schema := &Schema{
+			Type: []string{"array"},
+			Items: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "nestedProp", Schema: &Schema{Type: []string{"number"}}},
+				},
+			},
+		}
+
+		err := prepareSchemaForCRD(schema)
+
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		if schema.Items.Properties[0].Schema.Type[0] != "integer" {
+			t.Errorf("Expected nestedProp to be of type 'integer', but got '%s'", schema.Items.Properties[0].Schema.Type[0])
+		}
+	})
+
+	t.Run("should handle empty schema", func(t *testing.T) {
+		schema := &Schema{}
+
+		err := prepareSchemaForCRD(schema)
+
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+	})
+
+	t.Run("should handle nil schema", func(t *testing.T) {
+		err := prepareSchemaForCRD(nil)
+
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+	})
+}
+
+func TestGenerateAuthCRDSchemas(t *testing.T) {
+	t.Run("should generate correct auth schemas and refs", func(t *testing.T) {
+		// Arrange
+		mockDoc := &mockOASDocument{
+			securitySchemes: []SecuritySchemeInfo{
+				{Name: "BasicAuth", Type: SchemeTypeHTTP, Scheme: "basic"},
+				{Name: "BearerAuth", Type: SchemeTypeHTTP, Scheme: "bearer"},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+
+		// Empty spec schema to add authentication refs
+		specSchema := &Schema{}
+
+		authCRDSchemas, err := generator.generateAuthCRDSchemas()
+		if err != nil {
+			t.Fatalf("Expected no error from generateAuthCRDSchemas, but got: %v", err)
+		}
+		addAuthenticationRefs(specSchema, authCRDSchemas)
+
+		if len(authCRDSchemas) != 2 {
+			t.Fatalf("Expected 2 auth schemas, but got %d", len(authCRDSchemas))
+		}
+
+		basicAuthSchema, ok := authCRDSchemas["BasicAuth"]
+		if !ok {
+			t.Fatal("Expected to find BasicAuth schema")
+		}
+		if !strings.Contains(string(basicAuthSchema), `"username"`) {
+			t.Error("BasicAuth schema should contain 'username' property")
+		}
+
+		bearerAuthSchema, ok := authCRDSchemas["BearerAuth"]
+		if !ok {
+			t.Fatal("Expected to find BearerAuth schema")
+		}
+		if !strings.Contains(string(bearerAuthSchema), `"tokenRef"`) {
+			t.Error("BearerAuth schema should contain 'tokenRef' property")
+		}
+
+		if len(specSchema.Properties) != 1 || specSchema.Properties[0].Name != "authenticationRefs" {
+			t.Fatal("specSchema should have one property named 'authenticationRefs'")
+		}
+
+		authRefs := specSchema.Properties[0].Schema
+		if len(authRefs.Properties) != 2 {
+			t.Fatalf("Expected 2 auth refs, but got %d", len(authRefs.Properties))
+		}
+
+		basicRefFound := false
+		bearerRefFound := false
+		for _, p := range authRefs.Properties {
+			if p.Name == "basicAuthRef" {
+				basicRefFound = true
+			}
+			if p.Name == "bearerAuthRef" {
+				bearerRefFound = true
+			}
+		}
+
+		if !basicRefFound || !bearerRefFound {
+			t.Errorf("Expected to find both basicAuthRef and bearerAuthRef, but basicRefFound=%v, bearerRefFound=%v", basicRefFound, bearerRefFound)
 		}
 	})
 }

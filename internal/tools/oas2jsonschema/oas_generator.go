@@ -3,6 +3,8 @@ package oas2jsonschema
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 
 	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
@@ -39,16 +41,16 @@ func (g *OASSchemaGenerator) Generate(resource definitionv1alpha1.Resource, iden
 	}
 	allWarnings = append(allWarnings, warnings...)
 
-	authSchemas, err := g.generateSecuritySchemas()
+	authCRDSchemas, err := g.generateAuthCRDSchemas()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate security schemas: %w", err)
+		return nil, fmt.Errorf("failed to generate auth CRD schemas: %w", err)
 	}
 
 	return &GenerationResult{
-		SpecSchema:   specSchema,
-		StatusSchema: statusSchema,
-		AuthSchemas:  authSchemas,
-		Warnings:     allWarnings,
+		SpecSchema:     specSchema,
+		StatusSchema:   statusSchema,
+		AuthCRDSchemas: authCRDSchemas,
+		Warnings:       allWarnings,
 	}, nil
 }
 
@@ -61,12 +63,12 @@ func (g *OASSchemaGenerator) generateSpecSchema(resource definitionv1alpha1.Reso
 		return nil, nil, fmt.Errorf("could not determine base schema for spec: %w", err)
 	}
 
-	secSchemas, err := g.generateSecuritySchemas()
+	authCRDSchemas, err := g.generateAuthCRDSchemas()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not generate security schemas: %w", err)
+		return nil, nil, fmt.Errorf("could not generate auth CRD schemas: %w", err)
 	}
-	if len(secSchemas) > 0 {
-		addAuthenticationRefs(baseSchema, secSchemas)
+	if len(authCRDSchemas) > 0 {
+		addAuthenticationRefs(baseSchema, authCRDSchemas)
 	}
 
 	warnings = append(warnings, g.addParametersToSpec(baseSchema, resource)...)
@@ -116,6 +118,7 @@ func (g *OASSchemaGenerator) generateStatusSchema(resource definitionv1alpha1.Re
 	return byteSchema, warnings, nil
 }
 
+// getBaseSchemaForSpec returns the base schema for the spec, which is the request body of the 'create' action.
 func (g *OASSchemaGenerator) getBaseSchemaForSpec(resource definitionv1alpha1.Resource) (*Schema, error) {
 	for _, verb := range resource.VerbsDescription {
 		if verb.Action != ActionCreate {
@@ -145,15 +148,10 @@ func (g *OASSchemaGenerator) getBaseSchemaForSpec(resource definitionv1alpha1.Re
 	return &Schema{}, nil
 }
 
-func (g *OASSchemaGenerator) generateSecuritySchemas() (map[string][]byte, error) {
+// generateAuthCRDSchemas generates the JSON schemas for the authentication CRDs.
+func (g *OASSchemaGenerator) generateAuthCRDSchemas() (map[string][]byte, error) {
 	secByteSchema := make(map[string][]byte)
 	for _, secScheme := range g.doc.SecuritySchemes() {
-		authSchemaName, err := g.generateAuthSchemaName(secScheme)
-		if err != nil {
-			// Skip unsupported security schemes
-			continue
-		}
-
 		authSchema, err := g.generateAuthSchema(secScheme)
 		if err != nil {
 			// Skip unsupported security schemes
@@ -164,58 +162,28 @@ func (g *OASSchemaGenerator) generateSecuritySchemas() (map[string][]byte, error
 		if err != nil {
 			return nil, fmt.Errorf("generating auth schema for '%s': %w", secScheme.Name, err)
 		}
-		secByteSchema[authSchemaName] = byteSchema
+		secByteSchema[secScheme.Name] = byteSchema
 	}
 	return secByteSchema, nil
 }
 
-func (g *OASSchemaGenerator) generateAuthSchemaName(info SecuritySchemeInfo) (string, error) {
-	if info.Type == SchemeTypeHTTP && info.Scheme == "basic" {
-		return "BasicAuth", nil
-	}
-	if info.Type == SchemeTypeHTTP && info.Scheme == "bearer" {
-		return "BearerAuth", nil
-	}
-	return "", fmt.Errorf("unsupported security scheme type: %s", info.Type)
-}
-
+// generateAuthSchema generates the JSON schema for a given security scheme.
 func (g *OASSchemaGenerator) generateAuthSchema(info SecuritySchemeInfo) (*Schema, error) {
-	secretKeySelectorSchema := &Schema{
-		Type: []string{"object"},
-		Properties: []Property{
-			{Name: "name", Schema: &Schema{Type: []string{"string"}}},
-			{Name: "key", Schema: &Schema{Type: []string{"string"}}},
-		},
-		Required: []string{"name", "key"},
-	}
-
 	if info.Type == SchemeTypeHTTP && info.Scheme == "basic" {
-		return &Schema{
-			Type: []string{"object"},
-			Properties: []Property{
-				{Name: "username", Schema: &Schema{Type: []string{"string"}}},
-				{Name: "passwordRef", Schema: secretKeySelectorSchema},
-			},
-			Required: []string{"username", "passwordRef"},
-		}, nil
+		return reflectSchema(reflect.TypeOf(BasicAuth{}))
 	}
 
 	if info.Type == SchemeTypeHTTP && info.Scheme == "bearer" {
-		return &Schema{
-			Type: []string{"object"},
-			Properties: []Property{
-				{Name: "tokenRef", Schema: secretKeySelectorSchema},
-			},
-			Required: []string{"tokenRef"},
-		}, nil
+		return reflectSchema(reflect.TypeOf(BearerAuth{}))
 	}
 
 	return nil, fmt.Errorf("unsupported security scheme type: %s", info.Type)
 }
 
-func addAuthenticationRefs(schema *Schema, secSchemas map[string][]byte) {
+// addAuthenticationRefs adds the authenticationRefs property to the schema.
+func addAuthenticationRefs(schema *Schema, authCRDSchemas map[string][]byte) {
 	var authRefsProps []Property
-	for key := range secSchemas {
+	for key := range authCRDSchemas {
 		authRefsProps = append(authRefsProps, Property{Name: fmt.Sprintf("%sRef", text.FirstToLower(key)), Schema: &Schema{Type: []string{"string"}}})
 	}
 	authRefsSchema := &Schema{
@@ -227,6 +195,7 @@ func addAuthenticationRefs(schema *Schema, secSchemas map[string][]byte) {
 	schema.Required = append(schema.Required, "authenticationRefs")
 }
 
+// addParametersToSpec adds the parameters from all verbs to the schema.
 func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, resource definitionv1alpha1.Resource) []error {
 	var warnings []error
 	for _, verb := range resource.VerbsDescription {
@@ -256,6 +225,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, resource defini
 	return warnings
 }
 
+// addIdentifiersToSpec adds the identifiers to the schema.
 func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	for _, identifier := range identifiers {
 		found := false
@@ -277,6 +247,7 @@ func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	}
 }
 
+// getBaseSchemaForStatus returns the base schema for the status, which is the response body of the 'get' or 'findby' action.
 func (g *OASSchemaGenerator) getBaseSchemaForStatus(verbs []definitionv1alpha1.VerbsDescription) (*Schema, error) {
 	actions := []string{ActionGet, ActionFindBy}
 	for _, action := range actions {
@@ -291,6 +262,7 @@ func (g *OASSchemaGenerator) getBaseSchemaForStatus(verbs []definitionv1alpha1.V
 	return nil, nil
 }
 
+// buildStatusSchema builds the status schema from the response schema and the list of status fields.
 func (g *OASSchemaGenerator) buildStatusSchema(allStatusFields []string, responseSchema *Schema) (*Schema, []error) {
 	var warnings []error
 	var props []Property
@@ -393,6 +365,7 @@ func schemaToMap(schema *Schema) (map[string]interface{}, error) {
 	return m, nil
 }
 
+// prepareSchemaForCRD recursively traverses a schema and prepares it for use in a Kubernetes CRD.
 func prepareSchemaForCRD(schema *Schema) error {
 	if schema == nil {
 		return nil
@@ -416,18 +389,81 @@ func prepareSchemaForCRD(schema *Schema) error {
 		if err := prepareSchemaForCRD(allOfSchema); err != nil {
 			return err
 		}
-		for _, prop := range allOfSchema.Properties {
-			schema.Properties = append(schema.Properties, prop)
-		}
+		schema.Properties = append(schema.Properties, allOfSchema.Properties...)
 	}
 
 	return nil
 }
 
+// convertNumberToInteger converts "number" types to "integer" types.
 func convertNumberToInteger(schema *Schema) {
 	for i, t := range schema.Type {
 		if t == "number" {
 			schema.Type[i] = "integer"
 		}
 	}
+}
+
+// reflectSchema generates a schema from a Go type using reflection.
+func reflectSchema(t reflect.Type) (*Schema, error) {
+	if t == nil {
+		return nil, nil
+	}
+
+	props, req, err := buildSchemaProperties(t)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Schema{
+		Type:       []string{"object"},
+		Properties: props,
+		Required:   req,
+	}, nil
+}
+
+// buildSchemaProperties recursively builds the properties of a schema from a Go type.
+func buildSchemaProperties(t reflect.Type) ([]Property, []string, error) {
+	var props []Property
+	var required []string
+	var inlineRequired []string
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		fieldType := field.Type
+		fieldName := field.Tag.Get("json")
+		split := strings.Split(fieldName, ",")
+		if len(split) > 1 {
+			fieldName = split[0]
+		} else {
+			required = append(required, fieldName)
+		}
+
+		if fieldType.Kind() == reflect.Struct {
+			fieldProps, req, err := buildSchemaProperties(fieldType)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			if fieldName == "" {
+				props = append(props, fieldProps...)
+				inlineRequired = append(inlineRequired, req...)
+			} else {
+				props = append(props, Property{
+					Name: fieldName,
+					Schema: &Schema{
+						Type:       []string{"object"},
+						Properties: fieldProps,
+						Required:   req,
+					},
+				})
+			}
+		} else {
+			props = append(props, Property{
+				Name:   fieldName,
+				Schema: &Schema{Type: []string{fieldType.Name()}},
+			})
+		}
+	}
+	return props, append(required, inlineRequired...), nil
 }
