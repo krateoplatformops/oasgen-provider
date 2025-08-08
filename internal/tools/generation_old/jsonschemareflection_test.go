@@ -1,10 +1,10 @@
-package generation_test_old
+package generation_old
 
 import (
 	"reflect"
 	"testing"
 
-	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation_old"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +27,7 @@ func TestReflectBytes(t *testing.T) {
 		"required": ["id", "name"]
 	}`
 
-	schemaBytes, err := generation.ReflectBytes(reflect.TypeOf(TestStruct{}))
+	schemaBytes, err := generation_old.ReflectBytes(reflect.TypeOf(TestStruct{}))
 	if err != nil {
 		t.Errorf("error reflecting bytes: %v", err)
 	}

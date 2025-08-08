@@ -1,6 +1,8 @@
 package oas2jsonschema
 
 import (
+	"fmt"
+
 	rtv1 "github.com/krateoplatformops/provider-runtime/apis/common/v1"
 )
 
@@ -86,32 +88,73 @@ type ResponseInfo struct {
 	Content map[string]*Schema
 }
 
-// --- Interfaces ---
-
-// OASDocument defines the contract for accessing an OpenAPI specification.
-type OASDocument interface {
-	FindPath(path string) (PathItem, bool)
-	SecuritySchemes() []SecuritySchemeInfo
-}
-
-// PathItem defines the contract for a single API path.
-type PathItem interface {
-	GetOperations() map[string]Operation
-}
-
-// Operation defines the contract for a single API operation.
-type Operation interface {
-	GetParameters() []ParameterInfo
-	GetRequestBody() RequestBodyInfo
-	GetResponses() map[int]ResponseInfo
-}
-
 // GenerationResult holds the output of the schema generation process.
 type GenerationResult struct {
-	SpecSchema   []byte
-	StatusSchema []byte
-	AuthCRDSchemas  map[string][]byte
-	Warnings     []error
+	SpecSchema         []byte
+	StatusSchema       []byte
+	AuthCRDSchemas     map[string][]byte
+	GenerationWarnings []error
+	ValidationWarnings []error
+}
+
+// GenerationCode defines a machine-readable code for the type of generation warning.
+type GenerationCode string
+
+const (
+	// CodeDuplicateParameter indicates that a parameter is defined in multiple verbs.
+	CodeDuplicateParameter GenerationCode = "DuplicateParameter"
+	// CodePathNotFound indicates that a path specified in the RestDefinition was not found in the OpenAPI spec.
+	CodePathNotFound GenerationCode = "PathNotFound"
+	// CodeStatusFieldNotFound indicates that a status field was not found in the response schema.
+	CodeStatusFieldNotFound GenerationCode = "StatusFieldNotFound"
+	// CodeNoRootSchema indicates that no base schema could be found for the spec.
+	CodeNoRootSchema GenerationCode = "NoRootSchema"
+	// CodeNoStatusSchema indicates that no schema could be found for the status.
+	CodeNoStatusSchema GenerationCode = "NoStatusSchema"
+)
+
+// SchemaGenerationError defines a structured error for schema generation warnings.
+type SchemaGenerationError struct {
+	Path    string
+	Code    GenerationCode
+	Message string
+
+	Got      any
+	Expected any
+}
+
+func (e SchemaGenerationError) Error() string {
+	return fmt.Sprintf("generation error at %s: %s", e.Path, e.Message)
+}
+
+// ValidationCode defines a machine-readable code for the type of error.
+type ValidationCode string
+
+const (
+	// CodeMissingBaseAction indicates that no 'get' or 'findby' action was found.
+	CodeMissingBaseAction ValidationCode = "MissingBaseAction"
+	// CodeActionSchemaMissing indicates that the schema for a specific action is nil.
+	CodeActionSchemaMissing ValidationCode = "ActionSchemaMissing"
+	// CodeTypeMismatch indicates a type mismatch between two schemas.
+	CodeTypeMismatch ValidationCode = "TypeMismatch"
+	// CodePropertyMismatch indicates that one schema has properties while the other does not.
+	CodePropertyMismatch ValidationCode = "PropertyMismatch"
+	// CodeMissingArrayItems indicates that one schema has array items while the other does not.
+	CodeMissingArrayItems ValidationCode = "MissingArrayItems"
+)
+
+// SchemaValidationError defines a structured error for schema validation.
+type SchemaValidationError struct {
+	Path    string
+	Code    ValidationCode
+	Message string
+
+	Got      any
+	Expected any
+}
+
+func (e SchemaValidationError) Error() string {
+	return fmt.Sprintf("validation error at %s: %s", e.Path, e.Message)
 }
 
 type BasicAuth struct {

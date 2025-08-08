@@ -26,31 +26,34 @@ func NewOASSchemaGenerator(doc OASDocument, config *GeneratorConfig) *OASSchemaG
 
 // Generate orchestrates the full schema generation process.
 func (g *OASSchemaGenerator) Generate(resource definitionv1alpha1.Resource, identifiers []string) (*GenerationResult, error) {
-	var allWarnings []error
+	var generationWarnings []error
 
 	specSchema, warnings, err := g.generateSpecSchema(resource, identifiers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate spec schema: %w", err)
 	}
-	allWarnings = append(allWarnings, warnings...)
+	generationWarnings = append(generationWarnings, warnings...)
 
 	statusSchema, warnings, err := g.generateStatusSchema(resource, identifiers)
 	if err != nil {
 		// A failure to generate status schema is not considered a fatal error.
-		allWarnings = append(allWarnings, fmt.Errorf("failed to generate status schema: %w", err))
+		generationWarnings = append(generationWarnings, fmt.Errorf("failed to generate status schema: %w", err))
 	}
-	allWarnings = append(allWarnings, warnings...)
+	generationWarnings = append(generationWarnings, warnings...)
 
 	authCRDSchemas, err := g.generateAuthCRDSchemas()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate auth CRD schemas: %w", err)
 	}
 
+	validationWarnings := validateSchemas(g.doc, resource.VerbsDescription, g.config)
+
 	return &GenerationResult{
-		SpecSchema:     specSchema,
-		StatusSchema:   statusSchema,
-		AuthCRDSchemas: authCRDSchemas,
-		Warnings:       allWarnings,
+		SpecSchema:         specSchema,
+		StatusSchema:       statusSchema,
+		AuthCRDSchemas:     authCRDSchemas,
+		GenerationWarnings: generationWarnings,
+		ValidationWarnings: validationWarnings,
 	}, nil
 }
 
@@ -72,7 +75,9 @@ func (g *OASSchemaGenerator) generateSpecSchema(resource definitionv1alpha1.Reso
 	}
 
 	warnings = append(warnings, g.addParametersToSpec(baseSchema, resource)...)
-	addIdentifiersToSpec(baseSchema, identifiers)
+	if g.config.IncludeIdentifiersInSpec {
+		addIdentifiersToSpec(baseSchema, identifiers)
+	}
 
 	if err := prepareSchemaForCRD(baseSchema); err != nil {
 		return nil, warnings, fmt.Errorf("could not prepare spec schema for CRD: %w", err)
@@ -92,15 +97,15 @@ func (g *OASSchemaGenerator) generateStatusSchema(resource definitionv1alpha1.Re
 
 	allStatusFields := append(identifiers, resource.AdditionalStatusFields...)
 	if len(allStatusFields) == 0 {
-		return nil, []error{fmt.Errorf("no identifiers or additional status fields defined, skipping status schema generation")}, nil
+		return nil, []error{SchemaGenerationError{Code: CodeNoStatusSchema, Message: "no identifiers or additional status fields defined, skipping status schema generation"}}, nil
 	}
 
 	responseSchema, err := g.getBaseSchemaForStatus(resource.VerbsDescription)
 	if err != nil {
-		warnings = append(warnings, fmt.Errorf("schema validation warning: %w", err))
+		warnings = append(warnings, SchemaGenerationError{Message: fmt.Sprintf("schema validation warning: %v", err)})
 	}
 	if responseSchema == nil {
-		warnings = append(warnings, fmt.Errorf("could not find a GET or FINDBY response schema for status generation"))
+		warnings = append(warnings, SchemaGenerationError{Code: CodeNoStatusSchema, Message: "could not find a GET or FINDBY response schema for status generation"})
 	}
 
 	statusSchema, buildWarnings := g.buildStatusSchema(allStatusFields, responseSchema)
@@ -201,7 +206,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, resource defini
 	for _, verb := range resource.VerbsDescription {
 		path, ok := g.doc.FindPath(verb.Path)
 		if !ok {
-			warnings = append(warnings, fmt.Errorf("path '%s' in RestDefinition not found", verb.Path))
+			warnings = append(warnings, SchemaGenerationError{Code: CodePathNotFound, Message: fmt.Sprintf("path '%s' in RestDefinition not found", verb.Path)})
 			continue
 		}
 		ops := path.GetOperations()
@@ -210,7 +215,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, resource defini
 				found := false
 				for _, p := range schema.Properties {
 					if p.Name == param.Name {
-						warnings = append(warnings, fmt.Errorf("parameter '%s' already exists, skipping", param.Name))
+						warnings = append(warnings, SchemaGenerationError{Code: CodeDuplicateParameter, Message: fmt.Sprintf("parameter '%s' already exists, skipping", param.Name)})
 						found = true
 						break
 					}
@@ -278,7 +283,7 @@ func (g *OASSchemaGenerator) buildStatusSchema(allStatusFields []string, respons
 			}
 		}
 		if !found {
-			warnings = append(warnings, fmt.Errorf("status field '%s' not found in response, defaulting to string", fieldName))
+			warnings = append(warnings, SchemaGenerationError{Code: CodeStatusFieldNotFound, Message: fmt.Sprintf("status field '%s' not found in response, defaulting to string", fieldName)})
 			props = append(props, Property{Name: fieldName, Schema: &Schema{Type: []string{"string"}}})
 		}
 	}

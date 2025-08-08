@@ -124,7 +124,9 @@ func TestGenerateSpecSchema(t *testing.T) {
 				},
 			},
 		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+		config := DefaultGeneratorConfig()
+		config.IncludeIdentifiersInSpec = true
+		generator := NewOASSchemaGenerator(mockDoc, config)
 
 		// Act
 		result, _ := generator.Generate(resource, identifiers)
@@ -255,6 +257,24 @@ func TestGenerateStatusSchema(t *testing.T) {
 						},
 					},
 				},
+				"/widgets": {
+					Ops: map[string]Operation{
+						"get": &mockOperation{
+							Responses: map[int]ResponseInfo{
+								200: {
+									Content: map[string]*Schema{
+										"application/json": {
+											Type: []string{"object"},
+											Properties: []Property{
+												{Name: "id", Schema: &Schema{Type: []string{"string"}}},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		}
 		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
@@ -266,8 +286,11 @@ func TestGenerateStatusSchema(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Expected no error, but got: %v", err)
 		}
-		if len(result.Warnings) > 1 { // one warning is expected
-			t.Errorf("Expected one warning, but got: %v", result.Warnings)
+		if len(result.GenerationWarnings) > 0 {
+			t.Errorf("Expected no generation warnings, but got: %v", result.GenerationWarnings)
+		}
+		if len(result.ValidationWarnings) > 0 {
+			t.Errorf("Expected no validation warnings, but got: %v", result.ValidationWarnings)
 		}
 
 		schemaStr := string(result.StatusSchema)
@@ -353,10 +376,10 @@ func TestGenerateStatusSchema(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Expected no error, but got: %v", err)
 		}
-		if len(result.Warnings) != 2 { // One for 'id', one for 'non_existent_field'
-			t.Fatalf("Expected 2 warnings for missing fields, but got %d", len(result.Warnings))
+		if len(result.GenerationWarnings) != 2 { // One for 'id', one for 'non_existent_field'
+			t.Fatalf("Expected 2 generation warnings for missing fields, but got %d", len(result.GenerationWarnings))
 		}
-		if !strings.Contains(result.Warnings[1].Error(), "non_existent_field") {
+		if !strings.Contains(result.GenerationWarnings[1].Error(), "non_existent_field") {
 			t.Errorf("Warning message should mention 'non_existent_field'")
 		}
 
@@ -368,6 +391,7 @@ func TestGenerateStatusSchema(t *testing.T) {
 			t.Errorf("Expected non_existent_field to default to string, but it didn't. Got:\n%s", schemaStr)
 		}
 	})
+
 }
 
 func TestPrepareSchemaForCRD(t *testing.T) {
