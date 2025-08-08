@@ -14,37 +14,48 @@ const (
 	ActionUpdate = "update"
 )
 
-func validateSchemas(doc OASDocument, verbs []definitionv1alpha1.VerbsDescription, config *GeneratorConfig) []error {
-	var errors []error
-
-	availableActions := make(map[string]bool)
+func determineBaseAction(verbs []definitionv1alpha1.VerbsDescription) (string, error) {
+	hasGet := false
+	hasFindBy := false
 	for _, verb := range verbs {
-		availableActions[verb.Action] = true
+		if verb.Action == ActionGet {
+			hasGet = true
+			break // 'get' takes precedence
+		}
+		if verb.Action == ActionFindBy {
+			hasFindBy = true
+		}
 	}
 
-	baseAction := ""
-	if availableActions[ActionGet] {
-		baseAction = ActionGet
-	} else if availableActions[ActionFindBy] {
-		baseAction = ActionFindBy
+	if hasGet {
+		return ActionGet, nil
+	}
+	if hasFindBy {
+		return ActionFindBy, nil
 	}
 
-	if baseAction == "" {
-		errors = append(errors, SchemaValidationError{
-			Code:    CodeMissingBaseAction,
-			Message: "no 'get' or 'findby' action found to serve as a base for schema validation",
-		})
-		return errors
+	return "", SchemaValidationError{
+		Code:    CodeMissingBaseAction,
+		Message: "no 'get' or 'findby' action found to serve as a base for schema validation",
+	}
+}
+
+func validateSchemas(doc OASDocument, verbs []definitionv1alpha1.VerbsDescription, config *GeneratorConfig) []error {
+	baseAction, err := determineBaseAction(verbs)
+	if err != nil {
+		return []error{err}
 	}
 
-	actionsToCompare := []string{ActionCreate, ActionUpdate}
-	if baseAction == ActionGet && availableActions[ActionFindBy] {
-		actionsToCompare = append(actionsToCompare, ActionFindBy)
-	}
+	var errors []error
+	for _, verb := range verbs {
+		// Determine if the current verb is one we need to compare against the base.
+		isComparable := verb.Action == ActionCreate || verb.Action == ActionUpdate
+		if baseAction == ActionGet && verb.Action == ActionFindBy {
+			isComparable = true
+		}
 
-	for _, action := range actionsToCompare {
-		if availableActions[action] {
-			errors = append(errors, compareActionResponseSchemas(doc, verbs, action, baseAction, config)...)
+		if isComparable {
+			errors = append(errors, compareActionResponseSchemas(doc, verbs, verb.Action, baseAction, config)...)
 		}
 	}
 
@@ -55,26 +66,16 @@ func compareActionResponseSchemas(doc OASDocument, verbs []definitionv1alpha1.Ve
 	schema2, err := extractSchemaForAction(doc, verbs, action2, config)
 	if err != nil {
 		return []error{SchemaValidationError{
-			Message: fmt.Sprintf("error when calling extractSchemaForAction for action %s: %v", action2, err),
-		}}
-	}
-	if schema2 == nil {
-		return []error{SchemaValidationError{
 			Code:    CodeActionSchemaMissing,
-			Message: fmt.Sprintf("schema for action %s is nil, cannot compare", action2),
+			Message: fmt.Sprintf("could not extract base schema for action '%s': %v", action2, err),
 		}}
 	}
 
 	schema1, err := extractSchemaForAction(doc, verbs, action1, config)
 	if err != nil {
 		return []error{SchemaValidationError{
-			Message: fmt.Sprintf("error when calling extractSchemaForAction for action %s: %v", action1, err),
-		}}
-	}
-	if schema1 == nil {
-		return []error{SchemaValidationError{
 			Code:    CodeActionSchemaMissing,
-			Message: fmt.Sprintf("schema for action %s is nil, cannot compare", action1),
+			Message: fmt.Sprintf("could not extract schema for action '%s' to compare: %v", action1, err),
 		}}
 	}
 
@@ -131,6 +132,18 @@ func compareSchemas(path string, schema1, schema2 *Schema) []error {
 		}
 
 		currentPath := buildPath(path, prop1.Name)
+
+		if prop1.Schema == nil || prop2.Schema == nil {
+			if prop1.Schema != prop2.Schema { // One is nil, the other is not
+				errors = append(errors, SchemaValidationError{
+					Path:    currentPath,
+					Code:    CodePropertyMismatch,
+					Message: fmt.Sprintf("schema for property '%s' is nil in one definition but not the other", currentPath),
+				})
+			}
+			continue
+		}
+
 		if !areTypesCompatible(prop1.Schema.Type, prop2.Schema.Type) {
 			errors = append(errors, SchemaValidationError{
 				Path:     currentPath,
@@ -184,60 +197,41 @@ func getPrimaryType(types []string) string {
 }
 
 // areTypesCompatible checks if two slices of types are compatible based on their primary non-null type.
-// The compatibility rules are designed to be lenient but safe for CRD generation:
-//  1. If both have a primary type (e.g., "string", "object"), they must be identical.
-//  2. If one schema defines a type (e.g., ["string", "null"]) and the other is just ["null"] or empty,
-//     they are considered compatible. This handles cases where a field is optional in one response but not another.
-//  3. If both are effectively "null" or empty, they are compatible.
+// The compatibility rules are:
+// 1. If both have a primary type (e.g., "string", "object"), they must be identical.
+// 2. If one has a primary type and the other does not (i.e., is only "null" or empty), they are incompatible.
+// 3. If neither has a primary type, they are compatible (e.g., ["null"] vs []).
 func areTypesCompatible(types1, types2 []string) bool {
 	primaryType1 := getPrimaryType(types1)
 	primaryType2 := getPrimaryType(types2)
 
-	if primaryType1 != "" && primaryType2 != "" {
-		return primaryType1 == primaryType2
-	}
-
-	if primaryType1 != "" && primaryType2 == "" {
-		for _, t := range types1 {
-			if t == "null" {
-				return true
-			}
-		}
-		return false
-	}
-
-	if primaryType1 == "" && primaryType2 != "" {
-		for _, t := range types2 {
-			if t == "null" {
-				return true
-			}
-		}
-		return false
-	}
-
-	return true
+	// If both have a primary type, they must be the same.
+	// If one has a primary type and the other doesn't, they are not compatible.
+	return primaryType1 == primaryType2
 }
 
 func extractSchemaForAction(doc OASDocument, verbs []definitionv1alpha1.VerbsDescription, targetAction string, config *GeneratorConfig) (*Schema, error) {
+	var verbFound bool
 	for _, verb := range verbs {
 		if !strings.EqualFold(verb.Action, targetAction) {
 			continue
 		}
+		verbFound = true
 
 		path, ok := doc.FindPath(verb.Path)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("path '%s' not found in OAS document", verb.Path)
 		}
 
 		ops := path.GetOperations()
 		op, ok := ops[strings.ToLower(verb.Method)]
 		if !ok {
-			continue
+			return nil, fmt.Errorf("method '%s' not found for path '%s'", verb.Method, verb.Path)
 		}
 
 		responses := op.GetResponses()
 		if responses == nil {
-			continue
+			continue // Or return an error if responses are expected
 		}
 
 		for _, code := range config.SuccessCodes {
@@ -252,6 +246,7 @@ func extractSchemaForAction(doc OASDocument, verbs []definitionv1alpha1.VerbsDes
 					continue
 				}
 
+				// If a schema is found, return it immediately.
 				if strings.EqualFold(targetAction, ActionFindBy) && schema.Items != nil {
 					return schema.Items, nil
 				}
@@ -259,5 +254,10 @@ func extractSchemaForAction(doc OASDocument, verbs []definitionv1alpha1.VerbsDes
 			}
 		}
 	}
-	return nil, nil
+
+	if !verbFound {
+		return nil, fmt.Errorf("action '%s' not defined in resource verbs", targetAction)
+	}
+
+	return nil, fmt.Errorf("no suitable response schema found for action '%s'", targetAction)
 }
