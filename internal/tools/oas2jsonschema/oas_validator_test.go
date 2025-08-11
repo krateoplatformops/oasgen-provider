@@ -791,9 +791,9 @@ func TestValidateSchemas_Complex(t *testing.T) {
 
 	// Check for specific errors
 	expectedErrors := map[string]ValidationCode{
-		"status":        CodeTypeMismatch,
+		"status":             CodeTypeMismatch,
 		"user.profile.email": CodeTypeMismatch,
-		"tags.value":    CodeTypeMismatch,
+		"tags.value":         CodeTypeMismatch,
 	}
 
 	foundErrors := make(map[string]bool)

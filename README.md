@@ -185,3 +185,8 @@ apart from cases similar to the following:
 ```yaml
 (inputs) of github workflows
 ```
+
+
+### Not supported features
+
+`anyOf`, `oneOf` are not supported by OASGen provider.
