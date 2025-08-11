@@ -360,11 +360,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		if err != nil {
 			return fmt.Errorf("generating schemas: %w", err)
 		}
-		for _, er := range result.ValidationWarnings {
-			e.log.Debug("Schema validation warning", "Error", er)
-		}
 		for _, er := range result.GenerationWarnings {
-			e.log.Debug("Schema generation warning", "Error", er)
+			e.log.Debug("Schema generation warning", "Warning", er)
+		}
+		for _, er := range result.ValidationWarnings {
+			e.log.Debug("Schema validation warning", "Warning", er)
 		}
 
 		resource := crdgen.Generate(ctx, crdgen.Options{

@@ -56,7 +56,7 @@ func TestMain(m *testing.M) {
 	xenv.SetTestMode(true)
 
 	namespace = "gh-system"
-	clusterName = "krateo"
+	clusterName = "krateo-restdefinition-integration-test"
 	testenv = env.New()
 
 	testenv.Setup(
@@ -496,35 +496,34 @@ func TestLifecycle_GitHubWorkflows(t *testing.T) {
 	testenv.Test(t, f)
 }
 
-// TODO: refactor since it refers to composition (probaly coming from CDC)
 func handleObservation(t *testing.T, ctx context.Context, handler reconciler.ExternalClient, observation reconciler.ExternalObservation, u *definitionv1alpha1.RestDefinition) (context.Context, error) {
 	var err error
 	if observation.ResourceExists == true && observation.ResourceUpToDate == true {
 		observation, err = handler.Observe(ctx, u)
 		if err != nil {
-			t.Error("Observing composition.", "error", err)
+			t.Error("Observing RestDefinition.", "error", err)
 			return ctx, err
 		}
 		if observation.ResourceExists == true && observation.ResourceUpToDate == true {
-			t.Log("Composition already exists and is ready.")
+			t.Log("RestDefinition already exists and is ready.")
 			return ctx, nil
 		}
 	} else if observation.ResourceExists == false && observation.ResourceUpToDate == true {
 		err = handler.Delete(ctx, u)
 		if err != nil {
-			t.Error("Deleting composition.", "error", err)
+			t.Error("Deleting RestDefinition.", "error", err)
 			return ctx, err
 		}
 	} else if observation.ResourceExists == true && observation.ResourceUpToDate == false {
 		err = handler.Update(ctx, u)
 		if err != nil {
-			t.Error("Updating composition.", "error", err)
+			t.Error("Updating RestDefinition.", "error", err)
 			return ctx, err
 		}
 	} else if observation.ResourceExists == false && observation.ResourceUpToDate == false {
 		err = handler.Create(ctx, u)
 		if err != nil {
-			t.Error("Creating composition.", "error", err)
+			t.Error("Creating RestDefinition.", "error", err)
 			return ctx, err
 		}
 	}

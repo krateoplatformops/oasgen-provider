@@ -80,7 +80,7 @@ Krateo controllers support 4 verbs to provide resource reconciliation:
   - `rest-dynamic-controller` supports resource deletion using the `delete` action. This endpoint should delete the resource from the external system. This means that `rest-dynamic-controller` expects a subsequent call to the `findby` or `get` action will not return the deleted resource. The endpoint should not return an error if the resource does not exist, as it is expected that the resource has already been deleted.
   
 Any API behavior that does not match these requirements will require a web service wrapper to normalize the API interface. This is common with APIs that do not follow consistent naming conventions or have different response structures.
-To learn more about web service wrappers, please refer to the [cheatsheet](cheatsheet.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
+To learn more about web service wrappers, please refer to the [cheatsheet](docs/cheatsheet.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
 
 ### Type-Safe Status Fields
 
@@ -168,5 +168,12 @@ You can see a more practical guide on `oasgen-provider` usage at [this link](che
 
 ## OAS 3.0 vs OAS 3.1 Support
 
+https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0
+
+### `nullable` and `null` type support
+
 OAS 3.0
-`nullable` is not supported by OASGen provider.
+- `nullable` is not supported by OASGen provider.
+
+OAS 3.1
+- `null` type in the array `type` is supported by OASGen provider.
