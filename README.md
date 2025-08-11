@@ -165,3 +165,8 @@ You can see a more practical guide on `oasgen-provider` usage at [this link](che
 3. Use web service wrappers when API interfaces are inconsistent
 4. Regularly update OAS documents to match API changes
 5. Monitor controller logs with `krateo.io/connector-verbose: "true"`
+
+## OAS 3.0 vs OAS 3.1 Support
+
+OAS 3.0
+`nullable` is not supported by OASGen provider.

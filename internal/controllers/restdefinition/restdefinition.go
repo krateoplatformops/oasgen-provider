@@ -23,8 +23,6 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/meta"
 	"github.com/krateoplatformops/provider-runtime/pkg/ratelimiter"
-	"github.com/pb33f/libopenapi"
-	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -168,7 +166,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 
 		if len(cr.Status.Authentications) == 0 {
 			e.log.Debug("No authentications found in status, trying to get from document")
-			doc, err := getDocumentModelFromCRnew(ctx, e.kube, cr)
+			doc, err := e.getDocumentModelFromCR(ctx, cr)
 			if err != nil {
 				return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
 			}
@@ -191,7 +189,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, e.Delete(ctx, cr)
 	}
 
-	doc, err := e.getDocumentModelFromCRnew(ctx, cr)
+	doc, err := e.getDocumentModelFromCR(ctx, cr)
 	if err != nil {
 		return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
 	}
@@ -352,7 +350,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !crdOk {
-		doc, err := e.getDocumentModelFromCRnew(ctx, cr)
+		doc, err := e.getDocumentModelFromCR(ctx, cr)
 		if err != nil {
 			return fmt.Errorf("getting document model from CR: %w", err)
 		}
@@ -476,7 +474,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	doc, err := e.getDocumentModelFromCRnew(ctx, cr)
+	doc, err := e.getDocumentModelFromCR(ctx, cr)
 	if err != nil {
 		return fmt.Errorf("getting document model from CR: %w", err)
 	}
@@ -529,7 +527,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	doc, err := getDocumentModelFromCRnew(ctx, e.kube, cr)
+	doc, err := e.getDocumentModelFromCR(ctx, cr)
 	if err != nil {
 		return fmt.Errorf("getting document model from CR: %w", err)
 	}
@@ -599,7 +597,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 
 	if len(cr.Status.Authentications) == 0 {
 		e.log.Debug("No authentications found in status, trying to get from document")
-		doc, err := getDocumentModelFromCRnew(ctx, e.kube, cr)
+		doc, err := e.getDocumentModelFromCR(ctx, cr)
 		if err != nil {
 			return fmt.Errorf("getting document model from CR: %w", err)
 		}
@@ -755,57 +753,57 @@ func manageFinalizers(ctx context.Context, kubecli client.Client, disc discovery
 	return nil
 }
 
-func getDocumentModelFromCR(ctx context.Context, kube client.Client, cr *definitionv1alpha1.RestDefinition) (*libopenapi.DocumentModel[v3.Document], error) {
-	var err error
-	swaggerPath := cr.Spec.OASPath
-	basePath := "/tmp/swaggergen-provider"
-	err = os.MkdirAll(basePath, os.ModePerm)
-	defer os.RemoveAll(basePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
-	}
+//func getDocumentModelFromCR(ctx context.Context, kube client.Client, cr *definitionv1alpha1.RestDefinition) (*libopenapi.DocumentModel[v3.Document], //error) {
+//	var err error
+//	swaggerPath := cr.Spec.OASPath
+//	basePath := "/tmp/swaggergen-provider"
+//	err = os.MkdirAll(basePath, os.ModePerm)
+//	defer os.RemoveAll(basePath)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to create directory: %w", err)
+//	}
+//
+//	filegetter := &filegetter.Filegetter{
+//		Client:     http.DefaultClient,
+//		KubeClient: kube,
+//	}
+//
+//	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to download file: %w", err)
+//	}
+//
+//	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to read file: %w", err)
+//	}
+//
+//	d, err := libopenapi.NewDocument(contents)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to read file: %w", err)
+//	}
+//
+//	doc, modelErrors := d.BuildV3Model()
+//	if len(modelErrors) > 0 {
+//		return nil, fmt.Errorf("failed to build model: %w", errors.Join(modelErrors...))
+//	}
+//	if doc == nil {
+//		return nil, fmt.Errorf("failed to build model")
+//	}
+//
+//	// Resolve model references
+//	resolvingErrors := doc.Index.GetResolver().Resolve()
+//	errs := []error{}
+//	for i := range resolvingErrors {
+//		errs = append(errs, resolvingErrors[i].ErrorRef)
+//	}
+//	if len(resolvingErrors) > 0 {
+//		return nil, fmt.Errorf("failed to resolve model references: %w", errors.Join(errs...))
+//	}
+//	return doc, nil
+//}
 
-	filegetter := &filegetter.Filegetter{
-		Client:     http.DefaultClient,
-		KubeClient: kube,
-	}
-
-	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download file: %w", err)
-	}
-
-	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	d, err := libopenapi.NewDocument(contents)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	doc, modelErrors := d.BuildV3Model()
-	if len(modelErrors) > 0 {
-		return nil, fmt.Errorf("failed to build model: %w", errors.Join(modelErrors...))
-	}
-	if doc == nil {
-		return nil, fmt.Errorf("failed to build model")
-	}
-
-	// Resolve model references
-	resolvingErrors := doc.Index.GetResolver().Resolve()
-	errs := []error{}
-	for i := range resolvingErrors {
-		errs = append(errs, resolvingErrors[i].ErrorRef)
-	}
-	if len(resolvingErrors) > 0 {
-		return nil, fmt.Errorf("failed to resolve model references: %w", errors.Join(errs...))
-	}
-	return doc, nil
-}
-
-func (e *external) getDocumentModelFromCRnew(ctx context.Context, cr *definitionv1alpha1.RestDefinition) (oas2jsonschema.OASDocument, error) {
+func (e *external) getDocumentModelFromCR(ctx context.Context, cr *definitionv1alpha1.RestDefinition) (oas2jsonschema.OASDocument, error) {
 	swaggerPath := cr.Spec.OASPath
 	basePath := "/tmp/swaggergen-provider"
 	err := os.MkdirAll(basePath, os.ModePerm)
@@ -830,31 +828,4 @@ func (e *external) getDocumentModelFromCRnew(ctx context.Context, cr *definition
 	}
 
 	return e.parser.Parse(contents)
-}
-
-func getDocumentModelFromCRnew(ctx context.Context, kube client.Client, cr *definitionv1alpha1.RestDefinition) (oas2jsonschema.OASDocument, error) {
-	swaggerPath := cr.Spec.OASPath
-	basePath := "/tmp/swaggergen-provider"
-	err := os.MkdirAll(basePath, os.ModePerm)
-	defer os.RemoveAll(basePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	filegetter := &filegetter.Filegetter{
-		Client:     http.DefaultClient,
-		KubeClient: kube,
-	}
-
-	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download file: %w", err)
-	}
-
-	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	return oas2jsonschema.Parse(contents)
 }

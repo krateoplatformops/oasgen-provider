@@ -124,6 +124,7 @@ func (g *OASSchemaGenerator) generateStatusSchema(resource definitionv1alpha1.Re
 }
 
 // getBaseSchemaForSpec returns the base schema for the spec, which is the request body of the 'create' action.
+// TODO: what about no create action but only update?
 func (g *OASSchemaGenerator) getBaseSchemaForSpec(resource definitionv1alpha1.Resource) (*Schema, error) {
 	for _, verb := range resource.VerbsDescription {
 		if verb.Action != ActionCreate {
@@ -134,7 +135,7 @@ func (g *OASSchemaGenerator) getBaseSchemaForSpec(resource definitionv1alpha1.Re
 			return nil, fmt.Errorf("path '%s' not found in OpenAPI spec", verb.Path)
 		}
 		ops := path.GetOperations()
-		op, ok := ops[verb.Method]
+		op, ok := ops[strings.ToLower(verb.Method)]
 		if !ok {
 			return nil, fmt.Errorf("operation '%s' not found for path '%s'", verb.Method, verb.Path)
 		}

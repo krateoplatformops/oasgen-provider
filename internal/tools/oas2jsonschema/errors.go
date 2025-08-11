@@ -2,6 +2,8 @@ package oas2jsonschema
 
 import "fmt"
 
+// Note: currently only contains errors related to the OAS parser.
+
 // ParserErrorCode defines the type for parser-specific error codes.
 type ParserErrorCode string
 

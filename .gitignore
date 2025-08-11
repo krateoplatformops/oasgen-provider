@@ -54,3 +54,4 @@ cover.out
 **/*.xpkg
 
 coverage.txt
+coverage.html
