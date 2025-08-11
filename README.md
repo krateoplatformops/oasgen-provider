@@ -177,3 +177,11 @@ OAS 3.0
 
 OAS 3.1
 - `null` type in the array `type` is supported by OASGen provider.
+
+
+
+additionalProperties is discouraged
+apart from cases similar to the following:
+```yaml
+(inputs) of github workflows
+```

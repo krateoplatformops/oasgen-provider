@@ -79,10 +79,10 @@ func compareActionResponseSchemas(doc OASDocument, verbs []definitionv1alpha1.Ve
 		}}
 	}
 
-	return compareSchemas(".", schema1, schema2)
+	return compareSchemas(".", schema1, schema2, action1, action2)
 }
 
-func compareSchemas(path string, schema1, schema2 *Schema) []error {
+func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 string) []error {
 	var errors []error
 
 	if schema1 == nil && schema2 == nil {
@@ -112,10 +112,15 @@ func compareSchemas(path string, schema1, schema2 *Schema) []error {
 	}
 
 	if schema1HasProps != schema2HasProps {
+		msg := "schema mismatch: response for action '%s' has properties but response for action '%s' does not"
+		if !schema1HasProps {
+			// Swap the message to be accurate
+			msg = "schema mismatch: response for action '%s' does not have properties but response for action '%s' does"
+		}
 		errors = append(errors, SchemaValidationError{
 			Path:    path,
 			Code:    CodePropertyMismatch,
-			Message: "one schema has properties but the other does not",
+			Message: fmt.Sprintf(msg, action1, action2),
 		})
 		return errors
 	}
@@ -157,10 +162,10 @@ func compareSchemas(path string, schema1, schema2 *Schema) []error {
 
 		switch getPrimaryType(prop1.Schema.Type) {
 		case "object":
-			errors = append(errors, compareSchemas(currentPath, prop1.Schema, prop2.Schema)...)
+			errors = append(errors, compareSchemas(currentPath, prop1.Schema, prop2.Schema, action1, action2)...)
 		case "array":
 			if prop1.Schema.Items != nil && prop2.Schema.Items != nil {
-				errors = append(errors, compareSchemas(currentPath, prop1.Schema.Items, prop2.Schema.Items)...)
+				errors = append(errors, compareSchemas(currentPath, prop1.Schema.Items, prop2.Schema.Items, action1, action2)...)
 			} else if prop1.Schema.Items != nil && prop2.Schema.Items == nil {
 				errors = append(errors, SchemaValidationError{
 					Path:    currentPath,
