@@ -20,6 +20,22 @@ func DefaultGeneratorConfig() *GeneratorConfig {
 	}
 }
 
+// ResourceConfig holds the necessary configuration extracted from a
+// source (like a RestDefinition) to guide the schema generation process along with
+// the OAS specification.
+type ResourceConfig struct {
+	Verbs                  []Verb
+	Identifiers            []string
+	AdditionalStatusFields []string
+}
+
+// Verb defines a specific API operation (action, method, path).
+type Verb struct {
+	Action string
+	Method string
+	Path   string
+}
+
 // --- Library-Agnostic Domain Models ---
 
 // Property represents a single key-value pair in a schema's properties.

@@ -3,26 +3,13 @@ package oas2jsonschema
 import (
 	"strings"
 	"testing"
-
-	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 )
 
-// --- Test Suite ---
-
 func TestGenerateSpecSchema(t *testing.T) {
-	// Arrange: Common setup for all spec schema tests
-	resource := definitionv1alpha1.Resource{
-		VerbsDescription: []definitionv1alpha1.VerbsDescription{
-			{Action: "create", Path: "/widgets", Method: "post"},
-			{Action: "get", Path: "/widgets/{id}", Method: "get"},
-		},
-	}
-	identifiers := []string{"id"}
-
 	t.Run("should generate a basic spec schema from the create action", func(t *testing.T) {
 		// Arrange
-		resource := definitionv1alpha1.Resource{
-			VerbsDescription: []definitionv1alpha1.VerbsDescription{
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
 				{Action: "create", Path: "/widgets", Method: "post"},
 			},
 		}
@@ -47,10 +34,10 @@ func TestGenerateSpecSchema(t *testing.T) {
 				},
 			},
 		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
 
 		// Act
-		result, err := generator.Generate(resource, identifiers)
+		result, err := generator.Generate()
 
 		// Assert
 		if err != nil {
@@ -71,10 +58,11 @@ func TestGenerateSpecSchema(t *testing.T) {
 
 	t.Run("should add identifiers to the spec schema", func(t *testing.T) {
 		// Arrange
-		resource := definitionv1alpha1.Resource{
-			VerbsDescription: []definitionv1alpha1.VerbsDescription{
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
 				{Action: "create", Path: "/widgets", Method: "post"},
 			},
+			Identifiers: []string{"id"},
 		}
 		mockDoc := &mockOASDocument{
 			Paths: map[string]*mockPathItem{
@@ -89,12 +77,12 @@ func TestGenerateSpecSchema(t *testing.T) {
 				},
 			},
 		}
-		config := DefaultGeneratorConfig()
-		config.IncludeIdentifiersInSpec = true
-		generator := NewOASSchemaGenerator(mockDoc, config)
+		generatorConfig := DefaultGeneratorConfig()
+		generatorConfig.IncludeIdentifiersInSpec = true
+		generator := NewOASSchemaGenerator(mockDoc, generatorConfig, resourceConfig)
 
 		// Act
-		result, _ := generator.Generate(resource, identifiers)
+		result, _ := generator.Generate()
 
 		// Assert
 		schemaStr := string(result.SpecSchema)
@@ -105,6 +93,12 @@ func TestGenerateSpecSchema(t *testing.T) {
 
 	t.Run("should add parameters from all verbs to the spec schema", func(t *testing.T) {
 		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+				{Action: "get", Path: "/widgets/{id}", Method: "get"},
+			},
+		}
 		mockDoc := &mockOASDocument{
 			Paths: map[string]*mockPathItem{
 				"/widgets": {
@@ -128,10 +122,10 @@ func TestGenerateSpecSchema(t *testing.T) {
 				},
 			},
 		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
 
 		// Act
-		result, _ := generator.Generate(resource, identifiers)
+		result, _ := generator.Generate()
 
 		// Assert
 		schemaStr := string(result.SpecSchema)
@@ -145,8 +139,8 @@ func TestGenerateSpecSchema(t *testing.T) {
 
 	t.Run("should add authenticationRefs for security schemes", func(t *testing.T) {
 		// Arrange
-		resource := definitionv1alpha1.Resource{
-			VerbsDescription: []definitionv1alpha1.VerbsDescription{
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
 				{Action: "create", Path: "/widgets", Method: "post"},
 			},
 		}
@@ -166,10 +160,10 @@ func TestGenerateSpecSchema(t *testing.T) {
 				{Name: "BasicAuth", Type: SchemeTypeHTTP, Scheme: "basic"},
 			},
 		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
 
 		// Act
-		result, _ := generator.Generate(resource, identifiers)
+		result, _ := generator.Generate()
 
 		// Assert
 		schemaStr := string(result.SpecSchema)
@@ -188,18 +182,16 @@ func TestGenerateSpecSchema(t *testing.T) {
 }
 
 func TestGenerateStatusSchema(t *testing.T) {
-	// Arrange: Common setup for all status schema tests
-	resource := definitionv1alpha1.Resource{
-		VerbsDescription: []definitionv1alpha1.VerbsDescription{
-			{Action: "get", Path: "/widgets/{id}", Method: "get"},
-			{Action: "findby", Path: "/widgets", Method: "get"},
-		},
-		AdditionalStatusFields: []string{"last_updated", "version"},
-	}
-	identifiers := []string{"id"}
-
 	t.Run("should generate a status schema from the get action response", func(t *testing.T) {
 		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "get", Path: "/widgets/{id}", Method: "get"},
+				{Action: "findby", Path: "/widgets", Method: "get"},
+			},
+			Identifiers:            []string{"id"},
+			AdditionalStatusFields: []string{"last_updated", "version"},
+		}
 		mockDoc := &mockOASDocument{
 			Paths: map[string]*mockPathItem{
 				"/widgets/{id}": {
@@ -242,10 +234,10 @@ func TestGenerateStatusSchema(t *testing.T) {
 				},
 			},
 		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
 
 		// Act
-		result, err := generator.Generate(resource, identifiers)
+		result, err := generator.Generate()
 
 		// Assert
 		if err != nil {
@@ -269,10 +261,11 @@ func TestGenerateStatusSchema(t *testing.T) {
 
 	t.Run("should use findby as a fallback if get is not available", func(t *testing.T) {
 		// Arrange
-		resourceWithFindBy := definitionv1alpha1.Resource{
-			VerbsDescription: []definitionv1alpha1.VerbsDescription{
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
 				{Action: "findby", Path: "/widgets", Method: "get"},
 			},
+			Identifiers:            []string{"id"},
 			AdditionalStatusFields: []string{"status"},
 		}
 		mockDoc := &mockOASDocument{
@@ -301,10 +294,10 @@ func TestGenerateStatusSchema(t *testing.T) {
 				},
 			},
 		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
 
 		// Act
-		result, _ := generator.Generate(resourceWithFindBy, identifiers)
+		result, _ := generator.Generate()
 
 		// Assert
 		schemaStr := string(result.StatusSchema)
@@ -315,8 +308,11 @@ func TestGenerateStatusSchema(t *testing.T) {
 
 	t.Run("should default to string and warn for fields not in the response", func(t *testing.T) {
 		// Arrange
-		resourceMissingField := definitionv1alpha1.Resource{
-			VerbsDescription:       []definitionv1alpha1.VerbsDescription{{Action: "get", Path: "/widgets/{id}", Method: "get"}},
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "get", Path: "/widgets/{id}", Method: "get"},
+			},
+			Identifiers:            []string{"id"},
 			AdditionalStatusFields: []string{"non_existent_field"},
 		}
 		mockDoc := &mockOASDocument{
@@ -332,10 +328,10 @@ func TestGenerateStatusSchema(t *testing.T) {
 				},
 			},
 		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
 
 		// Act
-		result, err := generator.Generate(resourceMissingField, identifiers)
+		result, err := generator.Generate()
 
 		// Assert
 		if err != nil {
@@ -455,7 +451,7 @@ func TestGenerateAuthCRDSchemas(t *testing.T) {
 				{Name: "BearerAuth", Type: SchemeTypeHTTP, Scheme: "bearer"},
 			},
 		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig())
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), &ResourceConfig{})
 
 		// Empty spec schema to add authentication refs
 		specSchema := &Schema{}

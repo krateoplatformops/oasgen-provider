@@ -4,75 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/stretchr/testify/assert"
 )
-
-// TestAreTypesCompatible
-func TestAreTypesCompatible(t *testing.T) {
-	testCases := []struct {
-		name     string
-		types1   []string
-		types2   []string
-		expected bool
-	}{
-		{
-			name:     "Identical primary types",
-			types1:   []string{"string"},
-			types2:   []string{"string"},
-			expected: true,
-		},
-		{
-			name:     "Identical primary types with null",
-			types1:   []string{"object", "null"},
-			types2:   []string{"object", "null"},
-			expected: true,
-		},
-		{
-			name:     "Different primary types",
-			types1:   []string{"string"},
-			types2:   []string{"integer"},
-			expected: false,
-		},
-		{
-			name:     "One primary type, one null",
-			types1:   []string{"string", "null"},
-			types2:   []string{"null"},
-			expected: false,
-		},
-		{
-			name:     "One primary type (not nullable), one null",
-			types1:   []string{"string"},
-			types2:   []string{"null"},
-			expected: false,
-		},
-		{
-			name:     "One null, one primary type (not nullable)",
-			types1:   []string{"null"},
-			types2:   []string{"boolean"},
-			expected: false,
-		},
-		{
-			name:     "Both empty",
-			types1:   []string{},
-			types2:   []string{},
-			expected: true,
-		},
-		{
-			name:     "One empty, one with primary type",
-			types1:   []string{},
-			types2:   []string{"string"},
-			expected: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			actual := areTypesCompatible(tc.types1, tc.types2)
-			assert.Equal(t, tc.expected, actual)
-		})
-	}
-}
 
 // TestCompareSchemas
 func TestCompareSchemas(t *testing.T) {
@@ -303,7 +236,7 @@ func TestValidateSchemas(t *testing.T) {
 	testCases := []struct {
 		name      string
 		doc       OASDocument
-		verbs     []definitionv1alpha1.VerbsDescription
+		verbs     []Verb
 		expectErr bool
 		errCode   ValidationCode
 	}{
@@ -327,7 +260,7 @@ func TestValidateSchemas(t *testing.T) {
 					},
 				},
 			},
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionGet, Path: "/items", Method: "get"},
 				{Action: ActionCreate, Path: "/items", Method: "post"},
 			},
@@ -353,7 +286,7 @@ func TestValidateSchemas(t *testing.T) {
 					},
 				},
 			},
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionGet, Path: "/items", Method: "get"},
 				{Action: ActionCreate, Path: "/items", Method: "post"},
 			},
@@ -375,7 +308,7 @@ func TestValidateSchemas(t *testing.T) {
 					},
 				},
 			},
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionCreate, Path: "/items", Method: "post"},
 			},
 			expectErr: true,
@@ -399,7 +332,7 @@ func TestValidateSchemas(t *testing.T) {
 					},
 				},
 			},
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionGet, Path: "/items", Method: "get"},
 				{Action: ActionCreate, Path: "/items", Method: "post"},
 			},
@@ -422,7 +355,7 @@ func TestValidateSchemas(t *testing.T) {
 					},
 				},
 			},
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionGet, Path: "/items", Method: "get"},
 				{Action: ActionCreate, Path: "/items", Method: "post"}, // This action will fail to be extracted
 			},
@@ -433,7 +366,7 @@ func TestValidateSchemas(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			errs := validateSchemas(tc.doc, tc.verbs, config)
+			errs := ValidateSchemas(tc.doc, tc.verbs, config)
 			if tc.expectErr {
 				assert.NotEmpty(t, errs, "Expected errors, but got none")
 				validationErr, ok := errs[0].(SchemaValidationError)
@@ -446,7 +379,6 @@ func TestValidateSchemas(t *testing.T) {
 	}
 }
 
-// TestExtractSchemaForAction
 func TestExtractSchemaForAction(t *testing.T) {
 	defaultConfig := DefaultGeneratorConfig()
 	itemSchema := &Schema{Type: []string{"object"}, Properties: []Property{{Name: "id", Schema: &Schema{Type: []string{"integer"}}}}}
@@ -488,7 +420,7 @@ func TestExtractSchemaForAction(t *testing.T) {
 	testCases := []struct {
 		name           string
 		config         *GeneratorConfig
-		verbs          []definitionv1alpha1.VerbsDescription
+		verbs          []Verb
 		targetAction   string
 		expectErr      bool
 		expectNil      bool
@@ -499,7 +431,7 @@ func TestExtractSchemaForAction(t *testing.T) {
 		{
 			name:   "Extract schema for 'get' action",
 			config: defaultConfig,
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionGet, Path: "/items", Method: "get"},
 			},
 			targetAction:   ActionGet,
@@ -509,7 +441,7 @@ func TestExtractSchemaForAction(t *testing.T) {
 		{
 			name:   "Extract schema for 'findby' action (unwraps array)",
 			config: defaultConfig,
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionFindBy, Path: "/items/search", Method: "get"},
 			},
 			targetAction:   ActionFindBy,
@@ -520,7 +452,7 @@ func TestExtractSchemaForAction(t *testing.T) {
 		{
 			name:   "Action not found",
 			config: defaultConfig,
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionGet, Path: "/items", Method: "get"},
 			},
 			targetAction:  ActionUpdate, // 'update' is not in the verbs list
@@ -531,7 +463,7 @@ func TestExtractSchemaForAction(t *testing.T) {
 		{
 			name:   "Path not found in spec",
 			config: defaultConfig,
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionGet, Path: "/nonexistent", Method: "get"},
 			},
 			targetAction:  ActionGet,
@@ -545,7 +477,7 @@ func TestExtractSchemaForAction(t *testing.T) {
 				SuccessCodes:      []int{200},
 				AcceptedMIMETypes: []string{"application/json", "application/vnd.api+json"},
 			},
-			verbs: []definitionv1alpha1.VerbsDescription{
+			verbs: []Verb{
 				{Action: ActionGet, Path: "/items/alt", Method: "get"},
 			},
 			targetAction:   ActionGet,
@@ -556,7 +488,7 @@ func TestExtractSchemaForAction(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			schema, err := extractSchemaForAction(doc, tc.verbs, tc.targetAction, tc.config)
+			schema, err := ExtractSchemaForAction(doc, tc.verbs, tc.targetAction, tc.config)
 
 			if tc.expectErr {
 				assert.Error(t, err)
@@ -578,31 +510,31 @@ func TestExtractSchemaForAction(t *testing.T) {
 func TestDetermineBaseAction(t *testing.T) {
 	testCases := []struct {
 		name           string
-		verbs          []definitionv1alpha1.VerbsDescription
+		verbs          []Verb
 		expectedAction string
 		expectErr      bool
 	}{
 		{
 			name:           "should return 'get' when 'get' is available",
-			verbs:          []definitionv1alpha1.VerbsDescription{{Action: ActionGet}, {Action: ActionCreate}},
+			verbs:          []Verb{{Action: ActionGet}, {Action: ActionCreate}},
 			expectedAction: ActionGet,
 			expectErr:      false,
 		},
 		{
 			name:           "should return 'get' when both 'get' and 'findby' are available",
-			verbs:          []definitionv1alpha1.VerbsDescription{{Action: ActionGet}, {Action: ActionFindBy}},
+			verbs:          []Verb{{Action: ActionGet}, {Action: ActionFindBy}},
 			expectedAction: ActionGet,
 			expectErr:      false,
 		},
 		{
 			name:           "should return 'findby' when only 'findby' is available",
-			verbs:          []definitionv1alpha1.VerbsDescription{{Action: ActionFindBy}, {Action: ActionUpdate}},
+			verbs:          []Verb{{Action: ActionFindBy}, {Action: ActionUpdate}},
 			expectedAction: ActionFindBy,
 			expectErr:      false,
 		},
 		{
 			name:      "should return an error when no base action is available",
-			verbs:     []definitionv1alpha1.VerbsDescription{{Action: ActionCreate}, {Action: ActionUpdate}},
+			verbs:     []Verb{{Action: ActionCreate}, {Action: ActionUpdate}},
 			expectErr: true,
 		},
 	}
@@ -777,13 +709,13 @@ func TestValidateSchemas_Complex(t *testing.T) {
 		},
 	}
 
-	verbs := []definitionv1alpha1.VerbsDescription{
+	verbs := []Verb{
 		{Action: ActionGet, Path: "/complex", Method: "get"},
 		{Action: ActionCreate, Path: "/complex", Method: "post"},
 	}
 
 	// Act
-	errs := validateSchemas(doc, verbs, DefaultGeneratorConfig())
+	errs := ValidateSchemas(doc, verbs, DefaultGeneratorConfig())
 
 	// Assert
 	assert.NotEmpty(t, errs, "Expected validation errors, but got none")

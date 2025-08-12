@@ -3,8 +3,6 @@ package oas2jsonschema
 import (
 	"fmt"
 	"strings"
-
-	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 )
 
 const (
@@ -14,7 +12,8 @@ const (
 	ActionUpdate = "update"
 )
 
-func determineBaseAction(verbs []definitionv1alpha1.VerbsDescription) (string, error) {
+// TODO: make it configurable
+func determineBaseAction(verbs []Verb) (string, error) {
 	hasGet := false
 	hasFindBy := false
 	for _, verb := range verbs {
@@ -40,7 +39,7 @@ func determineBaseAction(verbs []definitionv1alpha1.VerbsDescription) (string, e
 	}
 }
 
-func validateSchemas(doc OASDocument, verbs []definitionv1alpha1.VerbsDescription, config *GeneratorConfig) []error {
+func ValidateSchemas(doc OASDocument, verbs []Verb, config *GeneratorConfig) []error {
 	baseAction, err := determineBaseAction(verbs)
 	if err != nil {
 		return []error{err}
@@ -55,6 +54,7 @@ func validateSchemas(doc OASDocument, verbs []definitionv1alpha1.VerbsDescriptio
 		}
 
 		if isComparable {
+			// Perform the comparison against the base action schema.
 			errors = append(errors, compareActionResponseSchemas(doc, verbs, verb.Action, baseAction, config)...)
 		}
 	}
@@ -62,8 +62,8 @@ func validateSchemas(doc OASDocument, verbs []definitionv1alpha1.VerbsDescriptio
 	return errors
 }
 
-func compareActionResponseSchemas(doc OASDocument, verbs []definitionv1alpha1.VerbsDescription, action1, action2 string, config *GeneratorConfig) []error {
-	schema2, err := extractSchemaForAction(doc, verbs, action2, config)
+func compareActionResponseSchemas(doc OASDocument, verbs []Verb, action1, action2 string, config *GeneratorConfig) []error {
+	schema2, err := ExtractSchemaForAction(doc, verbs, action2, config)
 	if err != nil {
 		return []error{SchemaValidationError{
 			Code:    CodeActionSchemaMissing,
@@ -71,7 +71,7 @@ func compareActionResponseSchemas(doc OASDocument, verbs []definitionv1alpha1.Ve
 		}}
 	}
 
-	schema1, err := extractSchemaForAction(doc, verbs, action1, config)
+	schema1, err := ExtractSchemaForAction(doc, verbs, action1, config)
 	if err != nil {
 		return []error{SchemaValidationError{
 			Code:    CodeActionSchemaMissing,
@@ -192,30 +192,7 @@ func buildPath(base, field string) string {
 	return fmt.Sprintf("%s.%s", base, field)
 }
 
-func getPrimaryType(types []string) string {
-	for _, t := range types {
-		if t != "null" {
-			return t
-		}
-	}
-	return ""
-}
-
-// areTypesCompatible checks if two slices of types are compatible based on their primary non-null type.
-// The compatibility rules are:
-// 1. If both have a primary type (e.g., "string", "object"), they must be identical.
-// 2. If one has a primary type and the other does not (i.e., is only "null" or empty), they are incompatible.
-// 3. If neither has a primary type, they are compatible (e.g., ["null"] vs []).
-func areTypesCompatible(types1, types2 []string) bool {
-	primaryType1 := getPrimaryType(types1)
-	primaryType2 := getPrimaryType(types2)
-
-	// If both have a primary type, they must be the same.
-	// If one has a primary type and the other doesn't, they are not compatible.
-	return primaryType1 == primaryType2
-}
-
-func extractSchemaForAction(doc OASDocument, verbs []definitionv1alpha1.VerbsDescription, targetAction string, config *GeneratorConfig) (*Schema, error) {
+func ExtractSchemaForAction(doc OASDocument, verbs []Verb, targetAction string, config *GeneratorConfig) (*Schema, error) {
 	var verbFound bool
 	for _, verb := range verbs {
 		if !strings.EqualFold(verb.Action, targetAction) {

@@ -1,5 +1,6 @@
-
 package oas2jsonschema
+
+// Note: File named in this way to avoid warnings about unused imports.
 
 // --- Mock Implementations ---
 

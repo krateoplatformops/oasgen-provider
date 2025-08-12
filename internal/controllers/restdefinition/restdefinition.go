@@ -355,9 +355,36 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("getting document model from CR: %w", err)
 		}
 
-		generator := oas2jsonschema.NewOASSchemaGenerator(doc, oas2jsonschema.DefaultGeneratorConfig())
-		result, err := generator.Generate(cr.Spec.Resource, cr.Spec.Resource.Identifiers)
+		// Shim needed to convert the VerbsDescription to Verbs
+		// Verbs is a type defined within the oas2jsonschema package
+		// and so it's not tied with the RestDefinition CRD
+		verbs := make([]oas2jsonschema.Verb, len(cr.Spec.Resource.VerbsDescription))
+		for i, v := range cr.Spec.Resource.VerbsDescription {
+			verbs[i] = oas2jsonschema.Verb{
+				Action: v.Action,
+				Method: v.Method,
+				Path:   v.Path,
+			}
+		}
+
+		// Create the resource configuration for the OAS schema generator
+		// We pass only relevant fields from the RestDefinition needed for schema generation
+		resourceConfig := &oas2jsonschema.ResourceConfig{
+			Verbs:                  verbs,
+			Identifiers:            cr.Spec.Resource.Identifiers,
+			AdditionalStatusFields: cr.Spec.Resource.AdditionalStatusFields,
+		}
+
+		// Create the OAS schema generator
+		generator := oas2jsonschema.NewOASSchemaGenerator(
+			doc,
+			oas2jsonschema.DefaultGeneratorConfig(),
+			resourceConfig,
+		)
+
+		result, err := generator.Generate()
 		if err != nil {
+			// Fatal error, we cannot continue
 			return fmt.Errorf("generating schemas: %w", err)
 		}
 		for _, er := range result.GenerationWarnings {

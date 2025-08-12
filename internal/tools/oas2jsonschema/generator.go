@@ -6,35 +6,40 @@ import (
 	"reflect"
 	"strings"
 
-	definitionv1alpha1 "github.com/krateoplatformops/oasgen-provider/apis/restdefinitions/v1alpha1"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
 )
 
 // OASSchemaGenerator orchestrates the generation of CRD schemas from an OpenAPI document.
 type OASSchemaGenerator struct {
-	config *GeneratorConfig
-	doc    OASDocument
+	generatorConfig *GeneratorConfig
+	resourceConfig  *ResourceConfig
+	doc             OASDocument
 }
 
 // NewOASSchemaGenerator creates a new, configured OASSchemaGenerator.
-func NewOASSchemaGenerator(doc OASDocument, config *GeneratorConfig) *OASSchemaGenerator {
+func NewOASSchemaGenerator(doc OASDocument, config *GeneratorConfig, resourceConfig *ResourceConfig) *OASSchemaGenerator {
 	return &OASSchemaGenerator{
-		doc:    doc,
-		config: config,
+		generatorConfig: config,
+		resourceConfig:  resourceConfig,
+		doc:             doc,
 	}
 }
 
+// Note on convention used in this file:
+// - Methods: stateful operations that use the generator's state
+// - Functions: stateless operations that do not rely on the generator's state
+
 // Generate orchestrates the full schema generation process.
-func (g *OASSchemaGenerator) Generate(resource definitionv1alpha1.Resource, identifiers []string) (*GenerationResult, error) {
+func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	var generationWarnings []error
 
-	specSchema, warnings, err := g.generateSpecSchema(resource, identifiers)
+	specSchema, warnings, err := g.generateSpecSchema()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate spec schema: %w", err)
 	}
 	generationWarnings = append(generationWarnings, warnings...)
 
-	statusSchema, warnings, err := g.generateStatusSchema(resource, identifiers)
+	statusSchema, warnings, err := g.generateStatusSchema()
 	if err != nil {
 		// A failure to generate status schema is not considered a fatal error. (TO BE DISCUSSED)
 		generationWarnings = append(generationWarnings, fmt.Errorf("failed to generate status schema: %w", err))
@@ -46,7 +51,15 @@ func (g *OASSchemaGenerator) Generate(resource definitionv1alpha1.Resource, iden
 		return nil, fmt.Errorf("failed to generate auth CRD schemas: %w", err)
 	}
 
-	validationWarnings := validateSchemas(g.doc, resource.VerbsDescription, g.config)
+	var verbs []Verb
+	for _, item := range g.resourceConfig.Verbs {
+		verbs = append(verbs, Verb{
+			Action: item.Action,
+			Method: item.Method,
+			Path:   item.Path,
+		})
+	}
+	validationWarnings := ValidateSchemas(g.doc, verbs, g.generatorConfig)
 
 	return &GenerationResult{
 		SpecSchema:         specSchema,
@@ -58,10 +71,10 @@ func (g *OASSchemaGenerator) Generate(resource definitionv1alpha1.Resource, iden
 }
 
 // generateSpecSchema generates the complete spec schema for a given resource.
-func (g *OASSchemaGenerator) generateSpecSchema(resource definitionv1alpha1.Resource, identifiers []string) ([]byte, []error, error) {
+func (g *OASSchemaGenerator) generateSpecSchema() ([]byte, []error, error) {
 	var warnings []error
 
-	baseSchema, err := g.getBaseSchemaForSpec(resource)
+	baseSchema, err := g.getBaseSchemaForSpec()
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not determine base schema for spec: %w", err)
 	}
@@ -74,9 +87,9 @@ func (g *OASSchemaGenerator) generateSpecSchema(resource definitionv1alpha1.Reso
 		addAuthenticationRefs(baseSchema, authCRDSchemas)
 	}
 
-	warnings = append(warnings, g.addParametersToSpec(baseSchema, resource)...)
-	if g.config.IncludeIdentifiersInSpec {
-		addIdentifiersToSpec(baseSchema, identifiers)
+	warnings = append(warnings, g.addParametersToSpec(baseSchema)...)
+	if g.generatorConfig.IncludeIdentifiersInSpec {
+		addIdentifiersToSpec(baseSchema, g.resourceConfig.Identifiers)
 	}
 
 	if err := prepareSchemaForCRD(baseSchema); err != nil {
@@ -92,15 +105,15 @@ func (g *OASSchemaGenerator) generateSpecSchema(resource definitionv1alpha1.Reso
 }
 
 // generateStatusSchema generates the complete status schema for a given resource.
-func (g *OASSchemaGenerator) generateStatusSchema(resource definitionv1alpha1.Resource, identifiers []string) ([]byte, []error, error) {
+func (g *OASSchemaGenerator) generateStatusSchema() ([]byte, []error, error) {
 	var warnings []error
 
-	allStatusFields := append(identifiers, resource.AdditionalStatusFields...)
+	allStatusFields := append(g.resourceConfig.Identifiers, g.resourceConfig.AdditionalStatusFields...)
 	if len(allStatusFields) == 0 {
 		return nil, []error{SchemaGenerationError{Code: CodeNoStatusSchema, Message: "no identifiers or additional status fields defined, skipping status schema generation"}}, nil
 	}
 
-	responseSchema, err := g.getBaseSchemaForStatus(resource.VerbsDescription)
+	responseSchema, err := g.getBaseSchemaForStatus()
 	if err != nil {
 		warnings = append(warnings, SchemaGenerationError{Message: fmt.Sprintf("schema validation warning: %v", err)})
 	}
@@ -108,7 +121,7 @@ func (g *OASSchemaGenerator) generateStatusSchema(resource definitionv1alpha1.Re
 		warnings = append(warnings, SchemaGenerationError{Code: CodeNoStatusSchema, Message: "could not find a GET or FINDBY response schema for status generation"})
 	}
 
-	statusSchema, buildWarnings := g.buildStatusSchema(allStatusFields, responseSchema)
+	statusSchema, buildWarnings := buildStatusSchema(allStatusFields, responseSchema)
 	warnings = append(warnings, buildWarnings...)
 
 	if err := prepareSchemaForCRD(statusSchema); err != nil {
@@ -125,8 +138,8 @@ func (g *OASSchemaGenerator) generateStatusSchema(resource definitionv1alpha1.Re
 
 // getBaseSchemaForSpec returns the base schema for the spec, which is the request body of the 'create' action.
 // TODO: what about no create action but only update? TO BE DISCUSSED
-func (g *OASSchemaGenerator) getBaseSchemaForSpec(resource definitionv1alpha1.Resource) (*Schema, error) {
-	for _, verb := range resource.VerbsDescription {
+func (g *OASSchemaGenerator) getBaseSchemaForSpec() (*Schema, error) {
+	for _, verb := range g.resourceConfig.Verbs {
 		if verb.Action != ActionCreate {
 			continue
 		}
@@ -141,7 +154,7 @@ func (g *OASSchemaGenerator) getBaseSchemaForSpec(resource definitionv1alpha1.Re
 		}
 
 		rb := op.GetRequestBody()
-		for _, mimeType := range g.config.AcceptedMIMETypes {
+		for _, mimeType := range g.generatorConfig.AcceptedMIMETypes {
 			if schema, ok := rb.Content[mimeType]; ok {
 				if getPrimaryType(schema.Type) == "array" {
 					schema.Properties = append(schema.Properties, Property{Name: "items", Schema: &Schema{Type: []string{"array"}, Items: schema.Items}})
@@ -158,7 +171,7 @@ func (g *OASSchemaGenerator) getBaseSchemaForSpec(resource definitionv1alpha1.Re
 func (g *OASSchemaGenerator) generateAuthCRDSchemas() (map[string][]byte, error) {
 	secByteSchema := make(map[string][]byte)
 	for _, secScheme := range g.doc.SecuritySchemes() {
-		authSchema, err := g.generateAuthSchema(secScheme)
+		authSchema, err := generateAuthSchema(secScheme)
 		if err != nil {
 			// Skip unsupported security schemes
 			continue
@@ -174,7 +187,7 @@ func (g *OASSchemaGenerator) generateAuthCRDSchemas() (map[string][]byte, error)
 }
 
 // generateAuthSchema generates the JSON schema for a given security scheme.
-func (g *OASSchemaGenerator) generateAuthSchema(info SecuritySchemeInfo) (*Schema, error) {
+func generateAuthSchema(info SecuritySchemeInfo) (*Schema, error) {
 	if info.Type == SchemeTypeHTTP && info.Scheme == "basic" {
 		return reflectSchema(reflect.TypeOf(BasicAuth{}))
 	}
@@ -202,11 +215,11 @@ func addAuthenticationRefs(schema *Schema, authCRDSchemas map[string][]byte) {
 }
 
 // addParametersToSpec adds the parameters from all verbs to the schema.
-func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, resource definitionv1alpha1.Resource) []error {
+func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 	var warnings []error
 	// Use a map to track unique paths to avoid processing them multiple times
 	uniquePaths := make(map[string]struct{})
-	for _, verb := range resource.VerbsDescription {
+	for _, verb := range g.resourceConfig.Verbs {
 		uniquePaths[verb.Path] = struct{}{}
 	}
 
@@ -262,10 +275,10 @@ func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 // getBaseSchemaForStatus returns the base schema for the status, which is the response body of the 'get' or 'findby' action.
 // TODO: what about no get/findby action but only update? TO BE DISCUSSED
 // maybe this could be configured in the GeneratorConfig
-func (g *OASSchemaGenerator) getBaseSchemaForStatus(verbs []definitionv1alpha1.VerbsDescription) (*Schema, error) {
+func (g *OASSchemaGenerator) getBaseSchemaForStatus() (*Schema, error) {
 	actions := []string{ActionGet, ActionFindBy}
 	for _, action := range actions {
-		schema, err := extractSchemaForAction(g.doc, verbs, action, g.config)
+		schema, err := ExtractSchemaForAction(g.doc, g.resourceConfig.Verbs, action, g.generatorConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -277,7 +290,7 @@ func (g *OASSchemaGenerator) getBaseSchemaForStatus(verbs []definitionv1alpha1.V
 }
 
 // buildStatusSchema builds the status schema from the response schema and the list of status fields.
-func (g *OASSchemaGenerator) buildStatusSchema(allStatusFields []string, responseSchema *Schema) (*Schema, []error) {
+func buildStatusSchema(allStatusFields []string, responseSchema *Schema) (*Schema, []error) {
 	var warnings []error
 	var props []Property
 	for _, fieldName := range allStatusFields {
