@@ -1,6 +1,7 @@
 # Krateo OASGen Provider
 
-The Krateo OASGen Provider is a Kubernetes controller that generates Custom Resource Definitions (CRDs) and controllers to manage resources directly from OpenAPI Specification (OAS) 3.1 documents (with support for OAS 3.0). It enables seamless integration of API-defined resources into Kubernetes environments.
+The Krateo OASGen Provider is a Kubernetes controller that generates Custom Resource Definitions (CRDs) and controllers to manage resources directly from OpenAPI Specification (OAS) 3.1 documents (with support for OAS 3.0, see [OAS 3.0 vs OAS 3.1 Support](#oas-30-vs-oas-31-support) section). 
+It enables seamless integration of API-defined resources into Kubernetes environments.
 
 ## Summary
 
