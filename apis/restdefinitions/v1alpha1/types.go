@@ -53,6 +53,23 @@ type RestDefinitionSpec struct {
 	// The resource to manage
 	// +required
 	Resource Resource `json:"resource"`
+	// ConfigurationFields: the list of fields to use as configuration fields
+	// +optional
+	ConfigurationFields []ConfigurationField `json:"configurationFields,omitempty"`
+}
+
+type ConfigurationField struct {
+	FromOpenAPI        FromOpenAPI        `json:"fromOpenAPI"`
+	FromRestDefinition FromRestDefinition `json:"fromRestDefinition"`
+}
+
+type FromOpenAPI struct {
+	Name string `json:"name"`
+	In   string `json:"in"` // "query", "path", "header", "cookie"
+}
+
+type FromRestDefinition struct {
+	Action string `json:"action"`
 }
 
 type KindApiVersion struct {

@@ -27,6 +27,21 @@ type ResourceConfig struct {
 	Verbs                  []Verb
 	Identifiers            []string
 	AdditionalStatusFields []string
+	ConfigurationFields    []ConfigurationField
+}
+
+type ConfigurationField struct {
+	FromOpenAPI        FromOpenAPI
+	FromRestDefinition FromRestDefinition
+}
+
+type FromOpenAPI struct {
+	Name string
+	In   string // "query", "path", "header", "cookie"
+}
+
+type FromRestDefinition struct {
+	Action string
 }
 
 // Verb defines a specific API operation (action, method, path).
@@ -105,11 +120,11 @@ type ResponseInfo struct {
 
 // GenerationResult holds the output of the schema generation process.
 type GenerationResult struct {
-	SpecSchema         []byte
-	StatusSchema       []byte
-	AuthCRDSchemas     map[string][]byte
-	GenerationWarnings []error
-	ValidationWarnings []error
+	SpecSchema          []byte
+	StatusSchema        []byte
+	ConfigurationSchema []byte
+	GenerationWarnings  []error
+	ValidationWarnings  []error
 }
 
 type BasicAuth struct {

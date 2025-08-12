@@ -2,7 +2,6 @@ package oas2jsonschema
 
 import (
 	"fmt"
-	"strings"
 )
 
 const (
@@ -190,56 +189,4 @@ func buildPath(base, field string) string {
 		return field
 	}
 	return fmt.Sprintf("%s.%s", base, field)
-}
-
-func ExtractSchemaForAction(doc OASDocument, verbs []Verb, targetAction string, config *GeneratorConfig) (*Schema, error) {
-	var verbFound bool
-	for _, verb := range verbs {
-		if !strings.EqualFold(verb.Action, targetAction) {
-			continue
-		}
-		verbFound = true
-
-		path, ok := doc.FindPath(verb.Path)
-		if !ok {
-			return nil, fmt.Errorf("path '%s' not found in OAS document", verb.Path)
-		}
-
-		ops := path.GetOperations()
-		op, ok := ops[strings.ToLower(verb.Method)]
-		if !ok {
-			return nil, fmt.Errorf("method '%s' not found for path '%s'", verb.Method, verb.Path)
-		}
-
-		responses := op.GetResponses()
-		if responses == nil {
-			continue // Or return an error if responses are expected
-		}
-
-		for _, code := range config.SuccessCodes {
-			resp, ok := responses[code]
-			if !ok {
-				continue
-			}
-
-			for _, mimeType := range config.AcceptedMIMETypes {
-				schema, ok := resp.Content[mimeType]
-				if !ok || schema == nil {
-					continue
-				}
-
-				// If a schema is found, return it immediately.
-				if strings.EqualFold(targetAction, ActionFindBy) && schema.Items != nil {
-					return schema.Items, nil
-				}
-				return schema, nil
-			}
-		}
-	}
-
-	if !verbFound {
-		return nil, fmt.Errorf("action '%s' not defined in resource verbs", targetAction)
-	}
-
-	return nil, fmt.Errorf("no suitable response schema found for action '%s'", targetAction)
 }

@@ -137,48 +137,6 @@ func TestGenerateSpecSchema(t *testing.T) {
 		}
 	})
 
-	t.Run("should add authenticationRefs for security schemes", func(t *testing.T) {
-		// Arrange
-		resourceConfig := &ResourceConfig{
-			Verbs: []Verb{
-				{Action: "create", Path: "/widgets", Method: "post"},
-			},
-		}
-		mockDoc := &mockOASDocument{
-			Paths: map[string]*mockPathItem{
-				"/widgets": {
-					Ops: map[string]Operation{
-						"post": &mockOperation{
-							RequestBody: RequestBodyInfo{
-								Content: map[string]*Schema{"application/json": {Type: []string{"object"}}},
-							},
-						},
-					},
-				},
-			},
-			securitySchemes: []SecuritySchemeInfo{
-				{Name: "BasicAuth", Type: SchemeTypeHTTP, Scheme: "basic"},
-			},
-		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
-
-		// Act
-		result, _ := generator.Generate()
-
-		// Assert
-		schemaStr := string(result.SpecSchema)
-		if !strings.Contains(schemaStr, `"authenticationRefs"`) {
-			t.Error("Schema should contain 'authenticationRefs' property")
-		}
-		if !strings.Contains(schemaStr, `"basicAuthRef"`) {
-			t.Error("Schema should contain 'basicAuthRef' within authenticationRefs")
-		}
-		if !strings.Contains(string(result.SpecSchema), `"required": [
-    "authenticationRefs"
-  ]`) {
-			t.Error("authenticationRefs should be a required field")
-		}
-	})
 }
 
 func TestGenerateStatusSchema(t *testing.T) {
@@ -438,72 +396,6 @@ func TestPrepareSchemaForCRD(t *testing.T) {
 
 		if err != nil {
 			t.Fatalf("Expected no error, but got: %v", err)
-		}
-	})
-}
-
-func TestGenerateAuthCRDSchemas(t *testing.T) {
-	t.Run("should generate correct auth schemas and refs", func(t *testing.T) {
-		// Arrange
-		mockDoc := &mockOASDocument{
-			securitySchemes: []SecuritySchemeInfo{
-				{Name: "BasicAuth", Type: SchemeTypeHTTP, Scheme: "basic"},
-				{Name: "BearerAuth", Type: SchemeTypeHTTP, Scheme: "bearer"},
-			},
-		}
-		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), &ResourceConfig{})
-
-		// Empty spec schema to add authentication refs
-		specSchema := &Schema{}
-
-		authCRDSchemas, err := generator.generateAuthCRDSchemas()
-		if err != nil {
-			t.Fatalf("Expected no error from generateAuthCRDSchemas, but got: %v", err)
-		}
-		addAuthenticationRefs(specSchema, authCRDSchemas)
-
-		if len(authCRDSchemas) != 2 {
-			t.Fatalf("Expected 2 auth schemas, but got %d", len(authCRDSchemas))
-		}
-
-		basicAuthSchema, ok := authCRDSchemas["BasicAuth"]
-		if !ok {
-			t.Fatal("Expected to find BasicAuth schema")
-		}
-		if !strings.Contains(string(basicAuthSchema), `"username"`) {
-			t.Error("BasicAuth schema should contain 'username' property")
-		}
-
-		bearerAuthSchema, ok := authCRDSchemas["BearerAuth"]
-		if !ok {
-			t.Fatal("Expected to find BearerAuth schema")
-		}
-		if !strings.Contains(string(bearerAuthSchema), `"tokenRef"`) {
-			t.Error("BearerAuth schema should contain 'tokenRef' property")
-		}
-
-		if len(specSchema.Properties) != 1 || specSchema.Properties[0].Name != "authenticationRefs" {
-			t.Fatal("specSchema should have one property named 'authenticationRefs'")
-		}
-
-		authRefs := specSchema.Properties[0].Schema
-		if len(authRefs.Properties) != 2 {
-			t.Fatalf("Expected 2 auth refs, but got %d", len(authRefs.Properties))
-		}
-
-		basicRefFound := false
-		bearerRefFound := false
-		for _, p := range authRefs.Properties {
-			if p.Name == "basicAuthRef" {
-				basicRefFound = true
-			}
-			if p.Name == "bearerAuthRef" {
-				bearerRefFound = true
-			}
-		}
-
-		if !basicRefFound || !bearerRefFound {
-			t.Errorf("Expected to find both basicAuthRef and bearerAuthRef, but basicRefFound=%v, bearerRefFound=%v", basicRefFound, bearerRefFound)
 		}
 	})
 }

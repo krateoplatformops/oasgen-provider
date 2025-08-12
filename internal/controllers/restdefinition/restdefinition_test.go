@@ -221,28 +221,38 @@ func TestLifecycle_Simple(t *testing.T) {
 			assert.NotNil(t, schema, "expecting schema to be not nil")
 
 			specProps := schema.Properties["spec"].Properties
-			_, ok := specProps["name"]
-			assert.True(t, ok, "expecting spec to have 'name' property")
-			_, ok = specProps["description"]
+			_, ok := specProps["description"]
 			assert.True(t, ok, "expecting spec to have 'description' property")
+
+			// Assert that the configurationRef exists and 'name' (the configured field) does not
+			_, ok = specProps["configurationRef"]
+			assert.True(t, ok, "expecting spec to have 'configurationRef' property")
+			_, ok = specProps["name"]
+			assert.False(t, ok, "expecting spec to NOT have 'name' property as it is a configuration field")
 
 			statusProps := schema.Properties["status"].Properties // name is in the identifiers so it should in the status
 			_, ok = statusProps["name"]
 			assert.True(t, ok, "expecting status to have 'name' property")
 
-			// Check if the Auth CRD is generated correctly
-			authCrd := apiextensionsv1.CustomResourceDefinition{}
-			err = r.Get(ctx, "bearerauths."+gvr.Group, "", &authCrd)
-			assert.Nil(t, err, "expecting nil error getting generated auth crd")
+			// Check if the Configuration CRD is generated correctly
+			configCrd := apiextensionsv1.CustomResourceDefinition{}
+			err = r.Get(ctx, "sampleconfigurations.sample.krateo.io", "", &configCrd)
+			assert.Nil(t, err, "expecting nil error getting generated configuration crd")
 
-			authSchema := authCrd.Spec.Versions[0].Schema.OpenAPIV3Schema
-			assert.NotNil(t, authSchema, "expecting auth schema to be not nil")
+			configSchema := configCrd.Spec.Versions[0].Schema.OpenAPIV3Schema
+			assert.NotNil(t, configSchema, "expecting configuration schema to be not nil")
 
-			spec, ok := authSchema.Properties["spec"]
-			assert.True(t, ok, "expecting auth schema to have a 'spec' property")
-			authSpecProps := spec.Properties
-			_, ok = authSpecProps["tokenRef"]
-			assert.True(t, ok, "expecting auth spec to have 'token' property")
+			configSpecProps := configSchema.Properties["spec"].Properties
+			_, ok = configSpecProps["authenticationMethods"]
+			assert.True(t, ok, "expecting config spec to have 'authenticationMethods' property")
+
+			queryGet, ok := configSpecProps["query"].Properties["get"]
+			assert.True(t, ok, "expecting config spec query to have 'get' property")
+
+			// check inside 'query' property of the configuration spec
+			queryGetProps := queryGet.Properties
+			_, ok = queryGetProps["name"]
+			assert.True(t, ok, "expecting config spec query to have 'name' property")
 
 			return ctx
 		}
@@ -430,20 +440,34 @@ func TestLifecycle_GitHubWorkflows(t *testing.T) {
 				assert.True(t, ok, "expecting spec to have 'ref' property")
 				_, ok = specProps["inputs"]
 				assert.True(t, ok, "expecting spec to have 'inputs' property")
+				_, ok = specProps["configurationRef"]
+				assert.True(t, ok, "expecting spec to have 'configurationRef' property")
+				_, ok = specProps["owner"]
+				assert.False(t, ok, "expecting spec to NOT have 'owner' property as it is a configuration field")
+				_, ok = specProps["repo"]
+				assert.False(t, ok, "expecting spec to NOT have 'repo' property as it is a configuration field")
 
-				// Check if the Auth CRD is generated correctly
-				authCrd := apiextensionsv1.CustomResourceDefinition{}
-				err = r.Get(ctx, "accesstokens."+gvr.Group, "", &authCrd)
-				assert.Nil(t, err, "expecting nil error getting generated auth crd")
+				// Check if the Configuration CRD is generated correctly
+				configCrd := apiextensionsv1.CustomResourceDefinition{}
+				err = r.Get(ctx, "workflowconfigurations.krateo.github.com", "", &configCrd)
+				assert.Nil(t, err, "expecting nil error getting generated configuration crd")
 
-				authSchema := authCrd.Spec.Versions[0].Schema.OpenAPIV3Schema
-				assert.NotNil(t, authSchema, "expecting auth schema to be not nil")
+				configSchema := configCrd.Spec.Versions[0].Schema.OpenAPIV3Schema
+				assert.NotNil(t, configSchema, "expecting configuration schema to be not nil")
 
-				spec, ok := authSchema.Properties["spec"]
-				assert.True(t, ok, "expecting auth schema to have a 'spec' property")
-				authSpecProps := spec.Properties
-				_, ok = authSpecProps["tokenRef"]
-				assert.True(t, ok, "expecting auth spec to have 'token' property")
+				configSpecProps := configSchema.Properties["spec"].Properties
+				_, ok = configSpecProps["authenticationMethods"]
+				assert.True(t, ok, "expecting config spec to have 'authenticationMethods' property")
+
+				pathCreate, ok := configSpecProps["path"].Properties["create"]
+				assert.True(t, ok, "expecting config spec path to have 'create' property")
+
+				// check inside 'path' property of the configuration spec
+				pathCreateProps := pathCreate.Properties
+				_, ok = pathCreateProps["owner"]
+				assert.True(t, ok, "expecting config spec path to have 'owner' property")
+				_, ok = pathCreateProps["repo"]
+				assert.True(t, ok, "expecting config spec path to have 'repo' property")
 
 				return ctx
 			}

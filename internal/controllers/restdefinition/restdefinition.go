@@ -355,7 +355,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("getting document model from CR: %w", err)
 		}
 
-		// Shim needed to convert the VerbsDescription to Verbs
+		// Shim needed to convert definitionv1alpha1.VerbsDescription to oas2jsonschema.Verbs
 		// Verbs is a type defined within the oas2jsonschema package
 		// and so it's not tied with the RestDefinition CRD
 		verbs := make([]oas2jsonschema.Verb, len(cr.Spec.Resource.VerbsDescription))
@@ -367,12 +367,27 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			}
 		}
 
+		// Shim needed to convert definitionv1alpha1.ConfigurationFields to oas2jsonschema.ConfigurationFields
+		configurationFields := make([]oas2jsonschema.ConfigurationField, len(cr.Spec.ConfigurationFields))
+		for i, v := range cr.Spec.ConfigurationFields {
+			configurationFields[i] = oas2jsonschema.ConfigurationField{
+				FromOpenAPI: oas2jsonschema.FromOpenAPI{
+					Name: v.FromOpenAPI.Name,
+					In:   v.FromOpenAPI.In,
+				},
+				FromRestDefinition: oas2jsonschema.FromRestDefinition{
+					Action: v.FromRestDefinition.Action,
+				},
+			}
+		}
+
 		// Create the resource configuration for the OAS schema generator
 		// We pass only relevant fields from the RestDefinition needed for schema generation
 		resourceConfig := &oas2jsonschema.ResourceConfig{
 			Verbs:                  verbs,
 			Identifiers:            cr.Spec.Resource.Identifiers,
 			AdditionalStatusFields: cr.Spec.Resource.AdditionalStatusFields,
+			ConfigurationFields:    configurationFields,
 		}
 
 		// Create the OAS schema generator
@@ -416,78 +431,35 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		for authSchemaName := range result.AuthCRDSchemas {
-			gvk := schema.GroupVersionKind{
-				Group:   cr.Spec.ResourceGroup,
-				Version: resourceVersion,
-				Kind:    text.CapitaliseFirstLetter(authSchemaName),
-			}
+		e.log.Info("Configuration fields defined, generating Configuration CRD")
 
-			crdOk, err := crd.Lookup(ctx, e.kube, plurals.ToGroupVersionResource(gvk))
-			if err != nil {
-				return fmt.Errorf("looking up CRD: %w", err)
-			}
-			if crdOk {
-				e.log.Debug("CRD already exists", "Kind:", authSchemaName)
-				if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-					Kind:       gvk.Kind,
-					APIVersion: gvk.GroupVersion().String(),
-				}) {
-					e.log.Debug("Adding authentication CRD to status", "Kind:", authSchemaName)
-					cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-						Kind:       gvk.Kind,
-						APIVersion: gvk.GroupVersion().String(),
-					})
-				}
-
-				err = e.kube.Status().Update(ctx, cr)
-				if err != nil {
-					return fmt.Errorf("updating status: %w", err)
-				}
-				continue
-			}
-
-			resource = crdgen.Generate(ctx, crdgen.Options{
-				Managed:                false,
-				WorkDir:                fmt.Sprintf("gen-crds/%s", authSchemaName),
-				GVK:                    gvk,
-				Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restauths", "ra"},
-				SpecJsonSchemaGetter:   result.OASAuthCRDSchemaGetter(authSchemaName),
-				StatusJsonSchemaGetter: oas2jsonschema.StaticJsonSchemaGetter(),
-			})
-
-			if resource.Err != nil {
-				return fmt.Errorf("generating CRD: %w", resource.Err)
-			}
-
-			crdu, err := crd.Unmarshal(resource.Manifest)
-			if err != nil {
-				return fmt.Errorf("unmarshalling CRD: %w", err)
-			}
-
-			err = kube.Apply(ctx, e.kube, crdu, kube.ApplyOptions{})
-			if err != nil {
-				return fmt.Errorf("installing CRD: %w", err)
-			}
-
-			e.log.Info("Created authentication CRD", "Kind:", authSchemaName, "Group:", gvk.Group)
-
-			if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-				Kind:       gvk.Kind,
-				APIVersion: gvk.GroupVersion().String(),
-			}) {
-				e.log.Debug("Adding authentication CRD to status", "Kind:", authSchemaName)
-				cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-					Kind:       gvk.Kind,
-					APIVersion: gvk.GroupVersion().String(),
-				})
-			}
-
-			err = e.kube.Status().Update(ctx, cr)
-			if err != nil {
-				return fmt.Errorf("updating status: %w", err)
-			}
+		cfgGVK := schema.GroupVersionKind{
+			Group:   cr.Spec.ResourceGroup,
+			Version: resourceVersion,
+			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind) + "Configuration",
 		}
+
+		cfgResource := crdgen.Generate(ctx, crdgen.Options{
+			Managed:              false, // Configuration is not a managed resource
+			WorkDir:              fmt.Sprintf("gen-crds/%s", cfgGVK.Kind),
+			GVK:                  cfgGVK,
+			Categories:           []string{strings.ToLower(cr.Spec.Resource.Kind), "restconfigs", "rc"},
+			SpecJsonSchemaGetter: result.OASConfigurationSchemaGetter(),
+		})
+		if cfgResource.Err != nil {
+			return fmt.Errorf("generating configuration CRD: %w", cfgResource.Err)
+		}
+
+		cfgCRDU, err := crd.Unmarshal(cfgResource.Manifest)
+		if err != nil {
+			return fmt.Errorf("unmarshalling configuration CRD: %w", err)
+		}
+
+		err = kube.Apply(ctx, e.kube, cfgCRDU, kube.ApplyOptions{})
+		if err != nil {
+			return fmt.Errorf("installing configuration CRD: %w", err)
+		}
+		e.log.Info("Created Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
 
 		cr.SetConditions(rtv1.Creating())
 		err = e.kube.Status().Update(ctx, cr)

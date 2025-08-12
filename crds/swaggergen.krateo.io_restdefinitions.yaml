@@ -62,6 +62,33 @@ spec:
           spec:
             description: RestDefinitionSpec is the specification of a RestDefinition.
             properties:
+              configurationFields:
+                description: 'ConfigurationFields: the list of fields to use as configuration
+                  fields'
+                items:
+                  properties:
+                    fromOpenAPI:
+                      properties:
+                        in:
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - in
+                      - name
+                      type: object
+                    fromRestDefinition:
+                      properties:
+                        action:
+                          type: string
+                      required:
+                      - action
+                      type: object
+                  required:
+                  - fromOpenAPI
+                  - fromRestDefinition
+                  type: object
+                type: array
               oasPath:
                 description: |-
                   Path to the OpenAPI specification. This value can change over time, for example if the OAS file is updated but be sure to not change the requestbody of the `create` verb.
