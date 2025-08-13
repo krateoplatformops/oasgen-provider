@@ -368,8 +368,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 
 		// Shim needed to convert definitionv1alpha1.ConfigurationFields to oas2jsonschema.ConfigurationFields
-		configurationFields := make([]oas2jsonschema.ConfigurationField, len(cr.Spec.ConfigurationFields))
-		for i, v := range cr.Spec.ConfigurationFields {
+		configurationFields := make([]oas2jsonschema.ConfigurationField, len(cr.Spec.Resource.ConfigurationFields))
+		for i, v := range cr.Spec.Resource.ConfigurationFields {
 			configurationFields[i] = oas2jsonschema.ConfigurationField{
 				FromOpenAPI: oas2jsonschema.FromOpenAPI{
 					Name: v.FromOpenAPI.Name,

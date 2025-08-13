@@ -35,6 +35,10 @@ type Resource struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="AdditionalStatusFields are immutable, you cannot change them once the CRD has been generated"
 	// +optional
 	AdditionalStatusFields []string `json:"additionalStatusFields,omitempty"`
+	// ConfigurationFields: the list of fields to use as configuration fields
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="ConfigurationFields are immutable, you cannot change them once the CRD has been generated"
+	// +optional
+	ConfigurationFields []ConfigurationField `json:"configurationFields,omitempty"`
 }
 
 // RestDefinitionSpec is the specification of a RestDefinition.
@@ -53,9 +57,6 @@ type RestDefinitionSpec struct {
 	// The resource to manage
 	// +required
 	Resource Resource `json:"resource"`
-	// ConfigurationFields: the list of fields to use as configuration fields
-	// +optional
-	ConfigurationFields []ConfigurationField `json:"configurationFields,omitempty"`
 }
 
 type ConfigurationField struct {

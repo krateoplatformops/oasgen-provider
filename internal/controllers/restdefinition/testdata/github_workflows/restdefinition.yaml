@@ -12,14 +12,14 @@ spec:
     - action: create
       method: POST
       path: /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches
-  configurationFields:
-  - fromOpenAPI:
-      name: owner
-      in: path
-    fromRestDefinition:
-      action: create
-  #- fromOpenAPI:
-  #    name: repo
-  #    in: path
-  #  fromRestDefinition:
-  #    action: create
+    configurationFields:
+    - fromOpenAPI:
+        name: owner
+        in: path
+      fromRestDefinition:
+        action: create
+    #- fromOpenAPI:
+    #    name: repo
+    #    in: path
+    #  fromRestDefinition:
+    #    action: create

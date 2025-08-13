@@ -117,7 +117,7 @@ func addConfigurationRefToSpec(schema *Schema) {
 			{Name: "name", Schema: &Schema{Type: []string{"string"}}},
 			{Name: "namespace", Schema: &Schema{Type: []string{"string"}, Description: "Namespace of the referenced Configuration. If not provided, the same namespace will be used."}},
 		},
-		Required: []string{"name"},
+		Required: []string{"name"}, // If namespace is not provided, it is RDC duty to use the same namespace as the resource.
 	}
 	schema.Properties = append(schema.Properties, Property{Name: "configurationRef", Schema: configRefSchema})
 	schema.Required = append(schema.Required, "configurationRef")
