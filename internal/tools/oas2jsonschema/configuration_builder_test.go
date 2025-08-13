@@ -35,6 +35,7 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 		},
 		securitySchemes: []SecuritySchemeInfo{
 			{Name: "BearerAuth", Type: SchemeTypeHTTP, Scheme: "bearer"},
+			{Name: "BasicAuth", Type: SchemeTypeHTTP, Scheme: "basic"},
 		},
 	}
 
@@ -78,11 +79,12 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 			name: "Authentication Only",
 			doc:  mockDoc,
 			resourceConfig: &ResourceConfig{
-				Verbs:               []Verb{}, // No verbs needed if only testing auth
-				ConfigurationFields: []ConfigurationField{},
+				Verbs:               []Verb{},               // No verbs needed if only testing auth
+				ConfigurationFields: []ConfigurationField{}, // No configuration fields
 			},
 			expectedSchemaPaths: map[string]string{
 				"properties.authenticationMethods.properties.bearerAuth.type": "object",
+				"properties.authenticationMethods.properties.basicAuth.type":  "object",
 			},
 		},
 		{
@@ -114,7 +116,7 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 			expectedSchemaPaths: nil, // Expect nil schema
 		},
 		{
-			name: "Gracefully Skips Invalid Fields",
+			name: "Gracefully Skips Invalid Fields", // To be understood if we want this behavior
 			doc:  mockDoc,
 			resourceConfig: &ResourceConfig{
 				Verbs: []Verb{
@@ -143,7 +145,7 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 			generator := NewOASSchemaGenerator(tc.doc, DefaultGeneratorConfig(), tc.resourceConfig)
 
 			// Act
-			schemaBytes, err := generator.GenerateConfigurationSchema()
+			schemaBytes, err := generator.BuildConfigurationSchema()
 
 			// Assert
 			if tc.expectError {

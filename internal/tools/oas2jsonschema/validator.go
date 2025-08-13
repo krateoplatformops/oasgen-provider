@@ -11,6 +11,29 @@ const (
 	ActionUpdate = "update"
 )
 
+func ValidateSchemas(doc OASDocument, verbs []Verb, config *GeneratorConfig) []error {
+	baseAction, err := determineBaseAction(verbs)
+	if err != nil {
+		return []error{err}
+	}
+
+	var errors []error
+	for _, verb := range verbs {
+		// Determine if the current verb is one we need to compare against the base.
+		isComparable := verb.Action == ActionCreate || verb.Action == ActionUpdate
+		if baseAction == ActionGet && verb.Action == ActionFindBy {
+			isComparable = true
+		}
+
+		if isComparable {
+			// Perform the comparison against the base action schema.
+			errors = append(errors, compareActionResponseSchemas(doc, verbs, verb.Action, baseAction, config)...)
+		}
+	}
+
+	return errors
+}
+
 // TODO: make it configurable
 func determineBaseAction(verbs []Verb) (string, error) {
 	hasGet := false
@@ -36,29 +59,6 @@ func determineBaseAction(verbs []Verb) (string, error) {
 		Code:    CodeMissingBaseAction,
 		Message: "no 'get' or 'findby' action found to serve as a base for schema validation",
 	}
-}
-
-func ValidateSchemas(doc OASDocument, verbs []Verb, config *GeneratorConfig) []error {
-	baseAction, err := determineBaseAction(verbs)
-	if err != nil {
-		return []error{err}
-	}
-
-	var errors []error
-	for _, verb := range verbs {
-		// Determine if the current verb is one we need to compare against the base.
-		isComparable := verb.Action == ActionCreate || verb.Action == ActionUpdate
-		if baseAction == ActionGet && verb.Action == ActionFindBy {
-			isComparable = true
-		}
-
-		if isComparable {
-			// Perform the comparison against the base action schema.
-			errors = append(errors, compareActionResponseSchemas(doc, verbs, verb.Action, baseAction, config)...)
-		}
-	}
-
-	return errors
 }
 
 func compareActionResponseSchemas(doc OASDocument, verbs []Verb, action1, action2 string, config *GeneratorConfig) []error {

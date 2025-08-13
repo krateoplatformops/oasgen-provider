@@ -6,34 +6,69 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
 )
 
-// addConfigurationRef adds the configurationRef property to the schema.
-func addConfigurationRef(schema *Schema) {
-	configRefSchema := &Schema{
-		Type:        []string{"object"},
-		Description: "A reference to the Configuration CR that holds all the needed configuration for this resource.",
-		Properties: []Property{
-			{Name: "name", Schema: &Schema{Type: []string{"string"}}},
-			{Name: "namespace", Schema: &Schema{Type: []string{"string"}, Description: "Namespace of the referenced Configuration. If not provided, the same namespace will be used."}},
-		},
-		Required: []string{"name"},
-	}
-	schema.Properties = append(schema.Properties, Property{Name: "configurationRef", Schema: configRefSchema})
-	schema.Required = append(schema.Required, "configurationRef")
-}
-
-// addParametersToSpec adds the parameters from all verbs to the schema, excluding
-// those that are defined as configuration fields.
-func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
+// BuildSpecSchema generates the complete spec schema for a given resource.
+func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	var warnings []error
 
-	isConfiguredParam := func(param ParameterInfo) bool {
-		for _, field := range g.resourceConfig.ConfigurationFields {
-			if field.FromOpenAPI.Name == param.Name && field.FromOpenAPI.In == param.In {
-				return true
-			}
-		}
-		return false
+	// Create the base schema for the spec
+	// which is the request body of the 'create' action.
+	baseSchema, err := g.getBaseSchemaForSpec()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not determine base schema for spec: %w", err)
 	}
+
+	// Create a lookup set of configured fields for efficient filtering.
+	configuredFieldsSet := g.getConfiguredFieldsSet()
+
+	// Always add a reference to the Configuration CRD.
+	addConfigurationRefToSpec(baseSchema)
+
+	// Remove any properties from the base schema that are defined as configuration fields.
+	// TODO: understand if this is actually needed
+	// If we decide that a field in the request body cannot be a configuration field, then this is not needed.
+	filterConfiguredProperties(baseSchema, configuredFieldsSet)
+
+	// Add parameters to the spec schema, excluding those that are defined as configuration fields.
+	warnings = append(warnings, g.addParametersToSpec(baseSchema, configuredFieldsSet)...)
+
+	// Add identifiers to the spec schema, if configured.
+	if g.generatorConfig.IncludeIdentifiersInSpec {
+		addIdentifiersToSpec(baseSchema, g.resourceConfig.Identifiers)
+	}
+
+	// Schema preparation for CRD compatibility.
+	if err := prepareSchemaForCRD(baseSchema); err != nil {
+		return nil, warnings, fmt.Errorf("could not prepare spec schema for CRD: %w", err)
+	}
+
+	// Convert the schema to JSON schema format.
+	byteSchema, err := GenerateJsonSchema(baseSchema)
+	if err != nil {
+		return nil, warnings, fmt.Errorf("could not generate final JSON schema: %w", err)
+	}
+
+	return byteSchema, warnings, nil
+}
+
+// getConfiguredFieldsSet creates a set of configured fields based on the resource configuration.
+func (g *OASSchemaGenerator) getConfiguredFieldsSet() map[string]struct{} {
+	configuredFields := make(map[string]struct{})
+	for _, field := range g.resourceConfig.ConfigurationFields {
+		in := field.FromOpenAPI.In
+		//if in == "" {
+		//	in = "body" // Normalize for consistency with request body properties
+		//}
+		key := fmt.Sprintf("%s-%s", in, field.FromOpenAPI.Name)
+		fmt.Printf("Adding configured field: %s\n", key) // Debugging output
+		configuredFields[key] = struct{}{}               // Use a struct for set-like behavior
+	}
+	return configuredFields
+}
+
+// addParametersToSpec adds the parameters from all verbs to the schema,
+// excluding those that are defined as configuration fields.
+func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredFields map[string]struct{}) []error {
+	var warnings []error
 
 	// Use a map to track unique paths to avoid processing them multiple times
 	uniquePaths := make(map[string]struct{})
@@ -44,13 +79,14 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 	for pathStr := range uniquePaths {
 		path, ok := g.doc.FindPath(pathStr)
 		if !ok {
-			warnings = append(warnings, SchemaGenerationError{Code: CodePathNotFound, Message: fmt.Sprintf("path '%s' in RestDefinition not found", pathStr)})
+			warnings = append(warnings, SchemaGenerationError{Code: CodePathNotFound, Message: fmt.Sprintf("path '%s' set in RestDefinition not found in OAS", pathStr)})
 			continue
 		}
 		ops := path.GetOperations()
 		for opName, op := range ops {
 			for _, param := range op.GetParameters() {
-				if isConfiguredParam(param) {
+				key := fmt.Sprintf("%s-%s", param.In, param.Name)
+				if _, isConfigured := configuredFields[key]; isConfigured {
 					continue // Skip parameters that are part of the configuration
 				}
 
@@ -72,6 +108,21 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 	return warnings
 }
 
+// addConfigurationRefToSpec adds the configurationRef property to the schema.
+func addConfigurationRefToSpec(schema *Schema) {
+	configRefSchema := &Schema{
+		Type:        []string{"object"},
+		Description: "A reference to the Configuration CR that holds all the needed configuration for this resource.",
+		Properties: []Property{
+			{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+			{Name: "namespace", Schema: &Schema{Type: []string{"string"}, Description: "Namespace of the referenced Configuration. If not provided, the same namespace will be used."}},
+		},
+		Required: []string{"name"},
+	}
+	schema.Properties = append(schema.Properties, Property{Name: "configurationRef", Schema: configRefSchema})
+	schema.Required = append(schema.Required, "configurationRef")
+}
+
 // addIdentifiersToSpec adds the identifiers to the schema.
 func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	for _, identifier := range identifiers {
@@ -82,6 +133,7 @@ func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 				break
 			}
 		}
+		// If the identifier is not found, add it to the schema.
 		if !found {
 			schema.Properties = append(schema.Properties, Property{
 				Name: identifier,
@@ -94,64 +146,13 @@ func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	}
 }
 
-// BuildSpecSchema generates the complete spec schema for a given resource.
-func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
-	var warnings []error
-
-	baseSchema, err := g.getBaseSchemaForSpec()
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not determine base schema for spec: %w", err)
-	}
-
-	// Always add a reference to the Configuration CRD.
-	addConfigurationRef(baseSchema)
-
-	// Remove any properties from the base schema that are defined as configuration fields.
-	filterConfiguredProperties(baseSchema, g.resourceConfig, g.resourceConfig.Verbs)
-
-	warnings = append(warnings, g.addParametersToSpec(baseSchema)...)
-	if g.generatorConfig.IncludeIdentifiersInSpec {
-		addIdentifiersToSpec(baseSchema, g.resourceConfig.Identifiers)
-	}
-
-	if err := prepareSchemaForCRD(baseSchema); err != nil {
-		return nil, warnings, fmt.Errorf("could not prepare spec schema for CRD: %w", err)
-	}
-
-	byteSchema, err := GenerateJsonSchema(baseSchema)
-	if err != nil {
-		return nil, warnings, fmt.Errorf("could not generate final JSON schema: %w", err)
-	}
-
-	return byteSchema, warnings, nil
-}
-
-func filterConfiguredProperties(schema *Schema, resourceConfig *ResourceConfig, verbs []Verb) {
+func filterConfiguredProperties(schema *Schema, configuredFields map[string]struct{}) {
 	var filteredProps []Property
 	for _, prop := range schema.Properties {
-		isConfigured := false
-		for _, field := range resourceConfig.ConfigurationFields {
-			// To filter a property, it must match a configured field's name.
-			// We also need to ensure we are not mis-identifying properties
-			// that are not from parameters (i.e., they are from the request body).
-			// A simple heuristic is to check if the parameter exists for any verb.
-			if prop.Name == field.FromOpenAPI.Name && isApplicativeParam(prop.Name, verbs) {
-				isConfigured = true
-				break
-			}
-		}
-		if !isConfigured {
+		key := fmt.Sprintf("body-%s", prop.Name)
+		if _, isConfigured := configuredFields[key]; !isConfigured {
 			filteredProps = append(filteredProps, prop)
 		}
 	}
 	schema.Properties = filteredProps
-}
-
-// isApplicativeParam checks if a property name corresponds to a parameter in any of the verbs.
-func isApplicativeParam(propName string, verbs []Verb) bool {
-	// This is a simplified check. A more robust implementation might need access to the OAS doc.
-	// For the purpose of this test fix, we assume that if a property name matches a configured
-	// field name, and that field is for a parameter, we should filter it.
-	// This helper is a placeholder for that logic.
-	return true
 }

@@ -7,10 +7,13 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
 )
 
-// GenerateConfigurationSchema generates the spec schema for the Configuration CRD.
-func (g *OASSchemaGenerator) GenerateConfigurationSchema() ([]byte, error) {
+// Note: currently the Configuration CRD has no status subresource.
+
+// BuildConfigurationSchema builds the spec schema for the Configuration CRD.
+func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 	// If there are no configuration fields and no security schemes, no configuration CRD is needed.
 	if len(g.resourceConfig.ConfigurationFields) == 0 && len(g.doc.SecuritySchemes()) == 0 {
+		// TODO: add logging / warning here
 		return nil, nil
 	}
 
@@ -62,25 +65,26 @@ func (g *OASSchemaGenerator) GenerateConfigurationSchema() ([]byte, error) {
 		rootSchema.Properties = append(rootSchema.Properties, Property{Name: paramType, Schema: schema})
 	}
 
-	// Consolidate authentication into this schema.
-	authMethodSchemas, err := g.buildAuthMethodSchemaMap()
+	// Add authentication into this schema.
+	authMethodsSchemas, err := g.buildAuthMethodsSchemaMap()
 	if err != nil {
 		return nil, fmt.Errorf("could not generate auth schemas for configuration: %w", err)
 	}
-	if len(authMethodSchemas) > 0 {
-		addAuthenticationMethods(rootSchema, authMethodSchemas)
+	if len(authMethodsSchemas) > 0 {
+		addAuthMethods(rootSchema, authMethodsSchemas)
 	}
 
 	return GenerateJsonSchema(rootSchema)
 }
 
-// buildAuthMethodSchemaMap generates the JSON schemas for the authentication methods.
-func (g *OASSchemaGenerator) buildAuthMethodSchemaMap() (map[string]*Schema, error) {
+// buildAuthMethodsSchemaMap generates the JSON schemas for the authentication methods.
+func (g *OASSchemaGenerator) buildAuthMethodsSchemaMap() (map[string]*Schema, error) {
 	schemaMap := make(map[string]*Schema)
 	for _, secScheme := range g.doc.SecuritySchemes() {
 		authSchema, err := createSchemaForSecurityScheme(secScheme)
 		if err != nil {
 			// Skip unsupported security schemes
+			// TODO: add logging here
 			continue
 		}
 		schemaMap[secScheme.Name] = authSchema
@@ -88,8 +92,8 @@ func (g *OASSchemaGenerator) buildAuthMethodSchemaMap() (map[string]*Schema, err
 	return schemaMap, nil
 }
 
-// addAuthenticationMethods adds the authenticationMethods property to the configuration schema.
-func addAuthenticationMethods(schema *Schema, authSchemas map[string]*Schema) {
+// addAuthMethods adds the authenticationMethods property to the configuration schema.
+func addAuthMethods(schema *Schema, authSchemas map[string]*Schema) {
 	authMethodsProps := []Property{}
 	for key, authSchema := range authSchemas {
 		authMethodsProps = append(authMethodsProps, Property{Name: text.FirstToLower(key), Schema: authSchema})
@@ -104,6 +108,8 @@ func addAuthenticationMethods(schema *Schema, authSchemas map[string]*Schema) {
 }
 
 // createSchemaForSecurityScheme generates the JSON schema for a given security scheme.
+// Note: currently only supports HTTP Basic and Bearer authentication schemes.
+// If the security scheme is not supported, it returns an error.
 func createSchemaForSecurityScheme(info SecuritySchemeInfo) (*Schema, error) {
 	if info.Type == SchemeTypeHTTP && info.Scheme == "basic" {
 		return reflectSchema(reflect.TypeOf(BasicAuth{}))

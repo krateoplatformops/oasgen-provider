@@ -18,8 +18,8 @@ spec:
       in: path
     fromRestDefinition:
       action: create
-  - fromOpenAPI:
-      name: repo
-      in: path
-    fromRestDefinition:
-      action: create
+  #- fromOpenAPI:
+  #    name: repo
+  #    in: path
+  #  fromRestDefinition:
+  #    action: create

@@ -28,9 +28,9 @@ spec:
     - action: update
       method: PATCH
       path: /resource
-  configurationFields:
-  - fromOpenAPI:
-      name: name
-      in: query
-    fromRestDefinition:
-      action: get
+  #configurationFields:
+  #- fromOpenAPI:
+  #    name: name
+  #    in: query
+  #  fromRestDefinition:
+  #    action: get
