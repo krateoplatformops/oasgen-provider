@@ -146,6 +146,8 @@ func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	}
 }
 
+// TODO: understand if this is actually needed
+// If we decide that a field in the request body cannot be a configuration field, then this is not needed.
 func filterConfiguredProperties(schema *Schema, configuredFields map[string]struct{}) {
 	var filteredProps []Property
 	for _, prop := range schema.Properties {

@@ -69,19 +69,6 @@ func convertNumberToInteger(schema *Schema) {
 	}
 }
 
-// GenerateJsonSchema converts a domain-specific Schema object into a JSON schema byte slice.
-func GenerateJsonSchema(schema *Schema) ([]byte, error) {
-	schemaMap, err := schemaToMap(schema)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert schema to map: %w", err)
-	}
-
-	// Add standard JSON schema fields
-	schemaMap["$schema"] = "http://json-schema.org/draft-07/schema#"
-
-	return json.MarshalIndent(schemaMap, "", "  ")
-}
-
 // schemaToMap converts our domain-specific Schema object into a map[string]interface{}
 // suitable for JSON marshalling. This is the key to making the generator library-agnostic.
 func schemaToMap(schema *Schema) (map[string]interface{}, error) {
@@ -147,4 +134,17 @@ func schemaToMap(schema *Schema) (map[string]interface{}, error) {
 	}
 
 	return m, nil
+}
+
+// GenerateJsonSchema converts a domain-specific Schema object into a JSON schema byte slice.
+func GenerateJsonSchema(schema *Schema) ([]byte, error) {
+	schemaMap, err := schemaToMap(schema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert schema to map: %w", err)
+	}
+
+	// Add standard JSON schema fields
+	schemaMap["$schema"] = "http://json-schema.org/draft-07/schema#"
+
+	return json.MarshalIndent(schemaMap, "", "  ")
 }

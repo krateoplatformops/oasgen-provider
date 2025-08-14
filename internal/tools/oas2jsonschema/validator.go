@@ -34,7 +34,7 @@ func ValidateSchemas(doc OASDocument, verbs []Verb, config *GeneratorConfig) []e
 	return errors
 }
 
-// TODO: make it configurable
+// TODO: make it configurable in the config
 func determineBaseAction(verbs []Verb) (string, error) {
 	hasGet := false
 	hasFindBy := false

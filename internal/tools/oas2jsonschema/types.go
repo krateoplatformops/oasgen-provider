@@ -37,7 +37,7 @@ type ConfigurationField struct {
 
 type FromOpenAPI struct {
 	Name string
-	In   string // "query", "path", "header", "cookie"
+	In   string // "query", "path", "header", "cookie" (TODO: add validation for this)
 }
 
 type FromRestDefinition struct {
