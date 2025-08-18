@@ -2,6 +2,7 @@ package oas2jsonschema
 
 import (
 	"errors"
+	"log"
 	"strconv"
 
 	"github.com/pb33f/libopenapi"
@@ -169,7 +170,8 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 	// invalid schemas (e.g., dangling references).
 	defer func() {
 		if r := recover(); r != nil {
-			// On panic, ensure we return a nil schema.
+			// Log the panic for debugging
+			log.Printf("Schema conversion panic: %v", r)
 			domainSchema = nil
 		}
 	}()
@@ -180,21 +182,49 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 
 	s, err := proxy.BuildSchema()
 	if err != nil {
-		return nil // Handle expected errors, like resolution failures.
+		log.Printf("Schema build error: %v", err)
+		return nil
 	}
 
-	// This check is necessary because even if err is nil, the schema can be nil
-	// in some edge cases (like a valid but empty proxy).
 	if s == nil {
 		return nil
+	}
+
+	var defaultVal interface{}
+	if s.Default != nil {
+		if err := s.Default.Decode(&defaultVal); err != nil {
+			log.Printf("Failed to decode default value: %v", err)
+		}
 	}
 
 	domainSchema = &Schema{
 		Type:        s.Type,
 		Description: s.Description,
 		Required:    s.Required,
+		Default:     defaultVal,
 	}
 
+	// AdditionalProperties handling for both OAS 3.0/3.1
+	if s.AdditionalProperties != nil {
+		switch {
+		case s.AdditionalProperties.IsB():
+			// Boolean form: allows or disallows any additional properties
+			domainSchema.AdditionalProperties = s.AdditionalProperties.B
+		case s.AdditionalProperties.IsA():
+			// Schema form: recurse so you don't lose detail
+			// TODO: handle this case properly
+			//domainSchema.AdditionalPropertiesSchema = convertLibopenapiSchema(s.AdditionalProperties.A)
+		default:
+			log.Printf("Warning: Unknown AdditionalProperties type")
+		}
+	}
+
+	// Assign MaxProperties if present, as per JSON Schema spec (any non-negative integer).
+	if s.MaxProperties != nil {
+		domainSchema.MaxProperties = int(*s.MaxProperties)
+	}
+
+	// Properties handling
 	if s.Properties != nil {
 		for pair := s.Properties.First(); pair != nil; pair = pair.Next() {
 			domainSchema.Properties = append(domainSchema.Properties, Property{
@@ -204,10 +234,28 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 		}
 	}
 
-	if s.Items != nil && s.Items.IsA() {
-		domainSchema.Items = convertLibopenapiSchema(s.Items.A)
+	// Items handling (OAS 3.0 / 3.1)
+	if s.Items != nil {
+		switch {
+		case s.Items.IsA():
+			// Single schema (OAS 3.0 style or OAS 3.1 single schema)
+			domainSchema.Items = convertLibopenapiSchema(s.Items.A)
+
+			// Edge case: boolean schemas in OAS 3.1
+			// if domainSchema.Items != nil && domainSchema.Items.IsBooleanSchema {
+			//     domainSchema.ItemsBoolean = domainSchema.Items.BooleanValue
+			//     domainSchema.Items = nil
+			// }
+
+		case s.Items.IsB():
+			// OAS 3.1 tuple validation: array of schemas
+			// for _, sub := range s.Items.B {
+			//     domainSchema.TupleItems = append(domainSchema.TupleItems, convertLibopenapiSchema(sub))
+			// }
+		}
 	}
 
+	// Handle AllOf
 	for _, allOfProxy := range s.AllOf {
 		domainSchema.AllOf = append(domainSchema.AllOf, convertLibopenapiSchema(allOfProxy))
 	}
@@ -215,6 +263,7 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 	return domainSchema
 }
 
+// Note: currently not used
 func convertToLibopenapiSchema(schema *Schema) *base.Schema {
 	if schema == nil {
 		return nil

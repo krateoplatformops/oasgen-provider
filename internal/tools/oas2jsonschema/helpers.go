@@ -5,8 +5,8 @@ import (
 	"fmt"
 )
 
-// getPrimaryType returns the primary type from a slice of types introuduced in OpenAPI 3.1.
-// which allows multiple types including "null".
+// getPrimaryType returns the primary type from a slice of types
+// The "type" slice of types was introduced in OpenAPI 3.1 which allows multiple types including "null".
 // Source: https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0
 func getPrimaryType(types []string) string {
 	for _, t := range types {
@@ -93,6 +93,21 @@ func schemaToMap(schema *Schema) (map[string]interface{}, error) {
 
 	if len(schema.Required) > 0 {
 		m["required"] = schema.Required
+	}
+
+	// TODO: add unit tests for this
+	if schema.Default != nil {
+		m["default"] = schema.Default
+	}
+
+	// TODO: add unit tests for this
+	if schema.AdditionalProperties {
+		m["additionalProperties"] = true
+	}
+
+	// TODO: add unit tests for this
+	if schema.MaxProperties > 0 {
+		m["maxProperties"] = schema.MaxProperties
 	}
 
 	if len(schema.Properties) > 0 {

@@ -70,9 +70,9 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 				},
 			},
 			expectedSchemaPaths: map[string]string{
-				"properties.query.properties.get.properties.api-version.type":   "string",
-				"properties.header.properties.get.properties.X-Request-ID.type": "string",
-				"properties.path.properties.put.properties.id.type":             "integer",
+				"properties.configuration.properties.query.properties.get.properties.api-version.type":   "string",
+				"properties.configuration.properties.header.properties.get.properties.X-Request-ID.type": "string",
+				"properties.configuration.properties.path.properties.put.properties.id.type":             "integer",
 			},
 		},
 		{
@@ -83,8 +83,8 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 				ConfigurationFields: []ConfigurationField{}, // No configuration fields
 			},
 			expectedSchemaPaths: map[string]string{
-				"properties.authenticationMethods.properties.bearerAuth.type": "object",
-				"properties.authenticationMethods.properties.basicAuth.type":  "object",
+				"properties.authentication.properties.bearer.type": "object",
+				"properties.authentication.properties.basic.type":  "object",
 			},
 		},
 		{
@@ -102,8 +102,8 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 				},
 			},
 			expectedSchemaPaths: map[string]string{
-				"properties.query.properties.get.properties.api-version.type": "string",
-				"properties.authenticationMethods.properties.bearerAuth.type": "object",
+				"properties.configuration.properties.query.properties.get.properties.api-version.type": "string",
+				"properties.authentication.properties.bearer.type":     "object",
 			},
 		},
 		{
@@ -134,7 +134,7 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 				},
 			},
 			expectedSchemaPaths: map[string]string{
-				"properties.query.properties.get.properties.api-version.type": "string",
+				"properties.configuration.properties.query.properties.get.properties.api-version.type": "string",
 			},
 		},
 	}

@@ -30,6 +30,7 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 
 	specSchema, warnings, err := g.BuildSpecSchema()
 	if err != nil {
+		// fatal error
 		return nil, fmt.Errorf("failed to generate spec schema: %w", err)
 	}
 	generationWarnings = append(generationWarnings, warnings...)
@@ -48,6 +49,7 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 		var err error
 		configurationSchema, err = g.BuildConfigurationSchema()
 		if err != nil {
+			// fatal error
 			return nil, fmt.Errorf("failed to generate configuration schema: %w", err)
 		}
 	}

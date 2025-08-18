@@ -98,6 +98,7 @@ func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 stri
 	schema2HasProps := len(schema2.Properties) > 0
 
 	if !schema1HasProps && !schema2HasProps {
+		// Check if primary types are compatible
 		if !areTypesCompatible(schema1.Type, schema2.Type) {
 			errors = append(errors, SchemaValidationError{
 				Path:     path,
@@ -161,9 +162,11 @@ func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 stri
 
 		switch getPrimaryType(prop1.Schema.Type) {
 		case "object":
+			// recursively compare object schemas
 			errors = append(errors, compareSchemas(currentPath, prop1.Schema, prop2.Schema, action1, action2)...)
 		case "array":
 			if prop1.Schema.Items != nil && prop2.Schema.Items != nil {
+				// recursively compare array item schemas
 				errors = append(errors, compareSchemas(currentPath, prop1.Schema.Items, prop2.Schema.Items, action1, action2)...)
 			} else if prop1.Schema.Items != nil && prop2.Schema.Items == nil {
 				errors = append(errors, SchemaValidationError{

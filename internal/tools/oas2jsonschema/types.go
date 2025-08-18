@@ -65,12 +65,15 @@ type Property struct {
 // It is not a representation of the entire OpenAPI document itself.
 // Potentially, this struct could be modified to include more fields in the future.
 type Schema struct {
-	Type        []string
-	Description string
-	Properties  []Property
-	Items       *Schema
-	AllOf       []*Schema
-	Required    []string
+	Type                 []string
+	Description          string
+	Properties           []Property
+	Items                *Schema
+	AllOf                []*Schema
+	Required             []string
+	Default              interface{} // Default value for the schema
+	AdditionalProperties bool
+	MaxProperties        int
 }
 
 // SecuritySchemeType defines the type of a security scheme (e.g., http, apiKey).

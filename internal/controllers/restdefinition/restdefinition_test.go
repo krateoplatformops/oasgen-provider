@@ -454,14 +454,20 @@ func TestLifecycle_GitHubWorkflows(t *testing.T) {
 				err = r.Get(ctx, "workflowconfigurations.krateo.github.com", "", &configCrd)
 				assert.Nil(t, err, "expecting nil error getting generated configuration crd")
 
-				configSchema := configCrd.Spec.Versions[0].Schema.OpenAPIV3Schema
-				assert.NotNil(t, configSchema, "expecting configuration schema to be not nil")
+				configRootSchema := configCrd.Spec.Versions[0].Schema.OpenAPIV3Schema
+				assert.NotNil(t, configRootSchema, "expecting configuration root schema to be not nil")
 
-				configSpecProps := configSchema.Properties["spec"].Properties
-				_, ok = configSpecProps["authenticationMethods"]
-				assert.True(t, ok, "expecting config spec to have 'authenticationMethods' property")
+				configRootSchemaProps := configRootSchema.Properties["spec"].Properties
 
-				pathCreate, ok := configSpecProps["path"].Properties["create"]
+				_, ok = configRootSchemaProps["authentication"]
+				assert.True(t, ok, "expecting config spec to have 'authentication' property")
+
+				configurationProps, ok := configRootSchemaProps["configuration"]
+				assert.True(t, ok, "expecting config spec to have 'configuration' property")
+
+				pathProp, ok := configurationProps.Properties["path"]
+				assert.True(t, ok, "expecting config spec to have 'path' property")
+				pathCreate, ok := pathProp.Properties["create"]
 				assert.True(t, ok, "expecting config spec path to have 'create' property")
 
 				// check inside 'path' property of the configuration spec

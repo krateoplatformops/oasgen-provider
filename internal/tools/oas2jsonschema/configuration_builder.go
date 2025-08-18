@@ -10,6 +10,7 @@ import (
 // Note: currently the Configuration CRD has no status subresource.
 
 // BuildConfigurationSchema builds the spec schema for the Configuration CRD.
+// TODO: return a slice of errors instead of a single error.
 func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 	// If there are no configuration fields and no security schemes, no configuration CRD is needed.
 	if len(g.resourceConfig.ConfigurationFields) == 0 && len(g.doc.SecuritySchemes()) == 0 {
@@ -18,6 +19,11 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 	}
 
 	rootSchema := &Schema{
+		Type:       []string{"object"},
+		Properties: []Property{},
+	}
+
+	configurationSchema := &Schema{
 		Type:       []string{"object"},
 		Properties: []Property{},
 	}
@@ -60,9 +66,17 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 		actionSchema.Properties = append(actionSchema.Properties, Property{Name: param.Name, Schema: param.Schema})
 	}
 
-	// Add the populated parameter type schemas to the root schema.
+	// Add the populated parameter type schemas to the configuration schema.
 	for paramType, schema := range paramTypeSchemas {
-		rootSchema.Properties = append(rootSchema.Properties, Property{Name: paramType, Schema: schema})
+		configurationSchema.Properties = append(configurationSchema.Properties, Property{Name: paramType, Schema: schema})
+	}
+
+	// If there are no parameters in the configuration schema, we don't need to add it.
+	if len(configurationSchema.Properties) > 0 {
+		rootSchema.Properties = append(rootSchema.Properties, Property{
+			Name:   "configuration",
+			Schema: configurationSchema,
+		})
 	}
 
 	// Add authentication into this schema.
@@ -87,12 +101,12 @@ func (g *OASSchemaGenerator) buildAuthMethodsSchemaMap() (map[string]*Schema, er
 			// TODO: add logging here
 			continue
 		}
-		schemaMap[secScheme.Name] = authSchema
+		schemaMap[secScheme.Scheme] = authSchema
 	}
 	return schemaMap, nil
 }
 
-// addAuthMethods adds the authenticationMethods property to the configuration schema.
+// addAuthMethods adds the `authentication` property to the configuration schema.
 func addAuthMethods(schema *Schema, authSchemas map[string]*Schema) {
 	authMethodsProps := []Property{}
 	for key, authSchema := range authSchemas {
@@ -104,7 +118,7 @@ func addAuthMethods(schema *Schema, authSchemas map[string]*Schema) {
 		Description: "The authentication methods available for this API.",
 		Properties:  authMethodsProps,
 	}
-	schema.Properties = append(schema.Properties, Property{Name: "authenticationMethods", Schema: authMethodsSchema})
+	schema.Properties = append(schema.Properties, Property{Name: "authentication", Schema: authMethodsSchema})
 }
 
 // createSchemaForSecurityScheme generates the JSON schema for a given security scheme.
