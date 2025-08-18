@@ -38,13 +38,13 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 			continue
 		}
 
-		// Ensure the top-level schema for the parameter type (e.g., "query") exists.
+		// Ensure the top-level schema for the parameter type (e.g., "query") already exists.
 		if _, ok := paramTypeSchemas[param.In]; !ok {
 			paramTypeSchemas[param.In] = &Schema{Type: []string{"object"}, Properties: []Property{}}
 		}
 		paramTypeSchema := paramTypeSchemas[param.In]
 
-		// Ensure the schema for the action (e.g., "get") exists.
+		// Ensure the schema for the action (e.g., "get") already exists.
 		var actionSchema *Schema
 		found := false
 		for i := range paramTypeSchema.Properties {

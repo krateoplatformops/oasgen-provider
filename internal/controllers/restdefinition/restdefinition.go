@@ -194,6 +194,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
 	}
 	authenticationGVRs := getAuthenticationGVRs(doc, cr)
+	configurationGVR := getConfigurationGVR(cr)
 
 	gvr := plurals.ToGroupVersionResource(gvk)
 	e.log.Info("Observing RestDefinition", "gvr", gvr.String())
@@ -261,6 +262,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 	opts := deploy.DeployOptions{
 		AuthenticationGVRs:     authenticationGVRs,
+		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
@@ -478,8 +480,10 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("getting document model from CR: %w", err)
 	}
 	authenticationGVRs := getAuthenticationGVRs(doc, cr)
+	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.DeployOptions{
 		AuthenticationGVRs:     authenticationGVRs,
+		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
@@ -541,9 +545,10 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	gvr := plurals.ToGroupVersionResource(gvk)
 
 	authenticationGVRs := getAuthenticationGVRs(doc, cr)
-
+	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.DeployOptions{
 		AuthenticationGVRs:     authenticationGVRs,
+		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
@@ -615,8 +620,11 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		Kind:    cr.Spec.Resource.Kind,
 	})
 	skipDeploy := meta.FinalizerExists(cr, restresourcesStillExistFinalizer) || meta.FinalizerExists(cr, authInUseFinalizer)
+
+	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.UndeployOptions{
 		AuthenticationGVRs: authenticationGVRs,
+		ConfigurationGVR:   configurationGVR,
 		SkipCRD:            false,
 		SkipDeploy:         skipDeploy,
 		RBACFolderPath:     RDCrbacConfigFolder,
@@ -700,6 +708,15 @@ func getAuthenticationGVKs(doc oas2jsonschema.OASDocument, cr *definitionv1alpha
 		authenticationGVKs = append(authenticationGVKs, gvk)
 	}
 	return authenticationGVKs
+}
+
+func getConfigurationGVR(cr *definitionv1alpha1.RestDefinition) schema.GroupVersionResource {
+	cfgGVK := schema.GroupVersionKind{
+		Group:   cr.Spec.ResourceGroup,
+		Version: resourceVersion,
+		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind) + "Configuration",
+	}
+	return plurals.ToGroupVersionResource(cfgGVK)
 }
 
 func manageFinalizers(ctx context.Context, kubecli client.Client, disc discovery.DiscoveryInterface, authenticationGVRs []schema.GroupVersionResource, cr *definitionv1alpha1.RestDefinition, log func(msg string, keysAndValues ...any)) error {
