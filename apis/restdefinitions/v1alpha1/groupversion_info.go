@@ -1,6 +1,6 @@
 // Package v1alpha1 contains API Schema RestDefinitions v1alpha1 API group
 // +kubebuilder:object:generate=true
-// +groupName=swaggergen.krateo.io
+// +groupName=ogen.krateo.io
 // +versionName=v1alpha1
 package v1alpha1
 
@@ -13,7 +13,7 @@ import (
 
 // Package type metadata.
 const (
-	Group   = "swaggergen.krateo.io"
+	Group   = "ogen.krateo.io"
 	Version = "v1alpha1"
 )
 

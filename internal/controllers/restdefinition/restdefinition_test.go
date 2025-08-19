@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 
 	testenv.Setup(
 		envfuncs.CreateCluster(kind.NewProvider(), clusterName),
-		envfuncs.SetupCRDs(crdPath, "swaggergen.krateo.io_restdefinitions.yaml"),
+		envfuncs.SetupCRDs(crdPath, "ogen.krateo.io_restdefinitions.yaml"),
 		e2e.CreateNamespace(namespace),
 		e2e.CreateNamespace("demo-system"),
 		e2e.CreateNamespace("krateo-system"),
@@ -223,36 +223,6 @@ func TestLifecycle_Simple(t *testing.T) {
 			specProps := schema.Properties["spec"].Properties
 			_, ok := specProps["description"]
 			assert.True(t, ok, "expecting spec to have 'description' property")
-
-			// Assert that the configurationRef exists and 'name' (the configured field) does not
-			//_, ok = specProps["configurationRef"]
-			//assert.True(t, ok, "expecting spec to have 'configurationRef' property")
-			//_, ok = specProps["name"]
-			//assert.False(t, ok, "expecting spec to NOT have 'name' property as it is a configuration field")
-			//
-			//statusProps := schema.Properties["status"].Properties // name is in the identifiers so it should in the status
-			//_, ok = statusProps["name"]
-			//assert.True(t, ok, "expecting status to have 'name' property")
-			//
-			//// Check if the Configuration CRD is generated correctly
-			//configCrd := apiextensionsv1.CustomResourceDefinition{}
-			//err = r.Get(ctx, "sampleconfigurations.sample.krateo.io", "", &configCrd)
-			//assert.Nil(t, err, "expecting nil error getting generated configuration crd")
-			//
-			//configSchema := configCrd.Spec.Versions[0].Schema.OpenAPIV3Schema
-			//assert.NotNil(t, configSchema, "expecting configuration schema to be not nil")
-			//
-			//configSpecProps := configSchema.Properties["spec"].Properties
-			//_, ok = configSpecProps["authenticationMethods"]
-			//assert.True(t, ok, "expecting config spec to have 'authenticationMethods' property")
-			//
-			//queryGet, ok := configSpecProps["query"].Properties["get"]
-			//assert.True(t, ok, "expecting config spec query to have 'get' property")
-			//
-			//// check inside 'query' property of the configuration spec
-			//queryGetProps := queryGet.Properties
-			//_, ok = queryGetProps["name"]
-			//assert.True(t, ok, "expecting config spec query to have 'name' property")
 
 			return ctx
 		}

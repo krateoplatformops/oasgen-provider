@@ -1,4 +1,4 @@
-apiVersion: swaggergen.krateo.io/v1alpha1
+apiVersion: ogen.krateo.io/v1alpha1
 kind: RestDefinition
 metadata:
   name: sample
@@ -28,9 +28,3 @@ spec:
     - action: update
       method: PATCH
       path: /resource
-  #configurationFields:
-  #- fromOpenAPI:
-  #    name: name
-  #    in: query
-  #  fromRestDefinition:
-  #    action: get

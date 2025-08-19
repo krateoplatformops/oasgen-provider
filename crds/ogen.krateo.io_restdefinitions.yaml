@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: restdefinitions.swaggergen.krateo.io
+  name: restdefinitions.ogen.krateo.io
 spec:
-  group: swaggergen.krateo.io
+  group: ogen.krateo.io
   names:
     categories:
     - krateo
@@ -158,7 +158,7 @@ spec:
                           type: string
                         path:
                           description: 'Path: the path to the api - has to be the
-                            same path as the one in the swagger file you are referencing'
+                            same path as the one in the OAS file you are referencing'
                           type: string
                       required:
                       - action

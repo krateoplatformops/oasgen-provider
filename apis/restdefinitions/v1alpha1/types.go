@@ -14,7 +14,7 @@ type VerbsDescription struct {
 	// +kubebuilder:validation:Enum=GET;POST;PUT;DELETE;PATCH
 	// +required
 	Method string `json:"method"`
-	// Path: the path to the api - has to be the same path as the one in the swagger file you are referencing
+	// Path: the path to the api - has to be the same path as the one in the OAS file you are referencing
 	// +required
 	Path string `json:"path"`
 }
