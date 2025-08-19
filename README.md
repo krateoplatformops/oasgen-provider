@@ -167,7 +167,12 @@ You can see a more practical guide on `oasgen-provider` usage at [this link](che
 4. Regularly update OAS documents to match API changes
 5. Monitor controller logs with `krateo.io/connector-verbose: "true"`
 
-## OAS 3.0 vs OAS 3.1 Support
+
+
+
+## Unsupported features
+
+### OAS 3.0 vs OAS 3.1 Support
 
 https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0
 
@@ -180,14 +185,24 @@ OAS 3.1
 - `null` type in the array `type` is supported by OASGen provider.
 
 
+### `additionalProperties` support
 
-additionalProperties is discouraged
-apart from cases similar to the following:
+The use of `additionalProperties` is discouraged apart from cases similar to the following:
 ```yaml
+TODO
 (inputs) of github workflows
 ```
 
-
-### Not supported features
-
 `anyOf`, `oneOf` are not supported by OASGen provider.
+
+
+`format` is not supported by OASGen provider.
+
+Something like this:
+```yaml
+price:
+	type: number
+  format: float
+  description: Price of the product
+```
+will be converted to integer in the CRD (format is ignored).
