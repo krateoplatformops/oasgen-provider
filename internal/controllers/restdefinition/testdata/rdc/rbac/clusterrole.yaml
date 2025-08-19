@@ -21,11 +21,9 @@ rules:
 - apiGroups: [ {{ .apiGroup }}]
   resources: ["{{ .resource }}", "{{ .resource }}/status"]
   verbs: ["*"]
-{{- if .authentications }}
+{{- if .configuration }}
 - apiGroups: [{{ .apiGroup }}]
   resources:
-  {{- range .authentications }}
-  - "{{ . }}"
-  {{- end }}
+  - "{{ .configuration }}"
   verbs: ["*"]
 {{- end }}
