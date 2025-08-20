@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"time"
 
 	"os"
@@ -58,7 +57,6 @@ const (
 	resourceVersion      = "v1alpha1"
 
 	restresourcesStillExistFinalizer = "composition.krateo.io/restresources-still-exist-finalizer"
-	authInUseFinalizer               = "composition.krateo.io/auth-in-use-finalizer"
 )
 
 var (
@@ -162,24 +160,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 
 	if meta.WasDeleted(cr) {
 		e.log.Info("RestDefinition was deleted, skipping observation")
-		var authenticationGVRs []schema.GroupVersionResource
-
-		if len(cr.Status.Authentications) == 0 {
-			e.log.Debug("No authentications found in status, trying to get from document")
-			doc, err := e.getDocumentModelFromCR(ctx, cr)
-			if err != nil {
-				return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
-			}
-			authenticationGVRs = getAuthenticationGVRs(doc, cr)
-		}
-
-		for _, auth := range cr.Status.Authentications {
-			gvk := schema.FromAPIVersionAndKind(auth.APIVersion, auth.Kind)
-			gvr := plurals.ToGroupVersionResource(gvk)
-			authenticationGVRs = append(authenticationGVRs, gvr)
-		}
-
-		err := manageFinalizers(ctx, e.kube, e.disc, authenticationGVRs, cr, e.log.Debug)
+		err := manageFinalizers(ctx, e.kube, cr, e.log.Debug)
 		if err != nil {
 			return reconciler.ExternalObservation{}, fmt.Errorf("managing finalizers: %w", err)
 		}
@@ -189,11 +170,6 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, e.Delete(ctx, cr)
 	}
 
-	doc, err := e.getDocumentModelFromCR(ctx, cr)
-	if err != nil {
-		return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
-	}
-	authenticationGVRs := getAuthenticationGVRs(doc, cr)
 	configurationGVR := getConfigurationGVR(cr)
 
 	gvr := plurals.ToGroupVersionResource(gvk)
@@ -261,7 +237,6 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, nil
 	}
 	opts := deploy.DeployOptions{
-		AuthenticationGVRs:     authenticationGVRs,
 		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
@@ -301,20 +276,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, nil
 	}
 
-	authenticationGVKs := getAuthenticationGVKs(doc, cr)
-	for _, gvk := range authenticationGVKs {
-		if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-			Kind:       gvk.Kind,
-			APIVersion: gvk.GroupVersion().String(),
-		}) {
-			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-				Kind:       gvk.Kind,
-				APIVersion: gvk.GroupVersion().String(),
-			})
-		}
-	}
-
-	err = manageFinalizers(ctx, e.kube, e.disc, authenticationGVRs, cr, e.log.Debug)
+	err = manageFinalizers(ctx, e.kube, cr, e.log.Debug)
 	if err != nil {
 		return reconciler.ExternalObservation{}, fmt.Errorf("managing finalizers: %w", err)
 	}
@@ -475,14 +437,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	doc, err := e.getDocumentModelFromCR(ctx, cr)
-	if err != nil {
-		return fmt.Errorf("getting document model from CR: %w", err)
-	}
-	authenticationGVRs := getAuthenticationGVRs(doc, cr)
 	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.DeployOptions{
-		AuthenticationGVRs:     authenticationGVRs,
 		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
@@ -504,6 +460,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	cr.Status.Resource = definitionv1alpha1.KindApiVersion{
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
+	}
+	cfgGVK := getConfigurationGVK(cr)
+	cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
+		Kind:       cfgGVK.Kind,
+		APIVersion: cfgGVK.GroupVersion().String(),
 	}
 	cr.Status.OASPath = cr.Spec.OASPath
 	cr.Status.Digest = dig
@@ -530,11 +491,6 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	doc, err := e.getDocumentModelFromCR(ctx, cr)
-	if err != nil {
-		return fmt.Errorf("getting document model from CR: %w", err)
-	}
-
 	e.log.Info("Updating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
 	gvk := schema.GroupVersionKind{
@@ -544,10 +500,8 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	}
 	gvr := plurals.ToGroupVersionResource(gvk)
 
-	authenticationGVRs := getAuthenticationGVRs(doc, cr)
 	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.DeployOptions{
-		AuthenticationGVRs:     authenticationGVRs,
 		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
@@ -569,6 +523,11 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	cr.Status.Resource = definitionv1alpha1.KindApiVersion{
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
+	}
+	cfgGVK := getConfigurationGVK(cr)
+	cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
+		Kind:       cfgGVK.Kind,
+		APIVersion: cfgGVK.GroupVersion().String(),
 	}
 	cr.Status.OASPath = cr.Spec.OASPath
 	cr.Status.Digest = dig
@@ -597,38 +556,21 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 
 	e.log.Info("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 
-	var authenticationGVRs []schema.GroupVersionResource
-
-	if len(cr.Status.Authentications) == 0 {
-		e.log.Debug("No authentications found in status, trying to get from document")
-		doc, err := e.getDocumentModelFromCR(ctx, cr)
-		if err != nil {
-			return fmt.Errorf("getting document model from CR: %w", err)
-		}
-		authenticationGVRs = getAuthenticationGVRs(doc, cr)
-	}
-
-	for _, auth := range cr.Status.Authentications {
-		gvk := schema.FromAPIVersionAndKind(auth.APIVersion, auth.Kind)
-		gvr := plurals.ToGroupVersionResource(gvk)
-		authenticationGVRs = append(authenticationGVRs, gvr)
-	}
-
 	gvr := plurals.ToGroupVersionResource(schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
 		Version: resourceVersion,
 		Kind:    cr.Spec.Resource.Kind,
 	})
-	skipDeploy := meta.FinalizerExists(cr, restresourcesStillExistFinalizer) || meta.FinalizerExists(cr, authInUseFinalizer)
+
+	skipDeploy := meta.FinalizerExists(cr, restresourcesStillExistFinalizer)
 
 	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.UndeployOptions{
-		AuthenticationGVRs: authenticationGVRs,
-		ConfigurationGVR:   configurationGVR,
-		SkipCRD:            false,
-		SkipDeploy:         skipDeploy,
-		RBACFolderPath:     RDCrbacConfigFolder,
-		KubeClient:         e.kube,
+		ConfigurationGVR: configurationGVR,
+		SkipCRD:          false,
+		SkipDeploy:       skipDeploy,
+		RBACFolderPath:   RDCrbacConfigFolder,
+		KubeClient:       e.kube,
 		NamespacedName: types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Name,
@@ -645,32 +587,32 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 
 	// Check if CRD exists and if there are any RestResources with the same group
-	for _, gvr := range authenticationGVRs {
-		crdOk, err := crd.Lookup(ctx, e.kube, gvr)
-		if err != nil {
-			return fmt.Errorf("looking up CRD: %w", err)
-		}
-		if crdOk {
-			authExist, rrCount, err := kube.CountRestDefinitionsWithGroup(ctx, e.kube, e.disc, gvr.Group)
-			if err != nil {
-				return fmt.Errorf("counting resources: %w", err)
-			}
-			if rrCount == 1 && authExist {
-				e.log.Info("CRD exists, deleting", "Group:", gvr.Group, "Resource:", gvr.Resource)
-				err = crd.Uninstall(ctx, e.kube, schema.GroupResource{
-					Group:    gvr.Group,
-					Resource: gvr.Resource,
-				})
-				if err != nil {
-					return fmt.Errorf("uninstalling authentication CRD: %w", err)
-				}
-
-			} else if rrCount > 1 {
-				e.log.Debug("Skipping CRD deletion, RestDefinitions that reference this auth still exist",
-					"Group", gvr.Group, "Count", rrCount)
-			}
-		}
-	}
+	//for _, gvr := range authenticationGVRs {
+	//	crdOk, err := crd.Lookup(ctx, e.kube, gvr)
+	//	if err != nil {
+	//		return fmt.Errorf("looking up CRD: %w", err)
+	//	}
+	//	if crdOk {
+	//		authExist, rrCount, err := kube.CountRestDefinitionsWithGroup(ctx, e.kube, e.disc, gvr.Group)
+	//		if err != nil {
+	//			return fmt.Errorf("counting resources: %w", err)
+	//		}
+	//		if rrCount == 1 && authExist {
+	//			e.log.Info("CRD exists, deleting", "Group:", gvr.Group, "Resource:", gvr.Resource)
+	//			err = crd.Uninstall(ctx, e.kube, schema.GroupResource{
+	//				Group:    gvr.Group,
+	//				Resource: gvr.Resource,
+	//			})
+	//			if err != nil {
+	//				return fmt.Errorf("uninstalling authentication CRD: %w", err)
+	//			}
+	//
+	//		} else if rrCount > 1 {
+	//			e.log.Debug("Skipping CRD deletion, RestDefinitions that reference this auth still exist",
+	//				"Group", gvr.Group, "Count", rrCount)
+	//		}
+	//	}
+	//}
 
 	if skipDeploy || opts.SkipCRD {
 		e.log.Info(" RestResources still exist",
@@ -684,88 +626,60 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	return err
 }
 
-func getAuthenticationGVRs(doc oas2jsonschema.OASDocument, cr *definitionv1alpha1.RestDefinition) []schema.GroupVersionResource {
-	var authenticationGVRs []schema.GroupVersionResource
-	for _, scheme := range doc.SecuritySchemes() {
-		gvk := schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(scheme.Name),
-		}
-		authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
-	}
-	return authenticationGVRs
-}
-
-func getAuthenticationGVKs(doc oas2jsonschema.OASDocument, cr *definitionv1alpha1.RestDefinition) []schema.GroupVersionKind {
-	var authenticationGVKs []schema.GroupVersionKind
-	for _, scheme := range doc.SecuritySchemes() {
-		gvk := schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(scheme.Name),
-		}
-		authenticationGVKs = append(authenticationGVKs, gvk)
-	}
-	return authenticationGVKs
-}
-
 func getConfigurationGVR(cr *definitionv1alpha1.RestDefinition) schema.GroupVersionResource {
-	cfgGVK := schema.GroupVersionKind{
+	cfgGVK := getConfigurationGVK(cr)
+	return plurals.ToGroupVersionResource(cfgGVK)
+}
+
+func getConfigurationGVK(cr *definitionv1alpha1.RestDefinition) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
 		Version: resourceVersion,
 		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind) + "Configuration",
 	}
-	return plurals.ToGroupVersionResource(cfgGVK)
 }
 
-func manageFinalizers(ctx context.Context, kubecli client.Client, disc discovery.DiscoveryInterface, authenticationGVRs []schema.GroupVersionResource, cr *definitionv1alpha1.RestDefinition, log func(msg string, keysAndValues ...any)) error {
-	var n int
-	var finalizer string
-	var err error
-	var authExist bool
-	if len(authenticationGVRs) > 0 {
-		authExist, n, err = kube.CountRestResourcesWithGroup(ctx, kubecli, disc, cr.Spec.ResourceGroup)
-		if err != nil {
-			return fmt.Errorf("counting resources: %w", err)
+func manageFinalizers(ctx context.Context, kubecli client.Client, cr *definitionv1alpha1.RestDefinition, log func(msg string, keysAndValues ...any)) error {
+	log("Managing finalizers for RestDefinition", "name", cr.Name, "namespace", cr.Namespace)
+
+	// Check if RestResources still exist for this RestDefinition
+	gvk := schema.GroupVersionKind{
+		Group:   cr.Spec.ResourceGroup,
+		Version: resourceVersion,
+		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
+	}
+
+	uli := unstructured.UnstructuredList{}
+	uli.SetGroupVersionKind(gvk)
+	err := kubecli.List(ctx, &uli)
+	if err != nil && !strings.Contains(err.Error(), "no matches for") {
+		return fmt.Errorf("listing RestResources: %w", err)
+	}
+
+	restResourceCount := len(uli.Items)
+
+	// Manage restresources-still-exist finalizer
+	if restResourceCount > 0 {
+		if !meta.FinalizerExists(cr, restresourcesStillExistFinalizer) {
+			log("Existing RestResources found", "Group", cr.Spec.ResourceGroup, "Kind", cr.Spec.Resource.Kind, "Count", restResourceCount)
+			log("Adding finalizer to RestDefinition", "name", cr.Name, "finalizer", restresourcesStillExistFinalizer)
+			meta.AddFinalizer(cr, restresourcesStillExistFinalizer)
+			err = kubecli.Update(ctx, cr)
+			if err != nil {
+				return fmt.Errorf("adding restresources finalizer: %w", err)
+			}
 		}
-		finalizer = authInUseFinalizer
 	} else {
-		uli := unstructured.UnstructuredList{}
-		uli.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
-		})
-		err := kubecli.List(ctx, &uli)
-		if err != nil {
-			if !strings.Contains(err.Error(), "no matches for") {
-				return fmt.Errorf("listing resources: %w", err)
-			}
-		}
-		n = len(uli.Items)
-		finalizer = restresourcesStillExistFinalizer
-	}
-	if n > 0 {
-		if !meta.FinalizerExists(cr, finalizer) && len(cr.Status.Authentications) > 0 {
-			log("Existing Rest Resources with group", "Group", cr.Spec.ResourceGroup, "Count", n)
-			log("Adding finalizer to RestDefinition", "name", cr.Name, "finalizer", finalizer)
-			meta.AddFinalizer(cr, finalizer)
+		if meta.FinalizerExists(cr, restresourcesStillExistFinalizer) {
+			log("No RestResources found, removing finalizer", "name", cr.Name, "finalizer", restresourcesStillExistFinalizer)
+			meta.RemoveFinalizer(cr, restresourcesStillExistFinalizer)
 			err = kubecli.Update(ctx, cr)
 			if err != nil {
-				return err
-			}
-		}
-	} else if !authExist {
-		if meta.FinalizerExists(cr, finalizer) {
-			log("Removing finalizer from RestDefinition", "name", cr.Name, "finalizer", finalizer)
-			meta.RemoveFinalizer(cr, finalizer)
-			err = kubecli.Update(ctx, cr)
-			if err != nil {
-				return err
+				return fmt.Errorf("removing restresources finalizer: %w", err)
 			}
 		}
 	}
+
 	return nil
 }
 

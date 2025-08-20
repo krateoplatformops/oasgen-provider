@@ -94,9 +94,9 @@ type RestDefinitionStatus struct {
 	// +optional
 	Resource KindApiVersion `json:"resource"`
 
-	// Authentications: the list of authentications to use
+	// Configuration: the configuration of the resource
 	// +optional
-	Authentications []KindApiVersion `json:"authentications"`
+	Configuration KindApiVersion `json:"configuration"`
 
 	// Digest: the digest of the managed resources
 	// +optional

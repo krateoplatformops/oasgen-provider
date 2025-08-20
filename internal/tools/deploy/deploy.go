@@ -25,7 +25,6 @@ const (
 )
 
 type UndeployOptions struct {
-	AuthenticationGVRs     []schema.GroupVersionResource
 	ConfigurationGVR       schema.GroupVersionResource
 	KubeClient             client.Client
 	NamespacedName         types.NamespacedName
@@ -40,7 +39,6 @@ type UndeployOptions struct {
 
 type DeployOptions struct {
 	GVR                    schema.GroupVersionResource
-	AuthenticationGVRs     []schema.GroupVersionResource
 	ConfigurationGVR       schema.GroupVersionResource
 	KubeClient             client.Client
 	NamespacedName         types.NamespacedName
@@ -58,7 +56,7 @@ func logError(log func(msg string, keysAndValues ...any), msg string, err error)
 	}
 }
 
-func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.NamespacedName, authenticationsGVRs []schema.GroupVersionResource, ConfigurationGVR schema.GroupVersionResource, rbacFolderPath string) (corev1.ServiceAccount, rbacv1.ClusterRole, rbacv1.ClusterRoleBinding, rbacv1.Role, rbacv1.RoleBinding, error) {
+func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.NamespacedName, ConfigurationGVR schema.GroupVersionResource, rbacFolderPath string) (corev1.ServiceAccount, rbacv1.ClusterRole, rbacv1.ClusterRoleBinding, rbacv1.Role, rbacv1.RoleBinding, error) {
 	rbacNSName = types.NamespacedName{
 		Namespace: rbacNSName.Namespace,
 		Name:      rbacNSName.Name + ControllerResourceSuffix,
@@ -69,16 +67,6 @@ func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.Names
 	if err != nil {
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
 	}
-
-	//var authentications []string
-	//for _, crd := range authenticationsGVRs {
-	//	authentications = append(authentications, crd.Resource)
-	//}
-	//clusterrole := rbacv1.ClusterRole{}
-	//err = templates.CreateK8sObject(&clusterrole, gvr, rbacNSName, path.Join(rbacFolderPath, "clusterrole.yaml"), "authentications", authentications)
-	//if err != nil {
-	//	return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
-	//}
 
 	configuration := ""
 	if ConfigurationGVR.Resource != "" {
@@ -283,7 +271,7 @@ func Deploy(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 
 	hsh := hasher.NewFNVObjectHash()
 
-	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.AuthenticationGVRs, opts.ConfigurationGVR, opts.RBACFolderPath)
+	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.ConfigurationGVR, opts.RBACFolderPath)
 	if err != nil {
 		opts.Log("Error creating RBAC resources", "error", err)
 		return "", err
@@ -405,7 +393,7 @@ func Undeploy(ctx context.Context, kube client.Client, opts UndeployOptions) err
 		return nil
 	}
 
-	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.AuthenticationGVRs, opts.ConfigurationGVR, opts.RBACFolderPath)
+	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.ConfigurationGVR, opts.RBACFolderPath)
 	if err != nil {
 		opts.Log("Error creating RBAC resources", "error", err)
 		return err
@@ -467,7 +455,7 @@ func Lookup(ctx context.Context, kube client.Client, opts DeployOptions) (digest
 		return "", fmt.Errorf("log function is required")
 	}
 
-	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.AuthenticationGVRs, opts.ConfigurationGVR, opts.RBACFolderPath)
+	sa, clusterrole, clusterrolebinding, role, rolebinding, err := createRBACResources(opts.GVR, opts.NamespacedName, opts.ConfigurationGVR, opts.RBACFolderPath)
 	if err != nil {
 		return "", err
 	}

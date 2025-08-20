@@ -185,18 +185,6 @@ spec:
           status:
             description: RestDefinitionStatus is the status of a RestDefinition.
             properties:
-              authentications:
-                description: 'Authentications: the list of authentications to use'
-                items:
-                  properties:
-                    apiVersion:
-                      description: 'APIVersion: the api version of the resource'
-                      type: string
-                    kind:
-                      description: 'Kind: the kind of the resource'
-                      type: string
-                  type: object
-                type: array
               conditions:
                 description: Conditions of the resource.
                 items:
@@ -233,6 +221,16 @@ spec:
                   - type
                   type: object
                 type: array
+              configuration:
+                description: 'Configuration: the configuration of the resource'
+                properties:
+                  apiVersion:
+                    description: 'APIVersion: the api version of the resource'
+                    type: string
+                  kind:
+                    description: 'Kind: the kind of the resource'
+                    type: string
+                type: object
               digest:
                 description: 'Digest: the digest of the managed resources'
                 type: string
