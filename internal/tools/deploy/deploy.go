@@ -71,14 +71,14 @@ func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.Names
 	configuration := ""
 	if ConfigurationGVR.Resource != "" {
 		configuration = ConfigurationGVR.Resource
-		fmt.Printf("Configuration GVR found: %s\n", configuration)
+		// fmt.Printf("Configuration GVR found: %s\n", configuration)
 	}
 	clusterrole := rbacv1.ClusterRole{}
 	err = templates.CreateK8sObject(&clusterrole, gvr, rbacNSName, path.Join(rbacFolderPath, "clusterrole.yaml"), "configuration", configuration)
 	if err != nil {
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
 	}
-	fmt.Printf("ClusterRole created with name: %s, namespace: %s, rules: %+v\n", clusterrole.Name, clusterrole.Namespace, clusterrole.Rules)
+	// fmt.Printf("ClusterRole created with name: %s, namespace: %s, rules: %+v\n", clusterrole.Name, clusterrole.Namespace, clusterrole.Rules)
 
 	clusterrolebinding := rbacv1.ClusterRoleBinding{}
 	err = templates.CreateK8sObject(&clusterrolebinding, gvr, rbacNSName, path.Join(rbacFolderPath, "clusterrolebinding.yaml"), "serviceAccount", sa.Name, "saNamespace", sa.Namespace)

@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	xenv.SetTestMode(true)
 
 	namespace = "demo-system"
-	clusterName = "krateo"
+	clusterName = "krateo-deploy-test"
 	testenv = env.New()
 
 	testenv.Setup(

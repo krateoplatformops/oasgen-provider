@@ -2,6 +2,7 @@ package oas2jsonschema
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
 )
@@ -26,7 +27,7 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	// Remove any properties from the base schema that are defined as configuration fields.
 	// TODO: understand if this is actually needed
 	// If we decide that a field in the request body cannot be a configuration field, then this is not needed.
-	filterConfiguredProperties(baseSchema, configuredFieldsSet)
+	//filterConfiguredProperties(baseSchema, configuredFieldsSet)
 
 	// Add parameters to the spec schema, excluding those that are defined as configuration fields.
 	warnings = append(warnings, g.addParametersToSpec(baseSchema, configuredFieldsSet)...)
@@ -98,6 +99,10 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredField
 						break
 					}
 				}
+				// if is authorizaion header, skip it as it is managed by the configuration CR withing the autehntication section.
+				if param.In == "header" && isAuthorizationHeader(param.Name) {
+					continue
+				}
 				if !found {
 					param.Schema.Description = fmt.Sprintf("PARAMETER: %s, VERB: %s - %s", param.In, text.CapitaliseFirstLetter(opName), param.Description)
 					schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: param.Schema})
@@ -157,4 +162,9 @@ func filterConfiguredProperties(schema *Schema, configuredFields map[string]stru
 		}
 	}
 	schema.Properties = filteredProps
+}
+
+// isAuthorizationHeader checks if the given header is an authorization header or contains "authorization" (case-insensitive).
+func isAuthorizationHeader(header string) bool {
+	return strings.Contains(strings.ToLower(header), "authorization")
 }

@@ -65,10 +65,10 @@ type Property struct {
 // It is not a representation of the entire OpenAPI document itself.
 // Potentially, this struct could be modified to include more fields in the future.
 type Schema struct {
-	Type                 []string
+	Type                 []string // OAS 3.1 allows multiple types (e.g., ["string", "null"])
 	Description          string
 	Properties           []Property
-	Items                *Schema
+	Items                *Schema // For array types, this defines the schema of items in the array
 	AllOf                []*Schema
 	Required             []string
 	Default              interface{} // Default value for the schema
@@ -131,7 +131,7 @@ type GenerationResult struct {
 }
 
 type BasicAuth struct {
-	Username    string                 `json:"username"`
+	UsernameRef rtv1.SecretKeySelector `json:"usernameRef"`
 	PasswordRef rtv1.SecretKeySelector `json:"passwordRef"`
 }
 

@@ -56,7 +56,7 @@ func TestMain(m *testing.M) {
 	xenv.SetTestMode(true)
 
 	namespace = "gh-system"
-	clusterName = "krateo-restdefinition-integration-test"
+	clusterName = "krateo-restdefinition-test"
 	testenv = env.New()
 
 	testenv.Setup(
