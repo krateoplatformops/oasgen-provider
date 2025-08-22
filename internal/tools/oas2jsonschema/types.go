@@ -72,6 +72,7 @@ type Schema struct {
 	AllOf                []*Schema
 	Required             []string
 	Default              interface{} // Default value for the schema
+	Enum                 []interface{}
 	AdditionalProperties bool
 	MaxProperties        int
 }

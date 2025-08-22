@@ -148,6 +148,10 @@ func schemaToMap(schema *Schema) (map[string]interface{}, error) {
 		m["allOf"] = allOfList
 	}
 
+	if len(schema.Enum) > 0 {
+		m["enum"] = schema.Enum
+	}
+
 	return m, nil
 }
 

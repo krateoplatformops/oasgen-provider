@@ -177,7 +177,62 @@ func TestGenerateSpecSchema(t *testing.T) {
 		// Assert
 		schemaStr := string(result.SpecSchema)
 		if strings.Contains(schemaStr, `"api-version"`) {
-			t.Error("Schema should NOT contain 'api-version' as it is a configuration field")
+            t.Error("Schema should NOT contain 'api-version' as it is a configuration field")
+        }
+    })
+
+    t.Run("should include enum validation for string properties", func(t *testing.T) {
+        // Arrange
+        resourceConfig := &ResourceConfig{
+            Verbs: []Verb{
+                {Action: "create", Path: "/widgets", Method: "post"},
+            },
+        }
+        mockDoc := &mockOASDocument{
+            Paths: map[string]*mockPathItem{
+                "/widgets": {
+                    Ops: map[string]Operation{
+                        "post": &mockOperation{
+                            RequestBody: RequestBodyInfo{
+                                Content: map[string]*Schema{
+                                    "application/json": {
+                                        Type: []string{"object"},
+                                        Properties: []Property{
+                                            {
+                                                Name: "status",
+                                                Schema: &Schema{
+                                                    Type: []string{"string"},
+                                                    Enum: []interface{}{"active", "inactive"},
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+        // Act
+        result, err := generator.Generate()
+        if err != nil {
+            t.Fatalf("Expected no error, but got: %v", err)
+        }
+
+        // Assert
+		schemaStr := string(result.SpecSchema)
+		// Check for the key parts separately to be less sensitive to indentation and exact formatting.
+		if !strings.Contains(schemaStr, `"status"`) {
+			t.Error("Schema is missing 'status' property")
+		}
+		if !strings.Contains(schemaStr, `"enum"`) {
+			t.Error("Schema is missing 'enum' key for status property")
+		}
+		if !strings.Contains(schemaStr, `"active"`) || !strings.Contains(schemaStr, `"inactive"`) {
+			t.Error("Schema is missing enum values 'active' or 'inactive'")
 		}
 	})
 }

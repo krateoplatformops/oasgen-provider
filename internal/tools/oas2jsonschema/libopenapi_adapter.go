@@ -204,7 +204,21 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 		Default:     defaultVal,
 	}
 
-	// AdditionalProperties handling for both OAS 3.0/3.1
+	// Enum handling
+	var enumValues []interface{}
+	if len(s.Enum) > 0 {
+		for _, enumProxy := range s.Enum {
+			var enumVal interface{}
+			if err := enumProxy.Decode(&enumVal); err != nil {
+				log.Printf("Failed to decode enum value: %v (raw: %#v)", err, enumProxy)
+				continue
+			}
+			enumValues = append(enumValues, enumVal)
+		}
+		domainSchema.Enum = enumValues
+	}
+
+	// AdditionalProperties handling
 	if s.AdditionalProperties != nil {
 		switch {
 		case s.AdditionalProperties.IsB():
@@ -214,6 +228,7 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 			// Schema form: recurse so you don't lose detail
 			// TODO: handle this case properly
 			//domainSchema.AdditionalPropertiesSchema = convertLibopenapiSchema(s.AdditionalProperties.A)
+			log.Printf("Warning: AdditionalProperties schema form not fully supported")
 		default:
 			log.Printf("Warning: Unknown AdditionalProperties type")
 		}
