@@ -6,25 +6,27 @@ import (
 )
 
 func (g *OASSchemaGenerator) findParameterInOAS(field ConfigurationField) (*ParameterInfo, error) {
-	for _, verb := range g.resourceConfig.Verbs {
-		if verb.Action == field.FromRestDefinition.Action {
-			path, ok := g.doc.FindPath(verb.Path)
-			if !ok {
-				continue
-			}
-			ops := path.GetOperations()
-			op, ok := ops[strings.ToLower(verb.Method)]
-			if !ok {
-				continue
-			}
-			for _, param := range op.GetParameters() {
-				if param.Name == field.FromOpenAPI.Name && param.In == field.FromOpenAPI.In {
-					return &param, nil
+	for _, action := range field.FromRestDefinition.Actions {
+		for _, verb := range g.resourceConfig.Verbs {
+			if verb.Action == action {
+				path, ok := g.doc.FindPath(verb.Path)
+				if !ok {
+					continue
+				}
+				ops := path.GetOperations()
+				op, ok := ops[strings.ToLower(verb.Method)]
+				if !ok {
+					continue
+				}
+				for _, param := range op.GetParameters() {
+					if param.Name == field.FromOpenAPI.Name && param.In == field.FromOpenAPI.In {
+						return &param, nil
+					}
 				}
 			}
 		}
 	}
-	return nil, fmt.Errorf("parameter '%s' in '%s' not found for action '%s'", field.FromOpenAPI.Name, field.FromOpenAPI.In, field.FromRestDefinition.Action)
+	return nil, fmt.Errorf("parameter '%s' in '%s' not found for any of the specified actions", field.FromOpenAPI.Name, field.FromOpenAPI.In)
 }
 
 // getBaseSchemaForSpec returns the base schema for the spec, which is the request body of the 'create' action.

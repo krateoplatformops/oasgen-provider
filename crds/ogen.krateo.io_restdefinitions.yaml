@@ -100,10 +100,15 @@ spec:
                           type: object
                         fromRestDefinition:
                           properties:
-                            action:
-                              type: string
+                            actions:
+                              description: 'Actions: the list of actions this configuration
+                                applies to. Use ["*"] to apply to all actions.'
+                              items:
+                                type: string
+                              minItems: 1
+                              type: array
                           required:
-                          - action
+                          - actions
                           type: object
                       required:
                       - fromOpenAPI

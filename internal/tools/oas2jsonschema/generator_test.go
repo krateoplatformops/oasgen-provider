@@ -132,11 +132,54 @@ func TestGenerateSpecSchema(t *testing.T) {
 		if !strings.Contains(schemaStr, `"verbose"`) {
 			t.Error("Schema should contain parameter 'verbose' from the get operation")
 		}
-		if !strings.Contains(schemaStr, `"PARAMETER: query, VERB: Get - "`) {
+		if !strings.Contains(schemaStr, `"PARAMETER: query - "`) {
 			t.Error("Parameter description was not added correctly")
 		}
 	})
 
+	t.Run("should exclude configured parameters from the spec schema", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+			ConfigurationFields: []ConfigurationField{
+				{
+					FromOpenAPI:        FromOpenAPI{Name: "api-version", In: "query"},
+					FromRestDefinition: FromRestDefinition{Actions: []string{"create"}},
+				},
+			},
+		}
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{"application/json": {Type: []string{"object"}}},
+							},
+							Parameters: []ParameterInfo{
+								{Name: "api-version", In: "query", Schema: &Schema{Type: []string{"string"}}},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// Act
+		result, err := generator.Generate()
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		// Assert
+		schemaStr := string(result.SpecSchema)
+		if strings.Contains(schemaStr, `"api-version"`) {
+			t.Error("Schema should NOT contain 'api-version' as it is a configuration field")
+		}
+	})
 }
 
 func TestGenerateStatusSchema(t *testing.T) {

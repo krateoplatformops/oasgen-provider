@@ -41,7 +41,7 @@ type FromOpenAPI struct {
 }
 
 type FromRestDefinition struct {
-	Action string
+	Actions []string
 }
 
 // Verb defines a specific API operation (action, method, path).

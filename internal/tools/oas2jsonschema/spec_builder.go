@@ -3,8 +3,6 @@ package oas2jsonschema
 import (
 	"fmt"
 	"strings"
-
-	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
 )
 
 // BuildSpecSchema generates the complete spec schema for a given resource.
@@ -18,11 +16,14 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 		return nil, nil, fmt.Errorf("could not determine base schema for spec: %w", err)
 	}
 
+	// If the resource has configuration fields, add a reference to the configuration schema.
+	// This is done only if there are configuration fields or security schemes defined.
+	if len(g.resourceConfig.ConfigurationFields) > 0 || len(g.doc.SecuritySchemes()) > 0 {
+		addConfigurationRefToSpec(baseSchema)
+	}
+
 	// Create a lookup set of configured fields for efficient filtering.
 	configuredFieldsSet := g.getConfiguredFieldsSet()
-
-	// Always add a reference to the Configuration CRD.
-	addConfigurationRefToSpec(baseSchema)
 
 	// Remove any properties from the base schema that are defined as configuration fields.
 	// TODO: understand if this is actually needed
@@ -51,65 +52,73 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	return byteSchema, warnings, nil
 }
 
-// getConfiguredFieldsSet creates a set of configured fields based on the resource configuration.
-func (g *OASSchemaGenerator) getConfiguredFieldsSet() map[string]struct{} {
-	configuredFields := make(map[string]struct{})
+// getConfiguredFieldsSet creates a map where keys are configured field identifiers
+// and values are a set of actions they apply to.
+func (g *OASSchemaGenerator) getConfiguredFieldsSet() map[string]map[string]struct{} {
+	configuredFields := make(map[string]map[string]struct{})
 	for _, field := range g.resourceConfig.ConfigurationFields {
-		in := field.FromOpenAPI.In
-		//if in == "" {
-		//	in = "body" // Normalize for consistency with request body properties
-		//}
-		key := fmt.Sprintf("%s-%s", in, field.FromOpenAPI.Name)
-		fmt.Printf("Adding configured field: %s\n", key) // Debugging output
-		configuredFields[key] = struct{}{}               // Use a struct for set-like behavior
+		key := fmt.Sprintf("%s-%s", field.FromOpenAPI.In, field.FromOpenAPI.Name)
+		if _, ok := configuredFields[key]; !ok {
+			configuredFields[key] = make(map[string]struct{})
+		}
+		for _, action := range field.FromRestDefinition.Actions {
+			configuredFields[key][action] = struct{}{}
+		}
 	}
 	return configuredFields
 }
 
 // addParametersToSpec adds the parameters from all verbs to the schema,
-// excluding those that are defined as configuration fields.
-func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredFields map[string]struct{}) []error {
+// excluding those that are defined as configuration fields for that specific verb.
+func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredFields map[string]map[string]struct{}) []error {
 	var warnings []error
 
-	// Use a map to track unique paths to avoid processing them multiple times
-	uniquePaths := make(map[string]struct{})
-	for _, verb := range g.resourceConfig.Verbs {
-		uniquePaths[verb.Path] = struct{}{}
-	}
+	uniqueParams := make(map[string]struct{})
 
-	for pathStr := range uniquePaths {
-		path, ok := g.doc.FindPath(pathStr)
+	for _, verb := range g.resourceConfig.Verbs {
+
+		// 1. Path lookup
+		path, ok := g.doc.FindPath(verb.Path)
 		if !ok {
-			warnings = append(warnings, SchemaGenerationError{Code: CodePathNotFound, Message: fmt.Sprintf("path '%s' set in RestDefinition not found in OAS", pathStr)})
+			warnings = append(warnings, SchemaGenerationError{Code: CodePathNotFound, Message: fmt.Sprintf("path '%s' set in RestDefinition not found in OAS", verb.Path)})
 			continue
 		}
-		ops := path.GetOperations()
-		for opName, op := range ops {
-			for _, param := range op.GetParameters() {
-				key := fmt.Sprintf("%s-%s", param.In, param.Name)
-				if _, isConfigured := configuredFields[key]; isConfigured {
-					continue // Skip parameters that are part of the configuration
-				}
 
-				found := false
-				for _, p := range schema.Properties {
-					if p.Name == param.Name {
-						warnings = append(warnings, SchemaGenerationError{Code: CodeDuplicateParameter, Message: fmt.Sprintf("parameter '%s' already exists, skipping", param.Name)})
-						found = true
-						break
-					}
+		// 2. Operation lookup
+		ops := path.GetOperations()
+		op, ok := ops[strings.ToLower(verb.Method)]
+		if !ok {
+			continue
+		}
+
+		// 3. Parameters lookup
+		for _, param := range op.GetParameters() {
+
+			// Check if this parameter is configured for the current action.
+			key := fmt.Sprintf("%s-%s", param.In, param.Name)
+			fmt.Printf("Checking parameter: %s for action: %s\n", key, verb.Action)
+			if actions, ok := configuredFields[key]; ok {
+				if _, isConfiguredForAction := actions[verb.Action]; isConfiguredForAction {
+					continue // Skip this parameter as it's a configuration field for this action.
 				}
-				// if is authorizaion header, skip it as it is managed by the configuration CR withing the autehntication section.
-				if param.In == "header" && isAuthorizationHeader(param.Name) {
-					continue
-				}
-				if !found {
-					param.Schema.Description = fmt.Sprintf("PARAMETER: %s, VERB: %s - %s", param.In, text.CapitaliseFirstLetter(opName), param.Description)
-					schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: param.Schema})
-				}
+			}
+
+			// if is authorizaion header, skip it as it is managed by the configuration CR withing the autehntication section.
+			if isAuthorizationHeader(param) {
+				fmt.Printf("Skipping authorization header: %s\n", param.Name)
+				continue
+			}
+
+			// Add parameter to spec only if not already present.
+			if _, exists := uniqueParams[param.Name]; !exists {
+				param.Schema.Description = fmt.Sprintf("PARAMETER: %s - %s", param.In, param.Description)
+				schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: param.Schema})
+				fmt.Printf("Adding parameter: %s to spec schema\n", param.Name)
+				uniqueParams[param.Name] = struct{}{}
 			}
 		}
 	}
+
 	return warnings
 }
 
@@ -153,18 +162,18 @@ func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 
 // TODO: understand if this is actually needed
 // If we decide that a field in the request body cannot be a configuration field, then this is not needed.
-func filterConfiguredProperties(schema *Schema, configuredFields map[string]struct{}) {
-	var filteredProps []Property
-	for _, prop := range schema.Properties {
-		key := fmt.Sprintf("body-%s", prop.Name)
-		if _, isConfigured := configuredFields[key]; !isConfigured {
-			filteredProps = append(filteredProps, prop)
-		}
-	}
-	schema.Properties = filteredProps
-}
+//func filterConfiguredProperties(schema *Schema, configuredFields map[string]struct{}) {
+//	var filteredProps []Property
+//	for _, prop := range schema.Properties {
+//		key := fmt.Sprintf("body-%s", prop.Name)
+//		if _, isConfigured := configuredFields[key]; !isConfigured {
+//			filteredProps = append(filteredProps, prop)
+//		}
+//	}
+//	schema.Properties = filteredProps
+//}
 
-// isAuthorizationHeader checks if the given header is an authorization header or contains "authorization" (case-insensitive).
-func isAuthorizationHeader(header string) bool {
-	return strings.Contains(strings.ToLower(header), "authorization")
+// isAuthorizationHeader checks if the given parameter is an authorization header (case-insensitive).
+func isAuthorizationHeader(param ParameterInfo) bool {
+	return strings.EqualFold(param.In, "header") && strings.Contains(strings.ToLower(param.Name), "authorization")
 }

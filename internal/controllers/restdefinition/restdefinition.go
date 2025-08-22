@@ -332,17 +332,22 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 
 		// Shim needed to convert definitionv1alpha1.ConfigurationFields to oas2jsonschema.ConfigurationFields
-		configurationFields := make([]oas2jsonschema.ConfigurationField, len(cr.Spec.Resource.ConfigurationFields))
-		for i, v := range cr.Spec.Resource.ConfigurationFields {
-			configurationFields[i] = oas2jsonschema.ConfigurationField{
+		configurationFields := make([]oas2jsonschema.ConfigurationField, 0, len(cr.Spec.Resource.ConfigurationFields))
+		for _, v := range cr.Spec.Resource.ConfigurationFields {
+			actions, err := expandWildcardActions(v.FromRestDefinition.Actions, cr.Spec.Resource.VerbsDescription)
+			if err != nil {
+				return fmt.Errorf("expanding wildcard for actions in configurationFields: %w", err)
+			}
+
+			configurationFields = append(configurationFields, oas2jsonschema.ConfigurationField{
 				FromOpenAPI: oas2jsonschema.FromOpenAPI{
 					Name: v.FromOpenAPI.Name,
 					In:   v.FromOpenAPI.In,
 				},
 				FromRestDefinition: oas2jsonschema.FromRestDefinition{
-					Action: v.FromRestDefinition.Action,
+					Actions: actions,
 				},
-			}
+			})
 		}
 
 		// Create the resource configuration for the OAS schema generator

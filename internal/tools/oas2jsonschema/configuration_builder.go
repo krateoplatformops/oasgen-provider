@@ -10,11 +10,8 @@ import (
 // Note: currently the Configuration CRD has no status subresource.
 
 // BuildConfigurationSchema builds the spec schema for the Configuration CRD.
-// TODO: return a slice of errors instead of a single error.
 func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
-	// If there are no configuration fields and no security schemes, no configuration CRD is needed.
 	if len(g.resourceConfig.ConfigurationFields) == 0 && len(g.doc.SecuritySchemes()) == 0 {
-		// TODO: add logging / warning here
 		return nil, nil
 	}
 
@@ -23,63 +20,62 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 		Properties: []Property{},
 	}
 
-	configurationSchema := &Schema{
-		Type:       []string{"object"},
-		Properties: []Property{},
-	}
-
-	// A map to hold the schemas for each parameter type (path, query, etc.)
 	paramTypeSchemas := make(map[string]*Schema)
 
 	for _, field := range g.resourceConfig.ConfigurationFields {
 		param, err := g.findParameterInOAS(field)
 		if err != nil {
-			// Consider logging a warning here
+			// TODO: Consider logging a warning here.
 			continue
 		}
 
-		// Ensure the top-level schema for the parameter type (e.g., "query") already exists.
-		if _, ok := paramTypeSchemas[param.In]; !ok {
-			paramTypeSchemas[param.In] = &Schema{Type: []string{"object"}, Properties: []Property{}}
+		// Ensure the top-level schema for the parameter's location (e.g., "query") already exists.
+		paramIn := param.In
+		if _, ok := paramTypeSchemas[paramIn]; !ok {
+			paramTypeSchemas[paramIn] = &Schema{Type: []string{"object"}, Properties: []Property{}}
 		}
-		paramTypeSchema := paramTypeSchemas[param.In]
+		paramTypeSchema := paramTypeSchemas[paramIn]
 
-		// Ensure the schema for the action (e.g., "get") already exists.
-		var actionSchema *Schema
-		found := false
-		for i := range paramTypeSchema.Properties {
-			if paramTypeSchema.Properties[i].Name == field.FromRestDefinition.Action {
-				actionSchema = paramTypeSchema.Properties[i].Schema
-				found = true
-				break
+		// Iterate over all actions this configuration field applies to.
+		for _, action := range field.FromRestDefinition.Actions {
+			var actionSchema *Schema
+			found := false
+			// Check if a schema for this action (e.g., "get") already exists
+			for i := range paramTypeSchema.Properties {
+				if paramTypeSchema.Properties[i].Name == action {
+					actionSchema = paramTypeSchema.Properties[i].Schema
+					found = true
+					break
+				}
 			}
-		}
-		if !found {
-			actionSchema = &Schema{Type: []string{"object"}, Properties: []Property{}}
-			paramTypeSchema.Properties = append(paramTypeSchema.Properties, Property{
-				Name:   field.FromRestDefinition.Action,
-				Schema: actionSchema,
-			})
-		}
+			// If not found, create a new schema for the action.
+			if !found {
+				actionSchema = &Schema{Type: []string{"object"}, Properties: []Property{}}
+				paramTypeSchema.Properties = append(paramTypeSchema.Properties, Property{
+					Name:   action,
+					Schema: actionSchema,
+				})
+			}
 
-		// Add the parameter's schema to the action schema.
-		actionSchema.Properties = append(actionSchema.Properties, Property{Name: param.Name, Schema: param.Schema})
+			// Add the parameter's schema to the action's schema.
+			actionSchema.Properties = append(actionSchema.Properties, Property{Name: param.Name, Schema: param.Schema})
+		}
 	}
 
-	// Add the populated parameter type schemas to the configuration schema.
-	for paramType, schema := range paramTypeSchemas {
-		configurationSchema.Properties = append(configurationSchema.Properties, Property{Name: paramType, Schema: schema})
-	}
-
-	// If there are no parameters in the configuration schema, we don't need to add it.
-	if len(configurationSchema.Properties) > 0 {
+	if len(paramTypeSchemas) > 0 {
+		configurationSchema := &Schema{
+			Type:       []string{"object"},
+			Properties: []Property{},
+		}
+		for paramType, schema := range paramTypeSchemas {
+			configurationSchema.Properties = append(configurationSchema.Properties, Property{Name: paramType, Schema: schema})
+		}
 		rootSchema.Properties = append(rootSchema.Properties, Property{
 			Name:   "configuration",
 			Schema: configurationSchema,
 		})
 	}
 
-	// Add authentication into this schema.
 	authMethodsSchemas, err := g.buildAuthMethodsSchemaMap()
 	if err != nil {
 		return nil, fmt.Errorf("could not generate auth schemas for configuration: %w", err)

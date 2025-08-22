@@ -21,6 +21,11 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 							{Name: "X-Request-ID", In: "header", Schema: &Schema{Type: []string{"string"}}},
 						},
 					},
+					"post": &mockOperation{
+						Parameters: []ParameterInfo{
+							{Name: "api-version", In: "query", Schema: &Schema{Type: []string{"string"}}},
+						},
+					},
 				},
 			},
 			"/items/{id}": {
@@ -28,6 +33,7 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 					"put": &mockOperation{
 						Parameters: []ParameterInfo{
 							{Name: "id", In: "path", Schema: &Schema{Type: []string{"integer"}}},
+							{Name: "api-version", In: "query", Schema: &Schema{Type: []string{"string"}}},
 						},
 					},
 				},
@@ -47,7 +53,7 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 		expectedSchemaPaths map[string]string // map of JSON path to expected type
 	}{
 		{
-			name: "Parameters Only",
+			name: "Parameters with Single Actions",
 			doc:  mockDoc,
 			resourceConfig: &ResourceConfig{
 				Verbs: []Verb{
@@ -57,15 +63,15 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 				ConfigurationFields: []ConfigurationField{
 					{
 						FromOpenAPI:        FromOpenAPI{Name: "api-version", In: "query"},
-						FromRestDefinition: FromRestDefinition{Action: "get"},
+						FromRestDefinition: FromRestDefinition{Actions: []string{"get"}},
 					},
 					{
 						FromOpenAPI:        FromOpenAPI{Name: "X-Request-ID", In: "header"},
-						FromRestDefinition: FromRestDefinition{Action: "get"},
+						FromRestDefinition: FromRestDefinition{Actions: []string{"get"}},
 					},
 					{
 						FromOpenAPI:        FromOpenAPI{Name: "id", In: "path"},
-						FromRestDefinition: FromRestDefinition{Action: "put"},
+						FromRestDefinition: FromRestDefinition{Actions: []string{"put"}},
 					},
 				},
 			},
@@ -76,11 +82,31 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 			},
 		},
 		{
+			name: "Multiple Actions for a Single Config Field",
+			doc:  mockDoc,
+			resourceConfig: &ResourceConfig{
+				Verbs: []Verb{
+					{Action: "get", Path: "/items", Method: "get"},
+					{Action: "put", Path: "/items/{id}", Method: "put"},
+				},
+				ConfigurationFields: []ConfigurationField{
+					{
+						FromOpenAPI:        FromOpenAPI{Name: "api-version", In: "query"},
+						FromRestDefinition: FromRestDefinition{Actions: []string{"get", "put"}},
+					},
+				},
+			},
+			expectedSchemaPaths: map[string]string{
+				"properties.configuration.properties.query.properties.get.properties.api-version.type": "string",
+				"properties.configuration.properties.query.properties.put.properties.api-version.type": "string",
+			},
+		},
+		{
 			name: "Authentication Only",
 			doc:  mockDoc,
 			resourceConfig: &ResourceConfig{
-				Verbs:               []Verb{},               // No verbs needed if only testing auth
-				ConfigurationFields: []ConfigurationField{}, // No configuration fields
+				Verbs:               []Verb{},
+				ConfigurationFields: []ConfigurationField{},
 			},
 			expectedSchemaPaths: map[string]string{
 				"properties.authentication.properties.bearer.type": "object",
@@ -97,26 +123,26 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 				ConfigurationFields: []ConfigurationField{
 					{
 						FromOpenAPI:        FromOpenAPI{Name: "api-version", In: "query"},
-						FromRestDefinition: FromRestDefinition{Action: "get"},
+						FromRestDefinition: FromRestDefinition{Actions: []string{"get"}},
 					},
 				},
 			},
 			expectedSchemaPaths: map[string]string{
 				"properties.configuration.properties.query.properties.get.properties.api-version.type": "string",
-				"properties.authentication.properties.bearer.type":     "object",
+				"properties.authentication.properties.bearer.type":                                     "object",
 			},
 		},
 		{
 			name: "Empty Case - No Fields and No Auth",
-			doc:  &mockOASDocument{}, // Doc with no security schemes
+			doc:  &mockOASDocument{},
 			resourceConfig: &ResourceConfig{
 				Verbs:               []Verb{},
 				ConfigurationFields: []ConfigurationField{},
 			},
-			expectedSchemaPaths: nil, // Expect nil schema
+			expectedSchemaPaths: nil,
 		},
 		{
-			name: "Gracefully Skips Invalid Fields", // To be understood if we want this behavior
+			name: "should gracefully skip configuration fields for non-existent parameters",
 			doc:  mockDoc,
 			resourceConfig: &ResourceConfig{
 				Verbs: []Verb{
@@ -125,11 +151,11 @@ func TestGenerateConfigurationSchema(t *testing.T) {
 				ConfigurationFields: []ConfigurationField{
 					{
 						FromOpenAPI:        FromOpenAPI{Name: "non-existent-param", In: "query"},
-						FromRestDefinition: FromRestDefinition{Action: "get"},
+						FromRestDefinition: FromRestDefinition{Actions: []string{"get"}},
 					},
 					{
 						FromOpenAPI:        FromOpenAPI{Name: "api-version", In: "query"},
-						FromRestDefinition: FromRestDefinition{Action: "get"},
+						FromRestDefinition: FromRestDefinition{Actions: []string{"get"}},
 					},
 				},
 			},

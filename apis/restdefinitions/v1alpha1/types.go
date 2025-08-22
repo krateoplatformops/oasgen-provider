@@ -70,7 +70,10 @@ type FromOpenAPI struct {
 }
 
 type FromRestDefinition struct {
-	Action string `json:"action"`
+	// Actions: the list of actions this configuration applies to. Use ["*"] to apply to all actions.
+	// +kubebuilder:validation:MinItems=1
+	// +required
+	Actions []string `json:"actions"`
 }
 
 type KindApiVersion struct {

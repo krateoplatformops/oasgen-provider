@@ -17,4 +17,5 @@ spec:
         name: owner
         in: path
       fromRestDefinition:
-        action: create
+        actions: 
+          - create
