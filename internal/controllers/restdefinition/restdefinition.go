@@ -658,7 +658,19 @@ func manageFinalizers(ctx context.Context, kubecli client.Client, cr *definition
 	uli.SetGroupVersionKind(gvk)
 	err := kubecli.List(ctx, &uli)
 	if err != nil && !strings.Contains(err.Error(), "no matches for") {
-		return fmt.Errorf("listing RestResources: %w", err)
+
+		// If the CRD is missing, we assume no resources exist
+		if strings.Contains(err.Error(), "the server could not find the requested resource") {
+			log("CRD not found, treating as no resources exist",
+				"Group", cr.Spec.ResourceGroup,
+				"Kind", cr.Spec.Resource.Kind,
+				"Version", resourceVersion,
+				"error", err.Error())
+			uli.Items = nil
+			err = nil
+		} else {
+			return fmt.Errorf("listing RestResources: %w", err)
+		}
 	}
 
 	restResourceCount := len(uli.Items)
