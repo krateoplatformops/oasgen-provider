@@ -1,6 +1,6 @@
 # Krateo OASGen Provider
 
-The Krateo OASGen Provider is a Kubernetes controller that generates Custom Resource Definitions (CRDs) and controllers to manage resources directly from OpenAPI Specification (OAS) 3.1 documents (with support for OAS 3.0, see [OAS 3.0 vs OAS 3.1 Support](#oas-30-vs-oas-31-support) section). 
+The Krateo OASGen Provider is a Kubernetes controller that generates Custom Resource Definitions (CRDs) and controllers to manage resources directly from OpenAPI Specification (OAS) 3.0/3.1 documents.
 It enables seamless integration of API-defined resources into Kubernetes environments.
 
 ## Summary
@@ -37,25 +37,24 @@ The diagram illustrates how the OASGen Provider processes OpenAPI Specifications
 
 ## Workflow
 
-1. User applies a RestDefinition CR
-2. Provider fetches the OAS specification
-3. Provider generates CRD based on the OAS schema
-4. Provider deploys the Rest Dynamic Controller
-5. Controller manages custom resources according to API specifications
-6. Resources are synchronized with external APIs
+1. User applies a RestDefinition CR.
+2. Provider fetches the OAS specification.
+3. Provider generates CRD based on the OAS schema.
+4. Provider deploys the specific Rest Dynamic Controller.
+5. Controller manages custom resources according to API specifications.
+6. Resources are synchronized with external APIs.
 
 ## Requirements
 
-- Kubernetes cluster (v1.20+ recommended)
-- OpenAPI Specification 3.0+ documents for your APIs
-- Network access to API endpoints from the cluster
+- Kubernetes cluster (v1.20+ recommended).
+- OpenAPI Specification 3.0+ documents for your APIs.
+- Network access to API endpoints from the cluster.
 
 ## RestDefinition Specifications
 
 ### CRD Specification
 
-To view the CRD configuration, visit [this link](https://doc.crds.dev/github.com/krateoplatformops/oasgen-provider).
-
+The RestDefinition CRD specification can be found here: [RestDefinition CRD](crds/ogen.krateo.io_restdefinitions.yaml).
 
 ### API Endpoints Requirements
 
@@ -85,16 +84,17 @@ To learn more about web service wrappers, please refer to the [cheatsheet](docs/
 
 ### Type-Safe Status Fields
 
-The OASGen Provider automatically generates a `status` subresource for your CRD, providing visibility into the state of the external resource. The fields within the status are derived from two sources in your `RestDefinition`:
+The OASGen Provider automatically generates a `status` subresource for your CRD, providing visibility into the state of the external resource. 
+The fields within the status are derived from two sources in your `RestDefinition`:
 
 - `identifiers`: Fields used to uniquely identify the resource.
 - `additionalStatusFields`: Any other fields you wish to expose in the status.
 
 To ensure type safety, the provider inspects the response schema of the `get` (or `findby` as a fallback) action in your OpenAPI specification. It uses the types defined in the OAS to generate the corresponding fields in the CRD's status schema.
 
-#### String Fallback Mechanism
+#### String Fallback Mechanism in Status Fields
 
-When the provider cannot find a specified `identifier` or `additionalStatusField` in the OpenAPI response schema, it employs a **string fallback** mechanism:
+When the provider cannot find a specified `identifier` or `additionalStatusField` in the OpenAPI response schema, it employs a **string fallback** mechanism for that status fields:
 1.  The provider logs a warning indicating that the field was not found in the OAS response.
 2.  It generates the status field with `type: string` as a safe default.
 
@@ -167,42 +167,14 @@ You can see a more practical guide on `oasgen-provider` usage at [this link](che
 4. Regularly update OAS documents to match API changes
 5. Monitor controller logs with `krateo.io/connector-verbose: "true"`
 
-
-
-
 ## Unsupported features
 
-### OAS 3.0 vs OAS 3.1 Support
+- `nullable` is not supported by OASGen provider. `nullable` was removed in OAS 3.1 in favor of using `null` type in the array `type`. Instead, `null` type in the array `type` is supported by OASGen provider.
 
-https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0
+- `anyOf` and `oneOf` are not supported by OASGen provider.
 
-### `nullable` and `null` type support
+- `format` is not supported by OASGen provider.
 
-OAS 3.0
-- `nullable` is not supported by OASGen provider.
+### OAS 3.0 vs OAS 3.1
 
-OAS 3.1
-- `null` type in the array `type` is supported by OASGen provider.
-
-
-### `additionalProperties` support
-
-The use of `additionalProperties` is discouraged apart from cases similar to the following:
-```yaml
-TODO
-(inputs) of github workflows
-```
-
-`anyOf`, `oneOf` are not supported by OASGen provider.
-
-
-`format` is not supported by OASGen provider.
-
-Something like this:
-```yaml
-price:
-	type: number
-  format: float
-  description: Price of the product
-```
-will be converted to integer in the CRD (format is ignored).
+For a reference to the differences between OAS 3.0 and OAS 3.1, please check the official documentation: https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0
