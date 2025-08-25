@@ -96,7 +96,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredField
 
 			// Check if this parameter is configured for the current action.
 			key := fmt.Sprintf("%s-%s", param.In, param.Name)
-			fmt.Printf("Checking parameter: %s for action: %s\n", key, verb.Action)
+			//fmt.Printf("Checking parameter: %s for action: %s\n", key, verb.Action)
 			if actions, ok := configuredFields[key]; ok {
 				if _, isConfiguredForAction := actions[verb.Action]; isConfiguredForAction {
 					continue // Skip this parameter as it's a configuration field for this action.
@@ -105,7 +105,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredField
 
 			// if is authorizaion header, skip it as it is managed by the configuration CR withing the autehntication section.
 			if isAuthorizationHeader(param) {
-				fmt.Printf("Skipping authorization header: %s\n", param.Name)
+				//fmt.Printf("Skipping authorization header: %s\n", param.Name)
 				continue
 			}
 
@@ -113,7 +113,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredField
 			if _, exists := uniqueParams[param.Name]; !exists {
 				param.Schema.Description = fmt.Sprintf("PARAMETER: %s - %s", param.In, param.Description)
 				schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: param.Schema})
-				fmt.Printf("Adding parameter: %s to spec schema\n", param.Name)
+				//fmt.Printf("Adding parameter: %s to spec schema\n", param.Name)
 				uniqueParams[param.Name] = struct{}{}
 			}
 		}
