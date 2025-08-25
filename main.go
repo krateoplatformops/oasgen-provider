@@ -3,15 +3,18 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"log"
+	"log/slog"
+	"os"
 	"time"
+
+	"github.com/go-logr/logr"
+
+	prettylog "github.com/krateoplatformops/plumbing/slogs/pretty"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/controllers"
 	"github.com/krateoplatformops/plumbing/env"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/krateoplatformops/oasgen-provider/apis"
@@ -39,14 +42,33 @@ func main() {
 
 	flag.Parse()
 
-	log.Default().SetOutput(io.Discard)
-	ctrl.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+	// log.Default().SetOutput(io.Discard)
+	// ctrl.SetLogger(zap.New(zap.WriteTo(io.Discard)))
 
-	zl := zap.New(zap.UseDevMode(*debug))
-	logr := logging.NewLogrLogger(zl.WithName(fmt.Sprintf("%s-provider", strcase.KebabCase(providerName))))
+	// zl := zap.New(zap.UseDevMode(*debug))
+	// logr := logging.NewLogrLogger(zl.WithName(fmt.Sprintf("%s-provider", strcase.KebabCase(providerName))))
+	// if *debug {
+	// 	ctrl.SetLogger(zl)
+	// }
+
+	logLevel := slog.LevelInfo
 	if *debug {
-		ctrl.SetLogger(zl)
+		logLevel = slog.LevelDebug
 	}
+
+	lh := prettylog.New(&slog.HandlerOptions{
+		Level:     logLevel,
+		AddSource: false,
+	},
+		prettylog.WithDestinationWriter(os.Stderr),
+		prettylog.WithColor(),
+		prettylog.WithOutputEmptyAttrs(),
+	)
+
+	logrlog := logr.FromSlogHandler(slog.New(lh).Handler())
+	log := logging.NewLogrLogger(logrlog)
+
+	ctrl.SetLogger(logrlog)
 
 	if maxErrorRetryInterval.Seconds() == 0 {
 		retryInterval := (*pollInterval / 2)
@@ -55,21 +77,22 @@ func main() {
 		retryInterval := (*pollInterval / 2)
 		maxErrorRetryInterval = &retryInterval
 
-		logr.Info("[WARNING] max-error-retry-interval is greater than or equal to poll interval, setting to half of poll interval", "max-error-retry-interval", maxErrorRetryInterval.String())
+		log.Info("[WARNING] max-error-retry-interval is greater than or equal to poll interval, setting to half of poll interval", "max-error-retry-interval", maxErrorRetryInterval.String())
 	}
 
 	if minErrorRetryInterval.Seconds() >= maxErrorRetryInterval.Seconds() {
 		retryInterval := 1 * time.Second
 		minErrorRetryInterval = &retryInterval
 
-		logr.Info("[WARNING] min-error-retry-interval is greater than or equal to max-error-retry-interval, setting to 1 second", "min-error-retry-interval", minErrorRetryInterval.String())
+		log.Info("[WARNING] min-error-retry-interval is greater than or equal to max-error-retry-interval, setting to 1 second", "min-error-retry-interval", minErrorRetryInterval.String())
 	}
 
-	logr.Debug("Starting", "sync-period", syncPeriod.String(), "poll-interval", pollInterval.String(), "max-error-retry-interval", maxErrorRetryInterval.String())
+	log.Debug("Starting", "sync-period", syncPeriod.String(), "poll-interval", pollInterval.String(), "max-error-retry-interval", maxErrorRetryInterval.String())
 
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
-		log.Fatalf("Cannot get API server rest config: %v", err)
+		log.Error(err, "Cannot get API server rest config")
+		os.Exit(1)
 	}
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
@@ -83,23 +106,27 @@ func main() {
 		},
 	})
 	if err != nil {
-		log.Fatalf("Cannot create controller manager: %v", err)
+		log.Error(err, "Cannot create controller manager")
+		os.Exit(1)
 	}
 
 	o := controller.Options{
-		Logger:                  logr,
+		Logger:                  log,
 		MaxConcurrentReconciles: *maxReconcileRate,
 		PollInterval:            *pollInterval,
 		GlobalRateLimiter:       ratelimiter.NewGlobalExponential(*minErrorRetryInterval, *maxErrorRetryInterval),
 	}
 
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		log.Fatalf("Cannot add APIs to scheme: %v", err)
+		log.Error(err, "Cannot add APIs to scheme")
+		os.Exit(1)
 	}
 	if err := controllers.Setup(mgr, o); err != nil {
-		log.Fatalf("Cannot setup controllers: %v", err)
+		log.Error(err, "Cannot setup controllers")
+		os.Exit(1)
 	}
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		log.Fatalf("Cannot start controller manager: %v", err)
+		log.Error(err, "Cannot start controller manager")
+		os.Exit(1)
 	}
 }

@@ -1,4 +1,8 @@
+kind: ConfigMap
 apiVersion: v1
+metadata:
+  name: sample-cm
+  namespace: demo-system
 data:
   openapi.yaml: |
     openapi: 3.0.1
@@ -123,7 +127,4 @@ data:
           type: http
           scheme: bearer
     x-original-swagger-version: "2.0"
-kind: ConfigMap
-metadata:
-  name: sample-cm
-  namespace: demo-system
+

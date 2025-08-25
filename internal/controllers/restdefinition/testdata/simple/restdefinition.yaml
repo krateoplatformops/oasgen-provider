@@ -1,4 +1,4 @@
-apiVersion: swaggergen.krateo.io/v1alpha1
+apiVersion: ogen.krateo.io/v1alpha1
 kind: RestDefinition
 metadata:
   name: sample

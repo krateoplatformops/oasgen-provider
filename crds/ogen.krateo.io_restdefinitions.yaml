@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: restdefinitions.swaggergen.krateo.io
+  name: restdefinitions.ogen.krateo.io
 spec:
-  group: swaggergen.krateo.io
+  group: ogen.krateo.io
   names:
     categories:
     - krateo
@@ -83,6 +83,42 @@ spec:
                     - message: AdditionalStatusFields are immutable, you cannot change
                         them once the CRD has been generated
                       rule: self == oldSelf
+                  configurationFields:
+                    description: 'ConfigurationFields: the list of fields to use as
+                      configuration fields'
+                    items:
+                      properties:
+                        fromOpenAPI:
+                          properties:
+                            in:
+                              type: string
+                            name:
+                              type: string
+                          required:
+                          - in
+                          - name
+                          type: object
+                        fromRestDefinition:
+                          properties:
+                            actions:
+                              description: 'Actions: the list of actions this configuration
+                                applies to. Use ["*"] to apply to all actions.'
+                              items:
+                                type: string
+                              minItems: 1
+                              type: array
+                          required:
+                          - actions
+                          type: object
+                      required:
+                      - fromOpenAPI
+                      - fromRestDefinition
+                      type: object
+                    type: array
+                    x-kubernetes-validations:
+                    - message: ConfigurationFields are immutable, you cannot change
+                        them once the CRD has been generated
+                      rule: self == oldSelf
                   identifiers:
                     description: 'Identifiers: the list of fields to use as identifiers
                       - used to populate the status of the resource'
@@ -127,7 +163,7 @@ spec:
                           type: string
                         path:
                           description: 'Path: the path to the api - has to be the
-                            same path as the one in the swagger file you are referencing'
+                            same path as the one in the OAS file you are referencing'
                           type: string
                       required:
                       - action
@@ -154,18 +190,6 @@ spec:
           status:
             description: RestDefinitionStatus is the status of a RestDefinition.
             properties:
-              authentications:
-                description: 'Authentications: the list of authentications to use'
-                items:
-                  properties:
-                    apiVersion:
-                      description: 'APIVersion: the api version of the resource'
-                      type: string
-                    kind:
-                      description: 'Kind: the kind of the resource'
-                      type: string
-                  type: object
-                type: array
               conditions:
                 description: Conditions of the resource.
                 items:
@@ -202,6 +226,16 @@ spec:
                   - type
                   type: object
                 type: array
+              configuration:
+                description: 'Configuration: the configuration of the resource'
+                properties:
+                  apiVersion:
+                    description: 'APIVersion: the api version of the resource'
+                    type: string
+                  kind:
+                    description: 'Kind: the kind of the resource'
+                    type: string
+                type: object
               digest:
                 description: 'Digest: the digest of the managed resources'
                 type: string

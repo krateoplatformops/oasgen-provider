@@ -1,6 +1,7 @@
 # Krateo OASGen Provider
 
-The Krateo OASGen Provider is a Kubernetes controller that generates Custom Resource Definitions (CRDs) and controllers to manage resources directly from OpenAPI Specification (OAS) 3.1 documents (with support for OAS 3.0). It enables seamless integration of API-defined resources into Kubernetes environments.
+The Krateo OASGen Provider is a Kubernetes controller that generates Custom Resource Definitions (CRDs) and controllers to manage resources directly from OpenAPI Specification (OAS) 3.0/3.1 documents.
+It enables seamless integration of API-defined resources into Kubernetes environments.
 
 ## Summary
 
@@ -36,25 +37,24 @@ The diagram illustrates how the OASGen Provider processes OpenAPI Specifications
 
 ## Workflow
 
-1. User applies a RestDefinition CR
-2. Provider fetches the OAS specification
-3. Provider generates CRD based on the OAS schema
-4. Provider deploys the Rest Dynamic Controller
-5. Controller manages custom resources according to API specifications
-6. Resources are synchronized with external APIs
+1. User applies a RestDefinition CR.
+2. Provider fetches the OAS specification.
+3. Provider generates CRD based on the OAS schema.
+4. Provider deploys the specific Rest Dynamic Controller.
+5. Controller manages custom resources according to API specifications.
+6. Resources are synchronized with external APIs.
 
 ## Requirements
 
-- Kubernetes cluster (v1.20+ recommended)
-- OpenAPI Specification 3.0+ documents for your APIs
-- Network access to API endpoints from the cluster
+- Kubernetes cluster (v1.20+ recommended).
+- OpenAPI Specification 3.0+ documents for your APIs.
+- Network access to API endpoints from the cluster.
 
 ## RestDefinition Specifications
 
 ### CRD Specification
 
-To view the CRD configuration, visit [this link](https://doc.crds.dev/github.com/krateoplatformops/oasgen-provider).
-
+The RestDefinition CRD specification can be found here: [RestDefinition CRD](crds/ogen.krateo.io_restdefinitions.yaml).
 
 ### API Endpoints Requirements
 
@@ -80,20 +80,21 @@ Krateo controllers support 4 verbs to provide resource reconciliation:
   - `rest-dynamic-controller` supports resource deletion using the `delete` action. This endpoint should delete the resource from the external system. This means that `rest-dynamic-controller` expects a subsequent call to the `findby` or `get` action will not return the deleted resource. The endpoint should not return an error if the resource does not exist, as it is expected that the resource has already been deleted.
   
 Any API behavior that does not match these requirements will require a web service wrapper to normalize the API interface. This is common with APIs that do not follow consistent naming conventions or have different response structures.
-To learn more about web service wrappers, please refer to the [cheatsheet](cheatsheet.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
+To learn more about web service wrappers, please refer to the [cheatsheet](docs/cheatsheet.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
 
 ### Type-Safe Status Fields
 
-The OASGen Provider automatically generates a `status` subresource for your CRD, providing visibility into the state of the external resource. The fields within the status are derived from two sources in your `RestDefinition`:
+The OASGen Provider automatically generates a `status` subresource for your CRD, providing visibility into the state of the external resource. 
+The fields within the status are derived from two sources in your `RestDefinition`:
 
 - `identifiers`: Fields used to uniquely identify the resource.
 - `additionalStatusFields`: Any other fields you wish to expose in the status.
 
 To ensure type safety, the provider inspects the response schema of the `get` (or `findby` as a fallback) action in your OpenAPI specification. It uses the types defined in the OAS to generate the corresponding fields in the CRD's status schema.
 
-#### String Fallback Mechanism
+#### String Fallback Mechanism in Status Fields
 
-When the provider cannot find a specified `identifier` or `additionalStatusField` in the OpenAPI response schema, it employs a **string fallback** mechanism:
+When the provider cannot find a specified `identifier` or `additionalStatusField` in the OpenAPI response schema, it employs a **string fallback** mechanism for that status fields:
 1.  The provider logs a warning indicating that the field was not found in the OAS response.
 2.  It generates the status field with `type: string` as a safe default.
 
@@ -165,3 +166,15 @@ You can see a more practical guide on `oasgen-provider` usage at [this link](che
 3. Use web service wrappers when API interfaces are inconsistent
 4. Regularly update OAS documents to match API changes
 5. Monitor controller logs with `krateo.io/connector-verbose: "true"`
+
+## Unsupported features
+
+- `nullable` is not supported by OASGen provider. `nullable` was removed in OAS 3.1 in favor of using `null` type in the array `type`. Instead, `null` type in the array `type` is supported by OASGen provider.
+
+- `anyOf` and `oneOf` are not supported by OASGen provider.
+
+- `format` is not supported by OASGen provider.
+
+### OAS 3.0 vs OAS 3.1
+
+For a reference to the differences between OAS 3.0 and OAS 3.1, please check the official documentation: https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0

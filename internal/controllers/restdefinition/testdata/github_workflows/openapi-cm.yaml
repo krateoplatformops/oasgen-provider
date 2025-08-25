@@ -1,4 +1,8 @@
+kind: ConfigMap
 apiVersion: v1
+metadata:
+  name: gh-workflows
+  namespace: gh-system
 data:
   ghworkflows.yaml: |-
     openapi: 3.0.3
@@ -104,7 +108,3 @@ data:
           required: true
           schema:
             type: string
-kind: ConfigMap
-metadata:
-  name: gh-workflows
-  namespace: gh-system

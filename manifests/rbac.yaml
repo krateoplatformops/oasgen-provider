@@ -16,7 +16,7 @@ rules:
   verbs:
   - '*'
 - apiGroups:
-  - swaggergen.krateo.io
+  - ogen.krateo.io
   resources:
   - restdefinitions
   - restdefinitions/status

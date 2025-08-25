@@ -1,5 +1,5 @@
 kind: RestDefinition
-apiVersion: swaggergen.krateo.io/v1alpha1
+apiVersion: ogen.krateo.io/v1alpha1
 metadata:
   name: def-pipelinepermissions
   namespace: default

@@ -14,7 +14,7 @@ type VerbsDescription struct {
 	// +kubebuilder:validation:Enum=GET;POST;PUT;DELETE;PATCH
 	// +required
 	Method string `json:"method"`
-	// Path: the path to the api - has to be the same path as the one in the swagger file you are referencing
+	// Path: the path to the api - has to be the same path as the one in the OAS file you are referencing
 	// +required
 	Path string `json:"path"`
 }
@@ -35,6 +35,10 @@ type Resource struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="AdditionalStatusFields are immutable, you cannot change them once the CRD has been generated"
 	// +optional
 	AdditionalStatusFields []string `json:"additionalStatusFields,omitempty"`
+	// ConfigurationFields: the list of fields to use as configuration fields
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="ConfigurationFields are immutable, you cannot change them once the CRD has been generated"
+	// +optional
+	ConfigurationFields []ConfigurationField `json:"configurationFields,omitempty"`
 }
 
 // RestDefinitionSpec is the specification of a RestDefinition.
@@ -53,6 +57,23 @@ type RestDefinitionSpec struct {
 	// The resource to manage
 	// +required
 	Resource Resource `json:"resource"`
+}
+
+type ConfigurationField struct {
+	FromOpenAPI        FromOpenAPI        `json:"fromOpenAPI"`
+	FromRestDefinition FromRestDefinition `json:"fromRestDefinition"`
+}
+
+type FromOpenAPI struct {
+	Name string `json:"name"`
+	In   string `json:"in"` // "query", "path", "header", "cookie"
+}
+
+type FromRestDefinition struct {
+	// Actions: the list of actions this configuration applies to. Use ["*"] to apply to all actions.
+	// +kubebuilder:validation:MinItems=1
+	// +required
+	Actions []string `json:"actions"`
 }
 
 type KindApiVersion struct {
@@ -76,9 +97,9 @@ type RestDefinitionStatus struct {
 	// +optional
 	Resource KindApiVersion `json:"resource"`
 
-	// Authentications: the list of authentications to use
+	// Configuration: the configuration of the resource
 	// +optional
-	Authentications []KindApiVersion `json:"authentications"`
+	Configuration KindApiVersion `json:"configuration"`
 
 	// Digest: the digest of the managed resources
 	// +optional

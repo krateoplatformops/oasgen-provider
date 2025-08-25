@@ -1,5 +1,5 @@
 kind: RestDefinition
-apiVersion: swaggergen.krateo.io/v1alpha1
+apiVersion: ogen.krateo.io/v1alpha1
 metadata:
   name: github-workflows
   namespace: gh-system
@@ -12,3 +12,10 @@ spec:
     - action: create
       method: POST
       path: /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches
+    configurationFields:
+    - fromOpenAPI:
+        name: owner
+        in: path
+      fromRestDefinition:
+        actions: 
+          - create

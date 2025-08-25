@@ -22,7 +22,7 @@ data:
     - apiGroups: [""]
       resources: ["events"]
       verbs: ["create", "patch", "update"]
-    - apiGroups: ["swaggergen.krateo.io"]
+    - apiGroups: ["ogen.krateo.io"]
       resources: ["restdefinitions", "restdefinitions/status"]
       verbs: ["get", "list", "watch"]
     - apiGroups: [""]
@@ -34,12 +34,10 @@ data:
     - apiGroups: [ {{ .apiGroup }}]
       resources: ["{{ .resource }}", "{{ .resource }}/status"]
       verbs: ["*"]
-    {{- if .authentications }}
+    {{- if .configuration }}
     - apiGroups: [{{ .apiGroup }}]
       resources:
-      {{- range .authentications }}
-      - "{{ . }}"
-      {{- end }}
+      - "{{ .configuration }}"
       verbs: ["*"]
     {{- end }}
   clusterrolebinding.yaml: |

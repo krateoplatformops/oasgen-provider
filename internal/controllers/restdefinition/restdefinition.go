@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"time"
 
 	"os"
@@ -23,8 +22,6 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/meta"
 	"github.com/krateoplatformops/provider-runtime/pkg/ratelimiter"
-	"github.com/pb33f/libopenapi"
-	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -34,12 +31,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/krateoplatformops/oasgen-provider/internal/controllers/logger"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/crd"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deploy"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/filegetter"
-	"github.com/krateoplatformops/oasgen-provider/internal/tools/generation"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/kube"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/oas2jsonschema"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/objects"
@@ -61,7 +56,6 @@ const (
 	resourceVersion      = "v1alpha1"
 
 	restresourcesStillExistFinalizer = "composition.krateo.io/restresources-still-exist-finalizer"
-	authInUseFinalizer               = "composition.krateo.io/auth-in-use-finalizer"
 )
 
 var (
@@ -95,6 +89,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 			log:      log,
 			recorder: recorder,
 			disc:     discovery,
+			parser:   oas2jsonschema.NewLibOASParser(),
 		}),
 		reconciler.WithTimeout(reconcileTimeout),
 		reconciler.WithCreationGracePeriod(reconcileGracePeriod),
@@ -114,6 +109,7 @@ type connector struct {
 	log      logging.Logger
 	recorder record.EventRecorder
 	disc     discovery.DiscoveryInterface
+	parser   oas2jsonschema.Parser
 }
 
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconciler.ExternalClient, error) {
@@ -125,27 +121,25 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 	RDCtemplateConfigmapPath = env.String("RDC_TEMPLATE_CONFIGMAP_PATH", RDCtemplateConfigmapPath)
 	RDCrbacConfigFolder = env.String("RDC_RBAC_CONFIG_FOLDER", RDCrbacConfigFolder)
 
-	log := logger.Logger{
-		Verbose: meta.IsVerbose(cr),
-		Logger:  c.log.WithValues("name", cr.Name, "namespace", cr.Namespace),
-	}
+	log := c.log.WithValues("name", cr.Name, "namespace", cr.Namespace)
 
 	return &external{
-		kube: c.kube,
-		log:  &log,
-		rec:  c.recorder,
-		disc: c.disc,
+		kube:   c.kube,
+		log:    log,
+		rec:    c.recorder,
+		disc:   c.disc,
+		parser: c.parser,
 	}, nil
 }
 
 // An ExternalClient observes, then either creates, updates, or deletes an
 // external resource to ensure it reflects the managed resource's desired state.
 type external struct {
-	kube client.Client
-	log  logging.Logger
-	// doc  *libopenapi.DocumentModel[v3.Document]
-	rec  record.EventRecorder
-	disc discovery.DiscoveryInterface
+	kube   client.Client
+	log    logging.Logger
+	rec    record.EventRecorder
+	disc   discovery.DiscoveryInterface
+	parser oas2jsonschema.Parser
 }
 
 func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler.ExternalObservation, error) {
@@ -161,28 +155,8 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if meta.WasDeleted(cr) {
-		e.log.Info("RestDefinition was deleted, skipping observation")
-		var authenticationGVRs []schema.GroupVersionResource
-
-		if len(cr.Status.Authentications) == 0 {
-			e.log.Debug("No authentications found in status, trying to get from document")
-			doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
-			if err != nil {
-				return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
-			}
-			authenticationGVRs, err = getAuthenticationGVRs(doc, cr)
-			if err != nil {
-				return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
-			}
-		}
-
-		for _, auth := range cr.Status.Authentications {
-			gvk := schema.FromAPIVersionAndKind(auth.APIVersion, auth.Kind)
-			gvr := plurals.ToGroupVersionResource(gvk)
-			authenticationGVRs = append(authenticationGVRs, gvr)
-		}
-
-		err := manageFinalizers(ctx, e.kube, e.disc, authenticationGVRs, cr, e.log.Debug)
+		e.log.Debug("RestDefinition was deleted, skipping observation")
+		err := manageFinalizers(ctx, e.kube, cr, e.log.Debug)
 		if err != nil {
 			return reconciler.ExternalObservation{}, fmt.Errorf("managing finalizers: %w", err)
 		}
@@ -192,17 +166,10 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, e.Delete(ctx, cr)
 	}
 
-	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
-	if err != nil {
-		return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
-	}
-	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
-	if err != nil {
-		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
-	}
+	configurationGVR := getConfigurationGVR(cr)
 
 	gvr := plurals.ToGroupVersionResource(gvk)
-	e.log.Info("Observing RestDefinition", "gvr", gvr.String())
+	e.log.Debug("Observing RestDefinition", "gvr", gvr.String())
 
 	crdOk, err := crd.Lookup(ctx, e.kube, gvr)
 	if err != nil {
@@ -210,7 +177,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if !crdOk {
-		e.log.Info("CRD not found", "gvr", gvr.String())
+		e.log.Debug("CRD not found", "gvr", gvr.String())
 
 		cr.SetConditions(rtv1.Unavailable().
 			WithMessage(fmt.Sprintf("CRD for '%s' does not exists yet", gvr.String())))
@@ -219,7 +186,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 			ResourceUpToDate: true,
 		}, nil
 	}
-	e.log.Info("Searching for Dynamic Controller", "gvr", gvr.String())
+	e.log.Debug("Searching for Dynamic Controller", "gvr", gvr.String())
 
 	deploymentNSName := types.NamespacedName{
 		Namespace: cr.Namespace,
@@ -253,7 +220,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		"replicas", *obj.Spec.Replicas, "readyReplicas", obj.Status.ReadyReplicas)
 
 	if !deployReady {
-		e.log.Info("Dynamic Controller not ready yet",
+		e.log.Debug("Dynamic Controller not ready yet",
 			"name", obj.Name, "namespace", obj.Namespace,
 		)
 
@@ -266,7 +233,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, nil
 	}
 	opts := deploy.DeployOptions{
-		AuthenticationGVRs:     authenticationGVRs,
+		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
@@ -286,7 +253,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if cr.Status.Digest != dig {
-		e.log.Info("Rendered resources digest changed", "status", cr.Status.Digest, "rendered", dig)
+		e.log.Debug("Rendered resources digest changed", "status", cr.Status.Digest, "rendered", dig)
 		return reconciler.ExternalObservation{
 			ResourceExists:   true,
 			ResourceUpToDate: false,
@@ -298,30 +265,14 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		return reconciler.ExternalObservation{}, err
 	}
 	if cr.Status.Digest != dig {
-		e.log.Info("Deployed resources digest changed", "status", cr.Status.Digest, "deployed", dig)
+		e.log.Debug("Deployed resources digest changed", "status", cr.Status.Digest, "deployed", dig)
 		return reconciler.ExternalObservation{
 			ResourceExists:   true,
 			ResourceUpToDate: false,
 		}, nil
 	}
 
-	authenticationGVKs, err := getAuthenticationGVKs(doc, cr)
-	if err != nil {
-		return reconciler.ExternalObservation{}, fmt.Errorf("getting authentication GVRs: %w", err)
-	}
-	for _, gvk := range authenticationGVKs {
-		if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-			Kind:       gvk.Kind,
-			APIVersion: gvk.GroupVersion().String(),
-		}) {
-			cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-				Kind:       gvk.Kind,
-				APIVersion: gvk.GroupVersion().String(),
-			})
-		}
-	}
-
-	err = manageFinalizers(ctx, e.kube, e.disc, authenticationGVRs, cr, e.log.Debug)
+	err = manageFinalizers(ctx, e.kube, cr, e.log.Debug)
 	if err != nil {
 		return reconciler.ExternalObservation{}, fmt.Errorf("managing finalizers: %w", err)
 	}
@@ -340,13 +291,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionCreate) {
-		e.log.Info("External resource should not be created by provider, skip creating.")
+		e.log.Debug("External resource should not be created by provider, skip creating.")
 		return nil
-	}
-
-	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
-	if err != nil {
-		return fmt.Errorf("getting document model from CR: %w", err)
 	}
 
 	e.log.Info("Creating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
@@ -364,12 +310,68 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !crdOk {
-		gen, errors, err := oas2jsonschema.GenerateByteSchemas(doc, cr.Spec.Resource, cr.Spec.Resource.Identifiers)
+		doc, err := e.getDocumentModelFromCR(ctx, cr)
 		if err != nil {
-			return fmt.Errorf("generating byte schemas: %w", err)
+			return fmt.Errorf("getting document model from CR: %w", err)
 		}
-		for _, er := range errors {
-			e.log.Debug("Generating Byte Schemas", "Error:", er)
+
+		// Shim needed to convert definitionv1alpha1.VerbsDescription to oas2jsonschema.Verbs
+		// Verbs is a type defined within the oas2jsonschema package
+		// and so it's not tied with the RestDefinition CRD
+		verbs := make([]oas2jsonschema.Verb, len(cr.Spec.Resource.VerbsDescription))
+		for i, v := range cr.Spec.Resource.VerbsDescription {
+			verbs[i] = oas2jsonschema.Verb{
+				Action: v.Action,
+				Method: v.Method,
+				Path:   v.Path,
+			}
+		}
+
+		// Shim needed to convert definitionv1alpha1.ConfigurationFields to oas2jsonschema.ConfigurationFields
+		configurationFields := make([]oas2jsonschema.ConfigurationField, 0, len(cr.Spec.Resource.ConfigurationFields))
+		for _, v := range cr.Spec.Resource.ConfigurationFields {
+			actions, err := expandWildcardActions(v.FromRestDefinition.Actions, cr.Spec.Resource.VerbsDescription)
+			if err != nil {
+				return fmt.Errorf("expanding wildcard for actions in configurationFields: %w", err)
+			}
+
+			configurationFields = append(configurationFields, oas2jsonschema.ConfigurationField{
+				FromOpenAPI: oas2jsonschema.FromOpenAPI{
+					Name: v.FromOpenAPI.Name,
+					In:   v.FromOpenAPI.In,
+				},
+				FromRestDefinition: oas2jsonschema.FromRestDefinition{
+					Actions: actions,
+				},
+			})
+		}
+
+		// Create the resource configuration for the OAS schema generator
+		// We pass only relevant fields from the RestDefinition needed for schema generation
+		resourceConfig := &oas2jsonschema.ResourceConfig{
+			Verbs:                  verbs,
+			Identifiers:            cr.Spec.Resource.Identifiers,
+			AdditionalStatusFields: cr.Spec.Resource.AdditionalStatusFields,
+			ConfigurationFields:    configurationFields,
+		}
+
+		// Create the OAS schema generator
+		generator := oas2jsonschema.NewOASSchemaGenerator(
+			doc,
+			oas2jsonschema.DefaultGeneratorConfig(),
+			resourceConfig,
+		)
+
+		result, err := generator.Generate()
+		if err != nil {
+			// Fatal error, we cannot continue
+			return fmt.Errorf("generating schemas: %w", err)
+		}
+		for _, er := range result.GenerationWarnings {
+			e.log.Debug("Schema generation warning", "Warning", er)
+		}
+		for _, er := range result.ValidationWarnings {
+			e.log.Debug("Schema validation warning", "Warning", er)
 		}
 
 		resource := crdgen.Generate(ctx, crdgen.Options{
@@ -377,8 +379,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			WorkDir:                fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
 			GVK:                    gvk,
 			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restresources", "rr"},
-			SpecJsonSchemaGetter:   gen.OASSpecJsonSchemaGetter(),
-			StatusJsonSchemaGetter: gen.OASStatusJsonSchemaGetter(),
+			SpecJsonSchemaGetter:   result.OASSpecJsonSchemaGetter(),
+			StatusJsonSchemaGetter: result.OASStatusJsonSchemaGetter(),
 		})
 		if resource.Err != nil {
 			return fmt.Errorf("generating CRD: %w", resource.Err)
@@ -394,100 +396,51 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-			authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
-			if err != nil {
-				return fmt.Errorf("generating Auth Schema Name: %w", err)
-			}
-			gvk := schema.GroupVersionKind{
-				Group:   cr.Spec.ResourceGroup,
-				Version: resourceVersion,
-				Kind:    text.CapitaliseFirstLetter(authSchemaName),
-			}
+		e.log.Debug("Configuration fields defined, generating Configuration CRD")
 
-			crdOk, err := crd.Lookup(ctx, e.kube, plurals.ToGroupVersionResource(gvk))
-			if err != nil {
-				return fmt.Errorf("looking up CRD: %w", err)
-			}
-			if crdOk {
-				e.log.Debug("CRD already exists", "Kind:", authSchemaName)
-				if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-					Kind:       gvk.Kind,
-					APIVersion: gvk.GroupVersion().String(),
-				}) {
-					e.log.Debug("Adding authentication CRD to status", "Kind:", authSchemaName)
-					cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-						Kind:       gvk.Kind,
-						APIVersion: gvk.GroupVersion().String(),
-					})
-				}
-
-				err = e.kube.Status().Update(ctx, cr)
-				if err != nil {
-					return fmt.Errorf("updating status: %w", err)
-				}
-				continue
-			}
-
-			resource = crdgen.Generate(ctx, crdgen.Options{
-				Managed:                false,
-				WorkDir:                fmt.Sprintf("gen-crds/%s", authSchemaName),
-				GVK:                    gvk,
-				Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restauths", "ra"},
-				SpecJsonSchemaGetter:   gen.OASAuthJsonSchemaGetter(authSchemaName),
-				StatusJsonSchemaGetter: oas2jsonschema.StaticJsonSchemaGetter(),
-			})
-
-			if resource.Err != nil {
-				return fmt.Errorf("generating CRD: %w", resource.Err)
-			}
-
-			crdu, err := crd.Unmarshal(resource.Manifest)
-			if err != nil {
-				return fmt.Errorf("unmarshalling CRD: %w", err)
-			}
-
-			err = kube.Apply(ctx, e.kube, crdu, kube.ApplyOptions{})
-			if err != nil {
-				return fmt.Errorf("installing CRD: %w", err)
-			}
-
-			e.log.Info("Created authentication CRD", "Kind:", authSchemaName, "Group:", gvk.Group)
-
-			if !slices.Contains(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-				Kind:       gvk.Kind,
-				APIVersion: gvk.GroupVersion().String(),
-			}) {
-				e.log.Debug("Adding authentication CRD to status", "Kind:", authSchemaName)
-				cr.Status.Authentications = append(cr.Status.Authentications, definitionv1alpha1.KindApiVersion{
-					Kind:       gvk.Kind,
-					APIVersion: gvk.GroupVersion().String(),
-				})
-			}
-
-			err = e.kube.Status().Update(ctx, cr)
-			if err != nil {
-				return fmt.Errorf("updating status: %w", err)
-			}
+		cfgGVK := schema.GroupVersionKind{
+			Group:   cr.Spec.ResourceGroup,
+			Version: resourceVersion,
+			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind) + "Configuration",
 		}
+
+		cfgResource := crdgen.Generate(ctx, crdgen.Options{
+			Managed:              false, // Configuration is not a managed resource
+			WorkDir:              fmt.Sprintf("gen-crds/%s", cfgGVK.Kind),
+			GVK:                  cfgGVK,
+			Categories:           []string{strings.ToLower(cr.Spec.Resource.Kind), "restconfigs", "rc"},
+			SpecJsonSchemaGetter: result.OASConfigurationSchemaGetter(),
+		})
+		if cfgResource.Err != nil {
+			return fmt.Errorf("generating configuration CRD: %w", cfgResource.Err)
+		}
+
+		cfgCRDU, err := crd.Unmarshal(cfgResource.Manifest)
+		if err != nil {
+			return fmt.Errorf("unmarshalling configuration CRD: %w", err)
+		}
+
+		err = kube.Apply(ctx, e.kube, cfgCRDU, kube.ApplyOptions{})
+		if err != nil {
+			return fmt.Errorf("installing configuration CRD: %w", err)
+		}
+		e.log.Debug("Created Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
 
 		cr.SetConditions(rtv1.Creating())
 		err = e.kube.Status().Update(ctx, cr)
 		if err != nil {
 			return fmt.Errorf("updating status: %w", err)
 		}
-		e.log.Info("Created CRD", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+		e.log.Debug("Created CRD", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 		e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
 			"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 
 		return nil
 	}
-	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
-	if err != nil {
-		return fmt.Errorf("getting authentication GVRs: %w", err)
-	}
+
+	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.DeployOptions{
-		AuthenticationGVRs:     authenticationGVRs,
+		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
@@ -509,6 +462,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
 	}
+	cfgGVK := getConfigurationGVK(cr)
+	cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
+		Kind:       cfgGVK.Kind,
+		APIVersion: cfgGVK.GroupVersion().String(),
+	}
 	cr.Status.OASPath = cr.Spec.OASPath
 	cr.Status.Digest = dig
 
@@ -517,7 +475,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("updating status: %w", err)
 	}
 
-	e.log.Info("Created RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.log.Debug("Created RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
 		"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return err
@@ -530,13 +488,8 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionUpdate) {
-		e.log.Info("External resource should not be updated by provider, skip updating.")
+		e.log.Debug("External resource should not be updated by provider, skip updating.")
 		return nil
-	}
-
-	doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
-	if err != nil {
-		return fmt.Errorf("getting document model from CR: %w", err)
 	}
 
 	e.log.Info("Updating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
@@ -548,13 +501,9 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	}
 	gvr := plurals.ToGroupVersionResource(gvk)
 
-	authenticationGVRs, err := getAuthenticationGVRs(doc, cr)
-	if err != nil {
-		return fmt.Errorf("getting authentication GVRs: %w", err)
-	}
-
+	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.DeployOptions{
-		AuthenticationGVRs:     authenticationGVRs,
+		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
 		DeploymentTemplatePath: RDCtemplateDeploymentPath,
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
@@ -576,6 +525,11 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
 	}
+	cfgGVK := getConfigurationGVK(cr)
+	cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
+		Kind:       cfgGVK.Kind,
+		APIVersion: cfgGVK.GroupVersion().String(),
+	}
 	cr.Status.OASPath = cr.Spec.OASPath
 	cr.Status.Digest = dig
 
@@ -584,7 +538,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("updating status: %w", err)
 	}
 
-	e.log.Info("Updated RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.log.Debug("Updated RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionUpdating",
 		"RestDefinition '%s/%s' updating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return nil
@@ -597,44 +551,27 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionDelete) {
-		e.log.Info("External resource should not be deleted by provider, skip deleting.")
+		e.log.Debug("External resource should not be deleted by provider, skip deleting.")
 		return nil
 	}
 
 	e.log.Info("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
-
-	var authenticationGVRs []schema.GroupVersionResource
-
-	if len(cr.Status.Authentications) == 0 {
-		e.log.Debug("No authentications found in status, trying to get from document")
-		doc, err := getDocumentModelFromCR(ctx, e.kube, cr)
-		if err != nil {
-			return fmt.Errorf("getting document model from CR: %w", err)
-		}
-		authenticationGVRs, err = getAuthenticationGVRs(doc, cr)
-		if err != nil {
-			return fmt.Errorf("getting authentication GVRs: %w", err)
-		}
-	}
-
-	for _, auth := range cr.Status.Authentications {
-		gvk := schema.FromAPIVersionAndKind(auth.APIVersion, auth.Kind)
-		gvr := plurals.ToGroupVersionResource(gvk)
-		authenticationGVRs = append(authenticationGVRs, gvr)
-	}
 
 	gvr := plurals.ToGroupVersionResource(schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
 		Version: resourceVersion,
 		Kind:    cr.Spec.Resource.Kind,
 	})
-	skipDeploy := meta.FinalizerExists(cr, restresourcesStillExistFinalizer) || meta.FinalizerExists(cr, authInUseFinalizer)
+
+	skipDeploy := meta.FinalizerExists(cr, restresourcesStillExistFinalizer)
+
+	configurationGVR := getConfigurationGVR(cr)
 	opts := deploy.UndeployOptions{
-		AuthenticationGVRs: authenticationGVRs,
-		SkipCRD:            false,
-		SkipDeploy:         skipDeploy,
-		RBACFolderPath:     RDCrbacConfigFolder,
-		KubeClient:         e.kube,
+		ConfigurationGVR: configurationGVR,
+		SkipCRD:          false,
+		SkipDeploy:       skipDeploy,
+		RBACFolderPath:   RDCrbacConfigFolder,
+		KubeClient:       e.kube,
 		NamespacedName: types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Name,
@@ -650,136 +587,91 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("uninstalling controller: %w", err)
 	}
 
-	// Check if CRD exists and if there are any RestResources with the same group
-	for _, gvr := range authenticationGVRs {
-		crdOk, err := crd.Lookup(ctx, e.kube, gvr)
-		if err != nil {
-			return fmt.Errorf("looking up CRD: %w", err)
-		}
-		if crdOk {
-			authExist, rrCount, err := kube.CountRestDefinitionsWithGroup(ctx, e.kube, e.disc, gvr.Group)
-			if err != nil {
-				return fmt.Errorf("counting resources: %w", err)
-			}
-			if rrCount == 1 && authExist {
-				e.log.Info("CRD exists, deleting", "Group:", gvr.Group, "Resource:", gvr.Resource)
-				err = crd.Uninstall(ctx, e.kube, schema.GroupResource{
-					Group:    gvr.Group,
-					Resource: gvr.Resource,
-				})
-				if err != nil {
-					return fmt.Errorf("uninstalling authentication CRD: %w", err)
-				}
-
-			} else if rrCount > 1 {
-				e.log.Debug("Skipping CRD deletion, RestDefinitions that reference this auth still exist",
-					"Group", gvr.Group, "Count", rrCount)
-			}
-		}
-	}
-
 	if skipDeploy || opts.SkipCRD {
-		e.log.Info(" RestResources still exist",
+		e.log.Debug(" RestResources still exist",
 			"Group", gvr.Group, "Resource", gvr.Resource)
 		return fmt.Errorf("restResources still exist")
 	}
 
-	e.log.Info("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.log.Debug("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionDeleting",
 		"RestDefinition '%s/%s' deleting", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return err
 }
 
-func getAuthenticationGVRs(doc *libopenapi.DocumentModel[v3.Document], cr *definitionv1alpha1.RestDefinition) ([]schema.GroupVersionResource, error) {
-	var authenticationGVRs []schema.GroupVersionResource
-	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
-		if err != nil {
-			return nil, fmt.Errorf("generating Auth Schema Name: %w", err)
-		}
-		gvk := schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(authSchemaName),
-		}
-
-		authenticationGVRs = append(authenticationGVRs, plurals.ToGroupVersionResource(gvk))
-	}
-	return authenticationGVRs, nil
+func getConfigurationGVR(cr *definitionv1alpha1.RestDefinition) schema.GroupVersionResource {
+	cfgGVK := getConfigurationGVK(cr)
+	return plurals.ToGroupVersionResource(cfgGVK)
 }
 
-func getAuthenticationGVKs(doc *libopenapi.DocumentModel[v3.Document], cr *definitionv1alpha1.RestDefinition) ([]schema.GroupVersionKind, error) {
-	var authenticationGVKs []schema.GroupVersionKind
-	for secSchemaPair := doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
-		if err != nil {
-			return nil, fmt.Errorf("generating Auth Schema Name: %w", err)
-		}
-		gvk := schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(authSchemaName),
-		}
-
-		authenticationGVKs = append(authenticationGVKs, gvk)
+func getConfigurationGVK(cr *definitionv1alpha1.RestDefinition) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   cr.Spec.ResourceGroup,
+		Version: resourceVersion,
+		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind) + "Configuration",
 	}
-	return authenticationGVKs, nil
 }
-func manageFinalizers(ctx context.Context, kubecli client.Client, disc discovery.DiscoveryInterface, authenticationGVRs []schema.GroupVersionResource, cr *definitionv1alpha1.RestDefinition, log func(msg string, keysAndValues ...any)) error {
-	var n int
-	var finalizer string
-	var err error
-	var authExist bool
-	if len(authenticationGVRs) > 0 {
-		authExist, n, err = kube.CountRestResourcesWithGroup(ctx, kubecli, disc, cr.Spec.ResourceGroup)
-		if err != nil {
-			return fmt.Errorf("counting resources: %w", err)
+
+func manageFinalizers(ctx context.Context, kubecli client.Client, cr *definitionv1alpha1.RestDefinition, log func(msg string, keysAndValues ...any)) error {
+	log("Managing finalizers for RestDefinition", "name", cr.Name, "namespace", cr.Namespace)
+
+	// Check if RestResources still exist for this RestDefinition
+	gvk := schema.GroupVersionKind{
+		Group:   cr.Spec.ResourceGroup,
+		Version: resourceVersion,
+		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
+	}
+
+	uli := unstructured.UnstructuredList{}
+	uli.SetGroupVersionKind(gvk)
+	err := kubecli.List(ctx, &uli)
+	if err != nil && !strings.Contains(err.Error(), "no matches for") {
+
+		// If the CRD is missing, we assume no resources exist
+		if strings.Contains(err.Error(), "the server could not find the requested resource") {
+			log("CRD not found, treating as no resources exist",
+				"Group", cr.Spec.ResourceGroup,
+				"Kind", cr.Spec.Resource.Kind,
+				"Version", resourceVersion,
+				"error", err.Error())
+			uli.Items = nil
+			err = nil
+		} else {
+			return fmt.Errorf("listing RestResources: %w", err)
 		}
-		finalizer = authInUseFinalizer
+	}
+
+	restResourceCount := len(uli.Items)
+
+	// Manage restresources-still-exist finalizer
+	if restResourceCount > 0 {
+		if !meta.FinalizerExists(cr, restresourcesStillExistFinalizer) {
+			log("Existing RestResources found", "Group", cr.Spec.ResourceGroup, "Kind", cr.Spec.Resource.Kind, "Count", restResourceCount)
+			log("Adding finalizer to RestDefinition", "name", cr.Name, "finalizer", restresourcesStillExistFinalizer)
+			meta.AddFinalizer(cr, restresourcesStillExistFinalizer)
+			err = kubecli.Update(ctx, cr)
+			if err != nil {
+				return fmt.Errorf("adding restresources finalizer: %w", err)
+			}
+		}
 	} else {
-		uli := unstructured.UnstructuredList{}
-		uli.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
-		})
-		err := kubecli.List(ctx, &uli)
-		if err != nil {
-			if !strings.Contains(err.Error(), "no matches for") {
-				return fmt.Errorf("listing resources: %w", err)
-			}
-		}
-		n = len(uli.Items)
-		finalizer = restresourcesStillExistFinalizer
-	}
-	if n > 0 {
-		if !meta.FinalizerExists(cr, finalizer) && len(cr.Status.Authentications) > 0 {
-			log("Existing Rest Resources with group", "Group", cr.Spec.ResourceGroup, "Count", n)
-			log("Adding finalizer to RestDefinition", "name", cr.Name, "finalizer", finalizer)
-			meta.AddFinalizer(cr, finalizer)
+		if meta.FinalizerExists(cr, restresourcesStillExistFinalizer) {
+			log("No RestResources found, removing finalizer", "name", cr.Name, "finalizer", restresourcesStillExistFinalizer)
+			meta.RemoveFinalizer(cr, restresourcesStillExistFinalizer)
 			err = kubecli.Update(ctx, cr)
 			if err != nil {
-				return err
-			}
-		}
-	} else if !authExist {
-		if meta.FinalizerExists(cr, finalizer) {
-			log("Removing finalizer from RestDefinition", "name", cr.Name, "finalizer", finalizer)
-			meta.RemoveFinalizer(cr, finalizer)
-			err = kubecli.Update(ctx, cr)
-			if err != nil {
-				return err
+				return fmt.Errorf("removing restresources finalizer: %w", err)
 			}
 		}
 	}
+
 	return nil
 }
 
-func getDocumentModelFromCR(ctx context.Context, kube client.Client, cr *definitionv1alpha1.RestDefinition) (*libopenapi.DocumentModel[v3.Document], error) {
-	var err error
-	swaggerPath := cr.Spec.OASPath
-	basePath := "/tmp/swaggergen-provider"
-	err = os.MkdirAll(basePath, os.ModePerm)
+func (e *external) getDocumentModelFromCR(ctx context.Context, cr *definitionv1alpha1.RestDefinition) (oas2jsonschema.OASDocument, error) {
+	OASPath := cr.Spec.OASPath
+	basePath := "/tmp/ogen-provider"
+	err := os.MkdirAll(basePath, os.ModePerm)
 	defer os.RemoveAll(basePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
@@ -787,40 +679,18 @@ func getDocumentModelFromCR(ctx context.Context, kube client.Client, cr *definit
 
 	filegetter := &filegetter.Filegetter{
 		Client:     http.DefaultClient,
-		KubeClient: kube,
+		KubeClient: e.kube,
 	}
 
-	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(swaggerPath)), swaggerPath, nil)
+	err = filegetter.GetFile(ctx, path.Join(basePath, path.Base(OASPath)), OASPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 
-	contents, err := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+	contents, err := os.ReadFile(path.Join(basePath, path.Base(OASPath)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	d, err := libopenapi.NewDocument(contents)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	doc, modelErrors := d.BuildV3Model()
-	if len(modelErrors) > 0 {
-		return nil, fmt.Errorf("failed to build model: %w", errors.Join(modelErrors...))
-	}
-	if doc == nil {
-		return nil, fmt.Errorf("failed to build model")
-	}
-
-	// Resolve model references
-	resolvingErrors := doc.Index.GetResolver().Resolve()
-	errs := []error{}
-	for i := range resolvingErrors {
-		errs = append(errs, resolvingErrors[i].ErrorRef)
-	}
-	if len(resolvingErrors) > 0 {
-		return nil, fmt.Errorf("failed to resolve model references: %w", errors.Join(errs...))
-	}
-	return doc, nil
+	return e.parser.Parse(contents)
 }

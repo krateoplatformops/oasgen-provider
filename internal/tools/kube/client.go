@@ -135,7 +135,8 @@ func Get(ctx context.Context, kube client.Client, obj client.Object) error {
 	return kube.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 }
 
-func CountRestResourcesWithGroup(ctx context.Context, kube client.Client, discovery discovery.DiscoveryInterface, group string) (auth bool, rest int, err error) {
+// Note: currently not used
+func CountRestResourcesWithGroup(ctx context.Context, kube client.Client, discovery discovery.DiscoveryInterface, group string) (configuration bool, rest int, err error) {
 	_, apiResourceList, err := discovery.ServerGroupsAndResources()
 	if err != nil {
 		return false, 0, fmt.Errorf("failed to discover API resources: %v", err)
@@ -144,13 +145,13 @@ func CountRestResourcesWithGroup(ctx context.Context, kube client.Client, discov
 	if len(apiResourceList) == 0 {
 		return false, 0, fmt.Errorf("no API resources found")
 	}
-	auth = false
+	configuration = false
 	rest = 0
 
 	for _, apiResource := range apiResourceList {
 		gv, err := schema.ParseGroupVersion(apiResource.GroupVersion)
 		if err != nil {
-			return auth, 0, fmt.Errorf("failed to parse group version: %v", err)
+			return configuration, 0, fmt.Errorf("failed to parse group version: %v", err)
 		}
 
 		if gv.Group == group {
@@ -167,13 +168,13 @@ func CountRestResourcesWithGroup(ctx context.Context, kube client.Client, discov
 					Kind:    resource.Kind,
 				})
 
-				if strings.HasSuffix(resource.Kind, "Auth") {
-					auth = true
+				if strings.HasSuffix(resource.Kind, "Configuration") {
+					configuration = true
 				} else {
 					err = kube.List(ctx, &li)
 					if err != nil {
 						if !strings.Contains(err.Error(), "no matches for") {
-							return auth, 0, fmt.Errorf("failed to list resources: %v", err)
+							return configuration, 0, fmt.Errorf("failed to list resources: %v", err)
 						}
 					}
 
@@ -183,10 +184,11 @@ func CountRestResourcesWithGroup(ctx context.Context, kube client.Client, discov
 		}
 	}
 
-	return auth, rest, nil
+	return configuration, rest, nil
 }
 
-func CountRestDefinitionsWithGroup(ctx context.Context, kube client.Client, discovery discovery.DiscoveryInterface, group string) (auth bool, rest int, err error) {
+// Note: currently not used
+func CountRestDefinitionsWithGroup(ctx context.Context, kube client.Client, discovery discovery.DiscoveryInterface, group string) (configuration bool, rest int, err error) {
 	_, apiResourceList, err := discovery.ServerGroupsAndResources()
 	if err != nil {
 		return false, 0, fmt.Errorf("failed to discover API resources: %v", err)
@@ -207,13 +209,13 @@ func CountRestDefinitionsWithGroup(ctx context.Context, kube client.Client, disc
 				if resource.Kind == "" {
 					continue
 				}
-				if strings.HasSuffix(resource.Kind, "Auth") {
-					auth = true
+				if strings.HasSuffix(resource.Kind, "Configuration") {
+					configuration = true
 				} else if !strings.HasSuffix(resource.Name, "/status") {
 					count += 1
 				}
 			}
 		}
 	}
-	return auth, count, nil
+	return configuration, count, nil
 }

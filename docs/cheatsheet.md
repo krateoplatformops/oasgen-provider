@@ -109,7 +109,7 @@ In order to create a RestDefinition for GitHub repositories, you need to define 
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: swaggergen.krateo.io/v1alpha1
+apiVersion: ogen.krateo.io/v1alpha1
 kind: RestDefinition
 metadata:
   name: gh-repo
@@ -375,7 +375,7 @@ In order to create a RestDefinition for GitHub teamrepos, you need to define the
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: swaggergen.krateo.io/v1alpha1
+apiVersion: ogen.krateo.io/v1alpha1
 kind: RestDefinition
 metadata:
   name: gh-teamrepo
@@ -600,7 +600,7 @@ Now we need to update the `RestDefinition` to use the new configmap:
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: swaggergen.krateo.io/v1alpha1
+apiVersion: ogen.krateo.io/v1alpha1
 kind: RestDefinition
 metadata:
   name: gh-teamrepo
