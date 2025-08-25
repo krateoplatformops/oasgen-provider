@@ -31,7 +31,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/krateoplatformops/oasgen-provider/internal/controllers/logger"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/crd"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deploy"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/deployment"
@@ -122,14 +121,11 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 	RDCtemplateConfigmapPath = env.String("RDC_TEMPLATE_CONFIGMAP_PATH", RDCtemplateConfigmapPath)
 	RDCrbacConfigFolder = env.String("RDC_RBAC_CONFIG_FOLDER", RDCrbacConfigFolder)
 
-	log := logger.Logger{
-		Verbose: meta.IsVerbose(cr),
-		Logger:  c.log.WithValues("name", cr.Name, "namespace", cr.Namespace),
-	}
+	log := c.log.WithValues("name", cr.Name, "namespace", cr.Namespace)
 
 	return &external{
 		kube:   c.kube,
-		log:    &log,
+		log:    log,
 		rec:    c.recorder,
 		disc:   c.disc,
 		parser: c.parser,
@@ -159,7 +155,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if meta.WasDeleted(cr) {
-		e.log.Info("RestDefinition was deleted, skipping observation")
+		e.log.Debug("RestDefinition was deleted, skipping observation")
 		err := manageFinalizers(ctx, e.kube, cr, e.log.Debug)
 		if err != nil {
 			return reconciler.ExternalObservation{}, fmt.Errorf("managing finalizers: %w", err)
@@ -173,7 +169,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	configurationGVR := getConfigurationGVR(cr)
 
 	gvr := plurals.ToGroupVersionResource(gvk)
-	e.log.Info("Observing RestDefinition", "gvr", gvr.String())
+	e.log.Debug("Observing RestDefinition", "gvr", gvr.String())
 
 	crdOk, err := crd.Lookup(ctx, e.kube, gvr)
 	if err != nil {
@@ -181,7 +177,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if !crdOk {
-		e.log.Info("CRD not found", "gvr", gvr.String())
+		e.log.Debug("CRD not found", "gvr", gvr.String())
 
 		cr.SetConditions(rtv1.Unavailable().
 			WithMessage(fmt.Sprintf("CRD for '%s' does not exists yet", gvr.String())))
@@ -190,7 +186,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 			ResourceUpToDate: true,
 		}, nil
 	}
-	e.log.Info("Searching for Dynamic Controller", "gvr", gvr.String())
+	e.log.Debug("Searching for Dynamic Controller", "gvr", gvr.String())
 
 	deploymentNSName := types.NamespacedName{
 		Namespace: cr.Namespace,
@@ -224,7 +220,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		"replicas", *obj.Spec.Replicas, "readyReplicas", obj.Status.ReadyReplicas)
 
 	if !deployReady {
-		e.log.Info("Dynamic Controller not ready yet",
+		e.log.Debug("Dynamic Controller not ready yet",
 			"name", obj.Name, "namespace", obj.Namespace,
 		)
 
@@ -257,7 +253,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	if cr.Status.Digest != dig {
-		e.log.Info("Rendered resources digest changed", "status", cr.Status.Digest, "rendered", dig)
+		e.log.Debug("Rendered resources digest changed", "status", cr.Status.Digest, "rendered", dig)
 		return reconciler.ExternalObservation{
 			ResourceExists:   true,
 			ResourceUpToDate: false,
@@ -269,7 +265,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		return reconciler.ExternalObservation{}, err
 	}
 	if cr.Status.Digest != dig {
-		e.log.Info("Deployed resources digest changed", "status", cr.Status.Digest, "deployed", dig)
+		e.log.Debug("Deployed resources digest changed", "status", cr.Status.Digest, "deployed", dig)
 		return reconciler.ExternalObservation{
 			ResourceExists:   true,
 			ResourceUpToDate: false,
@@ -295,7 +291,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionCreate) {
-		e.log.Info("External resource should not be created by provider, skip creating.")
+		e.log.Debug("External resource should not be created by provider, skip creating.")
 		return nil
 	}
 
@@ -400,7 +396,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		e.log.Info("Configuration fields defined, generating Configuration CRD")
+		e.log.Debug("Configuration fields defined, generating Configuration CRD")
 
 		cfgGVK := schema.GroupVersionKind{
 			Group:   cr.Spec.ResourceGroup,
@@ -428,14 +424,14 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		if err != nil {
 			return fmt.Errorf("installing configuration CRD: %w", err)
 		}
-		e.log.Info("Created Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
+		e.log.Debug("Created Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
 
 		cr.SetConditions(rtv1.Creating())
 		err = e.kube.Status().Update(ctx, cr)
 		if err != nil {
 			return fmt.Errorf("updating status: %w", err)
 		}
-		e.log.Info("Created CRD", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+		e.log.Debug("Created CRD", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 		e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
 			"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 
@@ -479,7 +475,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("updating status: %w", err)
 	}
 
-	e.log.Info("Created RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.log.Debug("Created RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
 		"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return err
@@ -492,7 +488,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionUpdate) {
-		e.log.Info("External resource should not be updated by provider, skip updating.")
+		e.log.Debug("External resource should not be updated by provider, skip updating.")
 		return nil
 	}
 
@@ -542,7 +538,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("updating status: %w", err)
 	}
 
-	e.log.Info("Updated RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.log.Debug("Updated RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionUpdating",
 		"RestDefinition '%s/%s' updating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return nil
@@ -555,7 +551,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionDelete) {
-		e.log.Info("External resource should not be deleted by provider, skip deleting.")
+		e.log.Debug("External resource should not be deleted by provider, skip deleting.")
 		return nil
 	}
 
@@ -591,41 +587,13 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return fmt.Errorf("uninstalling controller: %w", err)
 	}
 
-	// Check if CRD exists and if there are any RestResources with the same group
-	//for _, gvr := range authenticationGVRs {
-	//	crdOk, err := crd.Lookup(ctx, e.kube, gvr)
-	//	if err != nil {
-	//		return fmt.Errorf("looking up CRD: %w", err)
-	//	}
-	//	if crdOk {
-	//		authExist, rrCount, err := kube.CountRestDefinitionsWithGroup(ctx, e.kube, e.disc, gvr.Group)
-	//		if err != nil {
-	//			return fmt.Errorf("counting resources: %w", err)
-	//		}
-	//		if rrCount == 1 && authExist {
-	//			e.log.Info("CRD exists, deleting", "Group:", gvr.Group, "Resource:", gvr.Resource)
-	//			err = crd.Uninstall(ctx, e.kube, schema.GroupResource{
-	//				Group:    gvr.Group,
-	//				Resource: gvr.Resource,
-	//			})
-	//			if err != nil {
-	//				return fmt.Errorf("uninstalling authentication CRD: %w", err)
-	//			}
-	//
-	//		} else if rrCount > 1 {
-	//			e.log.Debug("Skipping CRD deletion, RestDefinitions that reference this auth still exist",
-	//				"Group", gvr.Group, "Count", rrCount)
-	//		}
-	//	}
-	//}
-
 	if skipDeploy || opts.SkipCRD {
-		e.log.Info(" RestResources still exist",
+		e.log.Debug(" RestResources still exist",
 			"Group", gvr.Group, "Resource", gvr.Resource)
 		return fmt.Errorf("restResources still exist")
 	}
 
-	e.log.Info("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+	e.log.Debug("Deleting RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionDeleting",
 		"RestDefinition '%s/%s' deleting", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 	return err

@@ -87,6 +87,18 @@ func (l *fakelogger) Info(msg string, keysAndValues ...interface{}) {
 	fmt.Println("INFO", msg, keysAndValues)
 }
 
+func (l *fakelogger) Error(err error, msg string, keysAndValues ...interface{}) {
+	fmt.Println("ERROR", msg, "error", err, keysAndValues)
+}
+
+func (l *fakelogger) Warn(msg string, keysAndValues ...interface{}) {
+	fmt.Println("WARN", msg, keysAndValues)
+}
+
+func (l *fakelogger) WithName(name string) logging.Logger {
+	return l
+}
+
 func (l *fakelogger) WithValues(keysAndValues ...interface{}) logging.Logger {
 	return l
 }
