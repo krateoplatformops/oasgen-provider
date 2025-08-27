@@ -5,21 +5,19 @@ It enables seamless integration of API-defined resources into Kubernetes environ
 
 ## Summary
 
-- [Krateo OASGen Provider](#krateo-oasgen-provider)
-  - [Summary](#summary)
-  - [Glossary](#glossary)
-  - [Architecture](#architecture)
-  - [Workflow](#workflow)
-  - [Requirements](#requirements)
-  - [RestDefinition Specifications](#restdefinition-specifications)
-    - [CRD Specification](#crd-specification)
-    - [API Endpoints Requirements](#api-endpoints-requirements)
-    - [About RestDefinition Actions](#about-restdefinition-actions)
-  - [How to Install](#how-to-install)
-  - [Examples and Troubleshooting](#examples-and-troubleshooting)
-  - [Environment Variables and Flags](#environment-variables-and-flags)
-  - [Security Features](#security-features)
-  - [Best Practices](#best-practices)
+- [Glossary](#glossary)
+- [Architecture](#architecture)
+- [Workflow](#workflow)
+- [Requirements](#requirements)
+- [RestDefinition Specifications](#restdefinition-specifications)
+  - [CRD Specification](#crd-specification)
+  - [API Endpoints Requirements](#api-endpoints-requirements)
+  - [About RestDefinition Actions](#about-restdefinition-actions)
+- [How to Install](#how-to-install)
+- [Examples and Troubleshooting](#examples-and-troubleshooting)
+- [Environment Variables and Flags](#environment-variables-and-flags)
+- [Security Features](#security-features)
+- [Best Practices](#best-practices)
 
 ## Glossary
 
