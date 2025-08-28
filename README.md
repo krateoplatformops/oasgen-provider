@@ -167,7 +167,7 @@ It must be noted that the **source of truth** for the resource is the resource a
 Therefore, the `rest-dynamic-controller` will always try to make the external system match the desired state defined in the resource manifest applied to the Kubernetes cluster.
 
 ```mermaid
-TODO
+TODO, if deemed necessary
 ```
 
 #### `findby` action
@@ -311,45 +311,40 @@ After a successful delete, the rest-dynamic-controller expects that any subseque
 The delete action must also be idempotent: if the resource does not exist in the external system, the endpoint should return a success response rather than an error. This behavior ensures that reconciliation can proceed correctly, since the desired state (“resource absent”) already matches the actual state.
 The typical status code for a successful delete operation is `204 No Content`, but `200 OK` or `202 Accepted` (and all successful status codes) are also acceptable.
 
-
-
-  
-
-
-
-
 ### API Endpoints consistency requirements
 
 Some consistency requirements includes but may not be limited to:
 
 1. Field names must be consistent across all actions (`create`, `update`, `findby`, `get`, `delete`)
 2. API responses must be consistent with the fields of the resource schema defined in the OAS document and so the CRD schema.
-3. Path parameters and request / response body fields should use consistent naming (e.g., `userId` vs `user_id` is not consistent, also having `repositoryId` as path paramter and `id` in the response body is not consistent)
+3. Path parameters and request / response body fields should use consistent naming (e.g., `userId` vs `user_id` is not consistent, also having `repositoryId` as path paramter and `id` in the response body is not consistent).
 
-Any API behavior that does not match these requirements will require a web service wrapper to normalize the API interface. 
+Any API behavior that does not match these requirements will require a web service wrapper to normalize / fix the API interface. 
 This is common with APIs that do not follow consistent naming conventions or have different response structures.
 To learn more about web service wrappers, please refer to the [cheatsheet](docs/cheatsheet.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
 
 
 ### Type-Safe Status Fields
 
-The OASGen Provider automatically generates a `status` subresource for the Resource CRD, providing visibility into the state of the external resource. 
+The OASGen Provider automatically generates a `status` subresource for the generated resource CRD, providing visibility into the state of the external resource. 
 The fields within the status are derived from two sources in your `RestDefinition`:
 
-- `identifiers`: Fields used to uniquely identify the resource.
-- `additionalStatusFields`: Any other fields you wish to expose in the status.
+- `identifiers`: Fields used to uniquely identify the resource with a `findby` action.
+- `additionalStatusFields`: Any other fields you wish to expose in the status. So also technical identifiers like `id`, `uuid`, etc. can be added here.
 
 To ensure type safety, the provider inspects the response schema of the `get` (or `findby` as a fallback) action in your OpenAPI specification. It uses the types defined in the OAS to generate the corresponding fields in the CRD's status schema.
 
 #### String Fallback Mechanism in Status Fields
 
-When the provider cannot find a specified `identifier` or `additionalStatusField` in the OpenAPI response schema, it employs a **string fallback** mechanism for that status fields:
-1.  The provider logs a warning indicating that the field was not found in the OAS response.
-2.  It generates the status field with `type: string` as a safe default.
+When the provider cannot find a specified `identifier` or `additionalStatusField` in the OAS response schema, it employs a **string fallback** mechanism for that status fields:
+1.  The OASGen Provider logs a warning indicating that the field was not found in the OAS response.
+2.  It generates thhat specific status field with `type: string` as a safe default.
 
 #### Kubernetes API Server Validation example
 
-If the response schema of an hypothetical `update` action returns as a response body a field with a type different than the one defined in the CRD, the Kubernetes API server will reject the update request:
+It must be noted that the Kubernetes API server performs strict validation of the resource status against the CRD schema.
+
+For example, if the response schema of an hypothetical `update` action returns as a response body a field with a type different than the one defined in the CRD, the Kubernetes API server will reject the update request:
 - The controller receives the response body from the external API. 
 - The controller sends the update request for the custom resource's status to the Kubernetes API server. 
 - The API server receives the request and validates it against the CRD's schema.
@@ -375,8 +370,6 @@ status:
     status: "False"
     type: Synced
 ```
-
-
 
 ## Examples and Troubleshooting
 
@@ -411,11 +404,13 @@ You can see a more practical guide on `oasgen-provider` usage at [this link](che
 
 ## Unsupported features
 
-- `nullable` is not supported by OASGen provider. `nullable` was removed in OAS 3.1 in favor of using `null` type in the array `type`. Instead, `null` type in the array `type` is supported by OASGen provider.
+Currently, the following OAS features are not supported by OASGen provider:
 
-- `anyOf` and `oneOf` are not supported by OASGen provider.
+- `nullable` is not supported. `nullable` was removed in OAS 3.1 in favor of using `null` type in the array `type`. Instead, `null` type in the array `type` is supported by OASGen provider.
+- `anyOf` and `oneOf` are not supported.
+- `format` is not supported.
 
-- `format` is not supported by OASGen provider.
+Note that this list may not be exhaustive and other features may also be unsupported. 
 
 ### OAS 3.0 vs OAS 3.1
 
