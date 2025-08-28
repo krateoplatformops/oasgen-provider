@@ -340,8 +340,7 @@ Some consistency requirements includes but may not be limited to:
 
 Any API behavior that does not match these requirements will require a web service wrapper to normalize / fix the API interface. 
 This is common with APIs that do not follow consistent naming conventions or have different response structures.
-To learn more about web service wrappers, please refer to the [cheatsheet](docs/cheatsheet.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
-
+To learn more about web service wrappers, please refer to the [usage guide](docs/USAGE_GUIDE.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
 
 ### Type-Safe Status Fields
 
@@ -392,7 +391,7 @@ status:
 
 ## Examples and Troubleshooting
 
-You can see a more practical guide on `oasgen-provider` usage at [this link](cheatsheet.md).
+A more practical usage guide with examples and troubleshooting tips can be found in the [Usage Guide](docs/USAGE_GUIDE.md).
 
 ## Environment Variables and Flags
 

@@ -1,4 +1,4 @@
-# Comprehensive Guide to Provider Generation with Krateo Operator Generator (KOG)
+# Krateo Operator Generator (KOG) Usage Guide
 
 ## Table of Contents
 
