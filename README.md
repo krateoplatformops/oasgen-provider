@@ -22,25 +22,103 @@ It enables seamless integration of API-defined resources into Kubernetes environ
 ## Glossary
 
 - **CRD (Custom Resource Definition):** A Kubernetes resource that defines custom objects and their schemas.
-- **RestDefinition:** A custom resource that defines how API resources are managed in Kubernetes based on OAS specifications.
-- **RDC (Rest Dynamic Controller):** A controller deployed by the provider to manage resources defined by a RestDefinition.
-- **OAS (OpenAPI Specification):** A standard, language-agnostic interface description for REST APIs.
-- **Plugin:** A wrapper service that maintains consistent API interfaces when needed. 
+- **RestDefinition:** A Custom Resource managed by oasgen-provider that defines how API resources are managed in Kubernetes based on OAS specifications.
+- **RDC (Rest Dynamic Controller):** A controller deployed by the oasgen-provider to manage Custom Resources defined by a RestDefinition.
+- **OAS (OpenAPI Specification):** A standard, language-agnostic interface description for REST APIs (https://www.openapis.org/).
+- **Plugin:** An **optional** wrapper web service to implement to maintain consistent API interfaces when needed. Can be also viewed as an **adapter pattern** / proxy service since it add a layer of indirection between the Rest Dynamic Controller and the external API.
 
 ## Architecture
 
-![Generator Architecture Image](_diagram/generator.png "Generator Architecture")
+In the following diagrams, we illustrate the architecture and workflow of the OASGen Provider in two scenarios: a standard scenario and a scenario that includes an optional Plugin (Wrapper Web Service).
 
+### Standard scenario
+```mermaid
+flowchart LR
+
+  subgraph Generator
+  provider[oasgen-provider]
+  restdefinition[[RestDefinition Manifest]]
+  crd[[CRD Manifest]]
+  end
+
+  subgraph Dynamic_Controller["Dynamic Controller"]
+  rdc[rest-dynamic-controller]
+  cr[[Custom resource Manifest]]
+  end
+
+  er[(External Resource)]
+
+  restdefinition -.->|Definition for| provider
+
+  provider -->|Generate| crd
+
+  provider -->|Deploy| rdc
+
+  cr -.->|Definition for| rdc
+
+  rdc -->|"Manage (Observe, Create, Update, Delete)"| er
+
+  cr -.->|Instance of| crd
+```
+
+<br/>
 The diagram illustrates how the OASGen Provider processes OpenAPI Specifications to generate CRDs and deploy the Rest Dynamic Controller (RDC). The RDC manages custom resources and interacts with external APIs, optionally through wrapper web services when needed.
+
+### Scenario with Plugin (Wrapper Web Service)
+
+```mermaid
+flowchart LR
+
+  subgraph Generator
+  provider[oasgen-provider]
+  restdefinition[[RestDefinition Manifest]]
+  crd[[CRD Manifest]]
+  end
+
+  subgraph Dynamic_Controller["Dynamic Controller"]
+  rdc[rest-dynamic-controller]
+  cr[[Custom resource Manifest]]
+  end
+
+  er[(External Resource)]
+
+  restdefinition -.->|Definition for| provider
+
+  provider -->|Generate| crd
+
+  provider -->|Deploy| rdc
+
+  cr -.->|Definition for| rdc
+
+  rdc --> |"Manage (Observe, Create, Update, Delete)"| ws[Plugin <br>Wrapper Web Service]
+
+  ws --> er
+
+  cr -.->|Instance of| crd
+```
+
+<br/>
+In this scenario, the Rest Dynamic Controller interacts with an optional Plugin (Wrapper Web Service) to handle API calls. This is useful when the external API does not conform to the expected interface or requires additional processing.
 
 ## Workflow
 
+### Standard scenario
+
 1. User applies a RestDefinition CR.
-2. Provider fetches the OAS specification.
-3. Provider generates CRD based on the OAS schema.
-4. Provider deploys the specific Rest Dynamic Controller.
-5. Controller manages custom resources according to API specifications.
-6. Resources are synchronized with external APIs.
+2. oasegn-provider fetches the OAS specification.
+3. oasegn-provider generates a CRD based on the OAS schema.
+4. oasegn-provider deploys the specific Rest Dynamic Controller.
+5. Rest Dynamic Controller manages custom resources according to API specifications.
+6. Resources states are synchronized with external APIs (observe, create, update, delete).
+
+### Scenario with Plugin (Wrapper Web Service)
+
+1. User applies a RestDefinition CR.
+2. oasegn-provider fetches the OAS specification.
+3. oasegn-provider generates a CRD based on the OAS schema.
+4. oasegn-provider deploys the specific Rest Dynamic Controller.
+5. Rest Dynamic Controller manages custom resources according to API specifications.
+6. Resources states are synchronized with external APIs (observe, create, update, delete) **through the Plugin (Wrapper Web Service) as an intermediary**.
 
 ## Requirements
 
@@ -58,23 +136,144 @@ The RestDefinition CRD specification can be found here: [RestDefinition CRD](crd
 
 1. Field names must be consistent across all actions (`create`, `update`, `findby`, `get`, `delete`)
 2. API responses must contain all fields defined in the CRD
-3. Path parameters and body fields should use consistent naming
+3. Path parameters and request / response body fields should use consistent naming (e.g., `userId` vs `user_id` is not consistent, also having `repositoryId` as path paramter and `id` in the response body is not consistent)
 
+### About Resource reconciliation and RestDefinition Actions
 
-### About RestDefinition Actions
-
-Krateo controllers support 4 verbs to provide resource reconciliation:
+Krateo controllers (among which `rest-dynamic-controller`) support 4 verbs to provide resource reconciliation:
 
 - **Observe**: This verb observes the resource state in the external system. It fetches the current state of the resource. If the resource does not exist or differs from the desired state, the controller will create or update it accordingly.
-  - `rest-dynamic-controller` supports searching for external resources using two actions (it is advised to specify both actions in the RestDefinition if possible, although it is not mandatory):
-  - **findby**: This action finds a resource by its identifiers. The endpoint used for this action must return a list of resources that match the identifiers. This is useful when you want to find a resource based on specific criteria, such as a unique identifier or a combination of fields.
-  - **get**: This action retrieves the current state of a resource. This typically fetches a single resource by its unique identifier.
 - **Create**: This verb creates a new resource in the external system.
+- **Update**: This verb updates an existing resource in the external system.
+- **Delete**: This verb deletes a resource from the external system.
+
+oasgen-provider supports 5 **actions**: `findby`, `get`, `create`, `update`, and `delete`.
+These actions are used by the Rest Dynamic Controller to actually implement the above verbs for the resource reconciliation process.
+
+```mermaid
+
+TODO
+```
+
+#### `findby` action
+
+The `findby` action finds a resource using its **identifiers**, which are defined as a list of fields in the RestDefinition manifest.
+The API endpoint used for this action must return a **list or collection of resources**, from which the `rest-dynamic-controller` will select the matching resource.
+
+##### Purpose of Identifiers
+
+Identifiers are fields that uniquely identify a resource within the external system.
+Unlike technical keys such as `id` or `uuid`, in the context of `findby`, these identifiers are human-friendly and typically **available before a resource is created**:
+- Examples: `name`, `email`, `title`
+- Characteristics: unique per resource, usually string-based, user-facing
+
+Note that it is the responsibility of the user to ensure that the identifiers defined in the RestDefinition manifest are indeed unique within the external system.
+For instance, if `name` is used as an identifier, the user must ensure that no two resources can have the same `name` in the external system in the context of the resource being managed. 
+
+As an example, in the context of a Email service, `email` is a good candidate for an identifier because it is unique per user. Even if the external system uses a unique technical identifier (like `id` or `uuid`) as the primary key for users, `email` can still be used as an identifier for the `findby` action because it is unique per user and available before the user is created.
+
+##### Why Use `findby`?
+
+The `findby` action is commonly used by the Observe verb during the first step of the reconciliation process.
+
+When a resource manifest is applied to the Kubernetes cluster for the first time, the `rest-dynamic-controller` must check whether the resource already exists in the external system. At this stage:
+
+- The resource’s external identifier (id, uuid, etc.) is **not yet available in the resource manifest**.
+- These identifiers are typically generated by the external system upon creation.
+
+Because of this, usually the `rest-dynamic-controller` cannot use the `get` action, which typically requires a unique technical identifier (id, uuid, etc.) to fetch a single resource.
+The HTTP GET endpoint for the `get` action would look like this:
+```sh
+GET /resources/{id}
+```
+Where `{id}` is a unique technical identifier that is not known before the resource is created but it is generated by the external system.
+In these cases, `rest-dynamic-controller` should rely on `findby` to search for the resource using the human-friendly identifiers that are available upfront.
+
+##### When the `findby` action is not needed
+
+The `findby` action is not needed when the external system uses a human-friendly unique identifier (like `name` or `email`) as the primary key for resources, and this identifier is available before the resource is created.
+Therefore, the HTTP GET endpoint would look like this:
+```sh
+GET /resources/{name}
+```
+In such cases, the `get` action can be used directly to fetch the resource from the external system even during the first ever reconciliation step.
+
+##### Why not only set `findby` and not `get`?
+
+In theory, `rest-dynamic-controller` could work with just the `findby` action and without the `get` action, however there is the major drawback that the `findby` action returns a **list or collection of resources**.
+This lists can be very large, and **fetching and processing them can be inefficient and slow**.
+For this reason, it is strongly recommended to always define both `findby` and `get` actions in the RestDefinition manifest, whenever possible and meaningful.
+
+#### Get
+
+This action retrieves the current state of a resource which typically means fetching a single resource by a unique identifier.
+Differently from `findby`, the API endpoint used for this action must return a **single resource**.
+
+As mentioned in the `findby` section, the nature of the identifiers vary depending on the external system.
+
+| Technical Identifier (typically `get`) | Human-friendly Identifier (typically `findby`) |
+|----------------------------|-------------------------------------|
+| id                         | name                                |
+| uuid                       | email                               |
+| resourceId                 | title                               |
+
+In the majority of cases, the `get` and the `findby` actions use different identifiers:
+- `findby` uses human-friendly identifiers that are typically available before the resource is created (e.g., `name`, `email`, `title`).
+- `get` uses unique technical identifiers that are typically generated by the external system upon resource creation (e.g., `id`, `uuid`, `resourceId`).
+
+Therefore the `get` action is typically used by the Observe verb during subsequent reconciliation loops (after the first one onward), after the resource has been created and the unique technical identifier (id, uuid, etc.) is known and stored in the resource status.
+
+##### When the `get` action is sufficient
+
+There are cases however where only the `get` action is sufficient for the Observe verb, for example when the external system uses a human-friendly unique identifier like `name` or `email` as the primary key for resources, and this identifier is available before the resource is created.
+Therefore, the HTTP GET endpoint would look like this:
+```sh
+GET /resources/{name}
+```
+In such cases, the `get` action can be used directly to fetch the resource from the external system even during the first ever reconciliation step.
+
+An example of this is the GitHub API, in the context of [repositories](https://github.com/krateoplatformops/github-provider-kog-chart/blob/main/chart/templates/rd-repo.yaml#L22-L24), the `name` is unique per user/organization and it is available before the repository is created, therefore the `get` action can be used directly to fetch a repository by its `name`. For example:
+```sh
+GET /repos/{owner}/{repo}
+```
+Where `{repo}` is the repository name, which is unique per user/organization and it is available before the repository is created (it is provided by the user when creating the repository).
+
+##### Typical complete workflow with both findby and get
+
+Assumptions:
+- The external system uses a unique technical identifier (id, uuid, etc.) as the primary key for resources.
+- The unique technical identifier (id, uuid, etc.) is generated by the external system upon resource creation.
+- The unique technical identifier (id, uuid, etc.) is therefore not known before the resource is created.
+- The RestDefinition manifest defines both `findby` and `get` actions.
+- The HTTP GET endpoint assigned to the `get` action looks like this:
+```sh
+GET /resources/{id}
+```
+Where `{id}` is a unique technical identifier that is not known before the resource is created but it is generated by the external system.
+- The HTTP GET endpoint assigned to the `findby` action looks like this:
+```sh
+GET /resources
+```
+
+Having defined the above assumptions, here is a typical complete workflow, assuming resource does not exist yet in the external system, would be:
+
+1. The user applies a resource manifest to the Kubernetes cluster.
+2. The `rest-dynamic-controller` uses the `findby` action to search for the resource using the human-friendly identifiers.
+3. If the resource is not found, the `rest-dynamic-controller` uses the `create` action to create the resource in the external system.
+4. The `status` of the resource is populated with the unique technical identifier (id, uuid, etc.) returned by the `create` action.
+5. In subsequent reconciliation loops, the `rest-dynamic-controller` uses the `get` action with the unique technical identifier to fetch the resource.
+
+
+
+
+
+#### `create`
+
   - `rest-dynamic-controller` supports resource creation using the `create` action. The endpoint used for this action must accept a request body containing the resource data in the format defined by the OAS schema. The request body should be strongly typed to match the OAS schema, ensuring data validation before being sent to the external system. The request body is used by `oasgen-provider` to generate the CRD.
   - this action could return a `202 Accepted` response, indicating that the resource creation is in progress. In this case, the `rest-dynamic-controller` will put the Custom Resource (CR) into a `Pending` state, and the controller will continue to monitor the resource until it is fully created (the `get` or `findby` does not return `404`). Once the resource is created, the controller will update the CR status to `Ready`.
-- **Update**: This verb updates an existing resource in the external system.
+
   - `rest-dynamic-controller` supports resource updates using the `update` action. The endpoint used for this action must use the same request body as the `create` action (it can have fewer fields, but not more, because the CRD is generated from the `create` request body).
-- **Delete**: This verb deletes a resource from the external system.
+
   - `rest-dynamic-controller` supports resource deletion using the `delete` action. This endpoint should delete the resource from the external system. This means that `rest-dynamic-controller` expects a subsequent call to the `findby` or `get` action will not return the deleted resource. The endpoint should not return an error if the resource does not exist, as it is expected that the resource has already been deleted.
   
 Any API behavior that does not match these requirements will require a web service wrapper to normalize the API interface. This is common with APIs that do not follow consistent naming conventions or have different response structures.
