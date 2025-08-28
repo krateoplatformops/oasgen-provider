@@ -31,7 +31,7 @@ The OAS should include the following information:
 
 - **Servers**: The `servers` field (at root level of the OAS) should define the base URL for the API endpoints you want to use. This is important for the provider to know where to send requests. Note that you can override the base URL in the OAS if you want to use a different URL for the API endpoints; refer [the a following section](#step-7-update-the-restdefinition-to-use-the-web-service) for more information.
 
-- **API endpoints (paths)**: It should contain the paths for the API endpoints you want to use, including the HTTP methods (GET, POST, PUT, DELETE) and any parameters required by the endpoints. Note that it is important to specify whether the parameters are required or optional, as this will affect the generated CRDs and controllers. To learn more about how these paths are used by `rest-dynamic-controller`, refer to the [RestDefinition section](../README.md#restdefinition) of the README. Note that any endpoint should have predictable behavior, which means that the API should be idempotent and if a POST, PUT, PATCH, or DELETE request is made to an endpoint, this should be reflected in the response of the GET request to the same endpoint. This is important for the provider to know how to handle the requests and responses correctly so that the `rest-dynamic-controller` can manage the resources properly.
+- **API endpoints (paths)**: It should contain the paths for the API endpoints you want to use, including the HTTP methods (GET, POST, PUT, DELETE) and any parameters required by the endpoints. Note that it is important to specify whether the parameters are required or optional, as this will affect the generated CRDs and controllers. To learn more about how these paths are used by `rest-dynamic-controller`, refer to the [RestDefinition section](../README.md#restdefinition) of the README. Note that any endpoint should have consistent behavior and whenever this is not the case, there may be the need to implmenent a plugin web server to normalize and fix the behavior of the API endpoints.
 
 - **Request and response schemas**: It should define the request and response schemas for each endpoint, including the data types and any validation rules.
 
@@ -40,7 +40,11 @@ The OAS should include the following information:
 Also note that any modification to the request or response schemas made by the API provider will require you to update the OAS accordingly, as the provider will generate the CRDs and controllers based on the OAS. Also consider removing the RestDefinition and recreating it with the updated OAS to ensure that the provider generates the correct CRDs and controllers (this is not necessary if you do not make changes to the request body or path parameters, as `oasgen-provider` won't need to update the generated CRD).
 
 ### Supported authentication methods
-- **Bearer Token**: Use `securitySchemes` in the OAS to define a bearer token scheme. This is common for APIs that require a token for authentication.
+
+Use `securitySchemes` in the OAS to define the authentication method used by the API. The following authentication methods are supported:
+
+- **Bearer Token**
+
 ```diff
 openapi: 3.0.3
 servers:
@@ -54,7 +58,8 @@ components:
 +     scheme: bearer
 ```
 
-- **Basic Authentication**: If the API uses basic authentication, you can define it in the OAS as follows:
+- **Basic Authentication**
+
 ```diff
 openapi: 3.0.3
 servers:
@@ -81,7 +86,7 @@ This guide provides a step-by-step approach to generating a provider for managin
    - Recommended for large APIs to reduce complexity
    - Create separate files for different resource types (e.g., `repositories.yaml`, `teamrepo.yaml`)
 
-3. **Add authentication** information if missing from original OAS: (notes that components is a "root" element in OAS 3+)
+3. **Add authentication** information if missing from original OAS (`components` is a "root" element in OAS 3.0+):
 ```diff
 openapi: 3.0.3
 servers:
@@ -102,14 +107,17 @@ components:
    kubectl create namespace gh-system
    ```
 
-2. Store your OAS as a ConfigMap: (In this example, we use a sample OAS for GitHub repositories stored in `samples/cheatsheet/assets/repo.yaml` of this repository)
+2. Store your OAS as a ConfigMap: 
+In this example, we use a sample OAS for GitHub repositories stored in `samples/cheatsheet/assets/repo.yaml` of this repository.
    ```bash
    kubectl create configmap repo --from-file=samples/cheatsheet/assets/repo.yaml -n gh-system
    ```
 
 ### Step 3: Create RestDefinition for GitHub Repositories
 
-In order to create a RestDefinition for GitHub repositories, you need to define the resource group, resource kind, and the verbs that the controller will support. The `oasPath` should point to the ConfigMap containing your OAS. You can learn more about the `RestDefinition` resource [here](README.md#restdefinition-specifications).
+In order to create a RestDefinition for GitHub repositories, you need to define the `resourceGroup`, `kind`, and the verbs that the controller will support. 
+The `oasPath` should point to the ConfigMap containing your OAS. 
+You can learn more about the `RestDefinition` resource [here](../README.md#restdefinition).
 
 ```bash
 cat <<EOF | kubectl apply -f -

@@ -175,7 +175,7 @@ These actions are used by the `rest-dynamic-controller` to actually implement th
 It must be noted that the **source of truth** is the resource applied to the Kubernetes cluster, and not the resource in the external system.
 Therefore, the `rest-dynamic-controller` will always try to make the external system match the desired state defined in the resource manifest applied to the Kubernetes cluster.
 
-The Kubernetes reconcilation loop can be summarized (at a high-level) with the following diagram with the actions used by the `rest-dynamic-controller`:
+The Kubernetes reconcilation loop can be summarized (at a high-level) with the following diagram with the actions defined by `oasgen-provider` and `rest-dynamic-controller`:
 ```mermaid
 graph LR
     subgraph K8s[Kubernetes Cluster]
@@ -239,6 +239,8 @@ In theory, `rest-dynamic-controller` could work with just the `findby` action an
 This lists can be very large, and **fetching and processing them can be inefficient and slow**.
 For this reason, it is strongly recommended to always define both `findby` and `get` actions in the RestDefinition manifest, whenever possible and meaningful.
 
+---
+
 #### `get` action
 
 The `get` action retrieves the current state of a resource which typically means fetching a single resource by a unique identifier.
@@ -297,6 +299,8 @@ Having defined the above assumptions, here is a typical complete workflow, assum
 4. The `status` of the resource is populated with the unique technical identifier (id, uuid, etc.) returned by the `create` action.
 5. In subsequent reconciliation loops, the `rest-dynamic-controller` uses the `get` action with the unique technical identifier to fetch the resource.
 
+---
+
 #### `create` action
 
 The `create` action creates a new resource in the external system.
@@ -312,6 +316,8 @@ Therefore the external system may respond with a `202 Accepted` response, indica
 In this case, the `rest-dynamic-controller` will put the Custom Resource (CR) into a `Pending` state with `Ready=False`, and the controller will continue to monitor the resource until it is fully created (the `get` or `findby` does not return `404`). 
 Once the resource is created, the controller will update the CR status to `Ready=True`.
 
+---
+
 #### `update` action
 
 The `update` action updates an existing resource in the external system.
@@ -319,6 +325,8 @@ The endpoint used for this action must use as request body a subset of the field
 
 The subset could be the entire resource schema, or just a few fields, depending on the API capabilities.
 It must be noted that it can have fewer fields, but not more, because the CRD is generated from the `create` action request body.
+
+---
 
 #### `delete` action
 
