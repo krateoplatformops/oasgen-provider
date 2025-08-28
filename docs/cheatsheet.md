@@ -30,11 +30,11 @@ In this case, you can create a web service that acts as a bridge between the Kra
 The OAS should include the following information:
 
 - **Servers**: The `servers` field (at root level of the OAS) should define the base URL for the API endpoints you want to use. This is important for the provider to know where to send requests. Note that you can override the base URL in the OAS if you want to use a different URL for the API endpoints; refer [the a following section](#step-7-update-the-restdefinition-to-use-the-web-service) for more information.
-<br/>
+<br>
 - **API endpoints (paths)**: It should contain the paths for the API endpoints you want to use, including the HTTP methods (GET, POST, PUT, DELETE) and any parameters required by the endpoints. Note that it is important to specify whether the parameters are required or optional, as this will affect the generated CRDs and controllers. To learn more about how these paths are used by `rest-dynamic-controller`, refer to the [RestDefinition section](README.md#restdefinition) of the README. Note that any endpoint should have predictable behavior, which means that the API should be idempotent and if a POST, PUT, PATCH, or DELETE request is made to an endpoint, this should be reflected in the response of the GET request to the same endpoint. This is important for the provider to know how to handle the requests and responses correctly so that the `rest-dynamic-controller` can manage the resources properly.
-<br/>
+<br>
 - **Request and response schemas**: It should define the request and response schemas for each endpoint, including the data types and any validation rules.
-<br/>
+<br>
 - **Authentication**: If the API requires authentication, you should define the security schemes in the `components` section of the OAS. This is important for the provider to know how to authenticate requests to the API. If the API uses OAuth2 or other authentication methods, you should define them in the OAS. You can see supported authentication methods [here](README.md#authentication).
 
 Also note that any modification to the request or response schemas made by the API provider will require you to update the OAS accordingly, as the provider will generate the CRDs and controllers based on the OAS. Also consider removing the RestDefinition and recreating it with the updated OAS to ensure that the provider generates the correct CRDs and controllers (this is not necessary if you do not make changes to the request body or path parameters, as `oasgen-provider` won't need to update the generated CRD).
