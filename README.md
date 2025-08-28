@@ -9,15 +9,36 @@ It enables seamless integration of API-defined resources into Kubernetes environ
 - [How to Install](#how-to-install)
 - [Glossary](#glossary)
 - [Architecture](#architecture)
+  - [Standard scenario](#standard-scenario)
+  - [Scenario with Plugin (Wrapper Web Service)](#scenario-with-plugin-wrapper-web-service)
 - [Workflow](#workflow)
+  - [Standard scenario](#standard-scenario-1)
+  - [Scenario with Plugin (Wrapper Web Service)](#scenario-with-plugin-wrapper-web-service-1)
 - [RestDefinition](#restdefinition)
   - [CRD Specification](#crd-specification)
-  - [API Endpoints Requirements](#api-endpoints-requirements)
-  - [About RestDefinition Actions](#about-restdefinition-actions)
-- [Examples and Troubleshooting](#examples-and-troubleshooting)
+  - [How to create a RestDefinition](#how-to-create-a-restdefinition)
+  - [About Resource reconciliation and RestDefinition Actions](#about-resource-reconciliation-and-restdefinition-actions)
+  - [Action `findby`](#action-findby)
+    - [Purpose of Identifiers](#purpose-of-identifiers)
+    - [Why Use `findby`?](#why-use-findby)
+    - [When the `findby` action is not needed](#when-the-findby-action-is-not-needed)
+    - [Why not only set `findby` and not `get`?](#why-not-only-set-findby-and-not-get)
+  - [Action `get`](#action-get)
+    - [When the `get` action is sufficient](#when-the-get-action-is-sufficient)
+    - [Typical complete workflow with both `findby` and `get`](#typical-complete-workflow-with-both-findby-and-get)
+  - [Action `create`](#action-create)
+  - [Action `update`](#action-update)
+  - [Action `delete`](#action-delete)
+  - [API Endpoints consistency requirements](#api-endpoints-consistency-requirements)
+  - [Type-Safe Status Fields](#type-safe-status-fields)
+    - [String Fallback Mechanism in Status Fields](#string-fallback-mechanism-in-status-fields)
+    - [Kubernetes API Server Validation example](#kubernetes-api-server-validation-example)
+- [Usage guide](#usage-guide)
 - [Environment Variables and Flags](#environment-variables-and-flags)
 - [Security Features](#security-features)
 - [Best Practices](#best-practices)
+- [Unsupported features](#unsupported-features)
+  - [OAS 3.0 vs OAS 3.1](#oas-30-vs-oas-31)
 
 ## Requirements
 
@@ -356,7 +377,7 @@ To ensure type safety, the provider inspects the response schema of the `get` (o
 
 When the provider cannot find a specified `identifier` or `additionalStatusField` in the OAS response schema, it employs a **string fallback** mechanism for that status fields:
 1.  The OASGen Provider logs a warning indicating that the field was not found in the OAS response.
-2.  It generates thhat specific status field with `type: string` as a safe default.
+2.  It generates that specific status field with `type: string` as a safe default.
 
 #### Kubernetes API Server Validation example
 
@@ -389,7 +410,7 @@ status:
     type: Synced
 ```
 
-## Examples and Troubleshooting
+## Usage guide
 
 A more practical usage guide with examples and troubleshooting tips can be found in the [Usage Guide](docs/USAGE_GUIDE.md).
 
