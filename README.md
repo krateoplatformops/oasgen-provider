@@ -175,7 +175,7 @@ These actions are used by the `rest-dynamic-controller` to actually implement th
 It must be noted that the **source of truth** is the resource applied to the Kubernetes cluster, and not the resource in the external system.
 Therefore, the `rest-dynamic-controller` will always try to make the external system match the desired state defined in the resource manifest applied to the Kubernetes cluster.
 
-The Kubernetes reconcilation loop can be summarized with the following diagram:
+The Kubernetes reconcilation loop can be summarized (at a high-level) with the following diagram with the actions used by the `rest-dynamic-controller`:
 ```mermaid
 graph LR
     subgraph K8s[Kubernetes Cluster]
@@ -408,7 +408,7 @@ You can see a more practical guide on `oasgen-provider` usage at [this link](che
 
 ## Security Features
 
-- Automatic generation of RBAC policies for custom resources
+- Automatic generation of Kubernetes RBAC policies for custom resources
 - Secure credential management through Kubernetes secrets
 - Field validation based on OAS schemas
 - Optional web service wrappers for additional security layers
@@ -425,7 +425,7 @@ You can see a more practical guide on `oasgen-provider` usage at [this link](che
 
 Currently, the following OAS features are not supported by OASGen provider:
 
-- `nullable` is not supported. `nullable` was removed in OAS 3.1 in favor of using `null` type in the array `type`. Instead, `null` type in the array `type` is supported by OASGen provider.
+- `nullable` is not supported. `nullable` was removed in OAS 3.1 in favor of using `null` type in the array `type`.
 - `anyOf` and `oneOf` are not supported.
 - `format` is not supported.
 
