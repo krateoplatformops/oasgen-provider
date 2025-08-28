@@ -165,12 +165,12 @@ Krateo controllers (among which `rest-dynamic-controller`) support 4 verbs to pr
 
 OASGen Provider defines and supports 5 **actions**: `findby`, `get`, `create`, `update`, and `delete`.
 These actions are used by the `rest-dynamic-controller` to actually implement the above verbs for the resource reconciliation process:
-| Verb    | Action(s) Used by `rest-dynamic-controller` | Description                                                                                     |
-|---------|------------------------------|-------------------------------------------------------------------------------------------------|
+| Verb    | Action(s) defined by `oasgen-provider` and `rest-dynamic-controller` | Description                                            |
+|---------|----------------------------------------------------------------------|--------------------------------------------------------|
 | Observe | `findby`, `get`              | Fetches the current state of the resource from the external system.                            |
-| Create  | `create`                     | Creates a new resource in the external system.                                                |
-| Update  | `update`                     | Updates an existing resource in the external system.                                          |
-| Delete  | `delete`                     | Deletes a resource from the external system.                                                  |
+| Create  | `create`                     | Creates a new resource in the external system.                                                 |
+| Update  | `update`                     | Updates an existing resource in the external system.                                           |
+| Delete  | `delete`                     | Deletes a resource from the external system.                                                   |
 
 It must be noted that the **source of truth** is the resource applied to the Kubernetes cluster, and not the resource in the external system.
 Therefore, the `rest-dynamic-controller` will always try to make the external system match the desired state defined in the resource manifest applied to the Kubernetes cluster.

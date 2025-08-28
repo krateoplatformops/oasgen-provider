@@ -35,7 +35,7 @@ The OAS should include the following information:
 
 - **Request and response schemas**: It should define the request and response schemas for each endpoint, including the data types and any validation rules.
 
-- **Authentication**: If the API requires authentication, you should define the security schemes in the `components` section of the OAS. This is important for the provider to know how to authenticate requests to the API. If the API uses OAuth2 or other authentication methods, you should define them in the OAS. You can see supported authentication methods [here](README.md#authentication).
+- **Authentication**: If the API requires authentication, you should define the security schemes in the `components` section of the OAS. This is important for the provider to know how to authenticate requests to the API. You can see supported authentication methods [here](README.md#authentication).
 
 Also note that any modification to the request or response schemas made by the API provider will require you to update the OAS accordingly, as the provider will generate the CRDs and controllers based on the OAS. Also consider removing the RestDefinition and recreating it with the updated OAS to ensure that the provider generates the correct CRDs and controllers (this is not necessary if you do not make changes to the request body or path parameters, as `oasgen-provider` won't need to update the generated CRD).
 
@@ -49,7 +49,7 @@ paths:
   ...
 components:
 + securitySchemes:
-+   oauth:
++   bearer:
 +     type: http
 +     scheme: bearer
 ```
