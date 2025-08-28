@@ -190,7 +190,7 @@ graph LR
   B -->|findby <br> get| A
 ```
 
-### `findby` action
+### Action `findby`
 
 The `findby` action finds a resource using its **identifiers**, which are defined as a list of fields in the RestDefinition manifest.
 The API endpoint used for this action must return a **list or collection of resources**, from which the `rest-dynamic-controller` will select the matching resource.
@@ -239,8 +239,7 @@ In theory, `rest-dynamic-controller` could work with just the `findby` action an
 This lists can be very large, and **fetching and processing them can be inefficient and slow**.
 For this reason, it is strongly recommended to always define both `findby` and `get` actions in the RestDefinition manifest, whenever possible and meaningful.
 
-
-### `get` action
+### Action `get`
 
 The `get` action retrieves the current state of a resource which typically means fetching a single resource by a unique identifier.
 Differently from `findby`, the API endpoint used for this action must return a **single resource**.
@@ -298,7 +297,7 @@ Having defined the above assumptions, here is a typical complete workflow, assum
 4. The `status` of the resource is populated with the unique technical identifier (id, uuid, etc.) returned by the `create` action.
 5. In subsequent reconciliation loops, the `rest-dynamic-controller` uses the `get` action with the unique technical identifier to fetch the resource.
 
-### `create` action
+### Action `create`
 
 The `create` action creates a new resource in the external system.
 The endpoint used for this action must accept a request body containing the resource data in the format defined by the OAS schema. 
@@ -313,7 +312,7 @@ Therefore the external system may respond with a `202 Accepted` response, indica
 In this case, the `rest-dynamic-controller` will put the Custom Resource (CR) into a `Pending` state with `Ready=False`, and the controller will continue to monitor the resource until it is fully created (the `get` or `findby` does not return `404`). 
 Once the resource is created, the controller will update the CR status to `Ready=True`.
 
-### `update` action
+### Action `update`
 
 The `update` action updates an existing resource in the external system.
 The endpoint used for this action must use as request body a subset of the fields defined in the OAS schema for the resource creation, containing only the fields that need to be updated.
@@ -321,7 +320,7 @@ The endpoint used for this action must use as request body a subset of the field
 The subset could be the entire resource schema, or just a few fields, depending on the API capabilities.
 It must be noted that it can have fewer fields, but not more, because the CRD is generated from the `create` action request body.
 
-### `delete` action
+### Action `delete`
 
 The `delete` action removes a resource from the external system.
 The endpoint used for this action must accept the unique identifier of the resource to be deleted, typically provided as a path parameter.
