@@ -98,9 +98,9 @@ paths:
   ...
 components:
 + securitySchemes:
-+   oauth:
++   bearer:
 +     type: http
-+   scheme: bearer
++     scheme: bearer
 ```
 
 ### Step 2: Prepare Kubernetes Environment
@@ -367,9 +367,9 @@ paths:
   ...
 components:
 + securitySchemes:
-+   oauth:
++   bearer:
 +     type: http
-+   scheme: bearer
++     scheme: bearer
 ```
 
 ### Step 2: Prepare Kubernetes Environment

@@ -86,7 +86,8 @@ This guide provides a step-by-step approach to generating a provider for managin
    - Recommended for large APIs to reduce complexity
    - Create separate files for different resource types (e.g., `repositories.yaml`, `teamrepo.yaml`)
 
-3. **Add authentication** information if missing from original OAS (`components` is a "root" element in OAS 3.0+):
+3. **Add authentication** information if missing from original OAS.
+In particular, the section `securitySchemes` should be added under `components` root element:
 ```diff
 openapi: 3.0.3
 servers:
@@ -95,22 +96,22 @@ paths:
   ...
 components:
 + securitySchemes:
-+   oauth:
++   bearer:
 +     type: http
-+   scheme: bearer
++     scheme: bearer
 ```
 
 ### Step 2: Prepare Kubernetes Environment
 
 1. Create a dedicated namespace:
-   ```bash
+   ```sh
    kubectl create namespace gh-system
    ```
 
 2. Store your OAS as a ConfigMap: 
-In this example, we use a sample OAS for GitHub repositories stored in `samples/cheatsheet/assets/repo.yaml` of this repository.
-   ```bash
-   kubectl create configmap repo --from-file=samples/cheatsheet/assets/repo.yaml -n gh-system
+In this example, we use a sample OAS for GitHub repositories stored in [`samples/usage_guide/assets/repo.yaml`](../samples/usage_guide/assets/repo.yaml) of this repository.
+   ```sh
+   kubectl create configmap repo --from-file=samples/usage_guide/assets/repo.yaml -n gh-system
    ```
 
 ### Step 3: Create RestDefinition for GitHub Repositories
@@ -128,12 +129,12 @@ metadata:
   namespace: gh-system
 spec:
   oasPath: configmap://gh-system/repo/repo.yaml
-  resourceGroup: github.kog.krateo.io
+  resourceGroup: github.ogen.krateo.io
   resource: 
     kind: Repo
-    identifiers:
-      - id 
+    additionalStatusFields:
       - name
+      - id
       - html_url
     verbsDescription:
     - action: create
@@ -165,36 +166,28 @@ Common error you might encounter:
 Cannot create external resource [...] error: "generating CRD: missing type in schema 'Title'"
 ```
 
-##### Solution 1: Simplify Complex Types (Recommended)
+##### Possible solution: Simplify Complex Types (Recommended)
 ```yaml
 title:
   type: string
   description: The title of the issue.
 ```
-**Note:** Requires API wrapper for type conversion if original API expects different types.
-
-##### Solution 2: Use AdditionalProperties (Flexible but Less Safe)
-```yaml
-title:
-  additionalProperties: true
-  type: object
-```
-**Note:** Bypasses validation but may cause runtime errors.
+**Note:** Requires a Plugin web service (API wrapper) for type conversion if original API expects different types.
 
 ### Step 4: Verification Steps
 
 1. Check CRD creation:
    ```bash
-   kubectl get crds | grep github.kog.krateo.io 
+   kubectl get crds | grep github.ogen.krateo.io
    ```
 
    You should see:
    ```text
-    bearerauths.github.kog.krateo.io           2025-06-13T08:28:06Z
-    repoes.github.kog.krateo.io                2025-06-13T08:28:06Z
+    repoconfigurations.github.ogen.krateo.io    2025-06-13T08:28:06Z
+    repoes.github.ogen.krateo.io                2025-06-13T08:28:06Z
    ```
 
-  If you see `bearerauths` and `repoes`, the CRDs have been created successfully. The second CRD represents the `repo` object. The first one is the `bearerauth` object, which is used to authenticate requests to the GitHub API.
+  If you see `repoconfigurations` and `repoes`, the CRDs have been created successfully. The second CRD represents the `repo` object. The first one is the `repoconfiguration` object, which is used to authenticate requests to the GitHub API.
 
 2. Verify controller pod:
    ```bash
@@ -228,7 +221,7 @@ kubectl create secret generic gh-token --from-literal=token=<token> -n gh-system
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.kog.krateo.io/v1alpha1
+apiVersion: github.ogen.krateo.io/v1alpha1
 kind: BearerAuth
 metadata:
   name: gh-bearer
@@ -245,7 +238,7 @@ Create a custom resource for the `Repo` object. This is used to create, update, 
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.kog.krateo.io/v1alpha1
+apiVersion: github.ogen.krateo.io/v1alpha1
 kind: Repo
 metadata:
   name: gh-repo-1
@@ -264,7 +257,7 @@ EOF
 You will expect that the controller creates a repository in your GitHub account with the name `krateo-test-repo` under the organization `krateoplatformops-test`. You can check the status of the repository by running:
 
 ```bash
-kubectl describe repo.github.kog.krateo.io/gh-repo-1 -n gh-system
+kubectl describe repo.github.ogen.krateo.io/gh-repo-1 -n gh-system
 ```
 
 You should see a successful creation event, which indicates that the repository was created successfully.
@@ -283,7 +276,7 @@ To update the repository, you can patch the `Repo` custom resource. For example,
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.kog.krateo.io/v1alpha1
+apiVersion: github.ogen.krateo.io/v1alpha1
 kind: Repo
 metadata:
   name: gh-repo-1
@@ -301,7 +294,7 @@ EOF
 This will trigger the controller to update the repository in GitHub with the new description.
 
 ```bash
-kubectl describe repo.github.kog.krateo.io/gh-repo-1 -n gh-system
+kubectl describe repo.github.ogen.krateo.io/gh-repo-1 -n gh-system
 ```{{exec}}
 
 You should see an event for the Repo resource indicating that the external resource was updated successfully:
@@ -317,7 +310,7 @@ Events:
 To delete the repository, you can delete the `Repo` custom resource:
 
 ```bash
-kubectl delete repo.github.kog.krateo.io gh-repo-1 -n gh-system
+kubectl delete repo.github.ogen.krateo.io gh-repo-1 -n gh-system
 ```
 
 This will trigger the controller to delete the corresponding repository in GitHub.
@@ -364,21 +357,21 @@ paths:
   ...
 components:
 + securitySchemes:
-+   oauth:
++   bearer:
 +     type: http
-+   scheme: bearer
++     scheme: bearer
 ```
 
 ### Step 2: Prepare Kubernetes Environment
 
 1. Create a dedicated namespace:
-   ```bash
+   ```sh
    kubectl create namespace gh-system
    ```
 
 2. Store your OAS as a ConfigMap (in this example, we use a sample OAS for GitHub teamrepos stored in assets of this repository):
-   ```bash
-   kubectl create configmap teamrepo --from-file=samples/cheatsheet/assets/teamrepo_no_ws.yaml -n gh-system
+   ```sh
+   kubectl create configmap teamrepo --from-file=samples/usage_guide/assets/teamrepo_no_ws.yaml -n gh-system
    ```
 
 ### Step 3: Create RestDefinition for GitHub TeamRepos
@@ -394,7 +387,7 @@ metadata:
   namespace: gh-system
 spec:
   oasPath: configmap://gh-system/teamrepo/teamrepo_no_ws.yaml
-  resourceGroup: github.kog.krateo.io
+  resourceGroup: github.ogen.krateo.io
   resource: 
     kind: TeamRepo
     identifiers:
@@ -430,18 +423,18 @@ kubectl wait restdefinition gh-teamrepo --for condition=Ready=True --namespace g
 
 1. **Check CRD creation:**
    ```bash
-   kubectl get crds | grep github.kog.krateo.io 
+   kubectl get crds | grep github.ogen.krateo.io 
    ```
 
    You should see:
    ```text
-   bearerauths.github.kog.krateo.io           2025-06-13T08:28:06Z
-   teamrepos.github.kog.krateo.io             2025-06-13T08:28:06Z
+   bearerauths.github.ogen.krateo.io           2025-06-13T08:28:06Z
+   teamrepos.github.ogen.krateo.io             2025-06-13T08:28:06Z
    ```
 
    If you see `bearerauths` and `teamrepos`, the CRDs are created successfully. The second CRD represents the `teamrepo` object, while the first one is the `bearerauth` object used to authenticate requests to the GitHub API.
 
-   **Note:** If you've previously created the `repo` RestDefinition, you'll also see the `repoes.github.kog.krateo.io` CRD. However, the `bearerauths.github.kog.krateo.io` CRD is shared between RestDefinitions because they use the same group and authentication scheme.
+   **Note:** If you've previously created the `repo` RestDefinition, you'll also see the `repoes.github.ogen.krateo.io` CRD. However, the `bearerauths.github.ogen.krateo.io` CRD is shared between RestDefinitions because they use the same group and authentication scheme.
 
 2. **Verify controller deployment:**
    ```bash
@@ -475,7 +468,7 @@ kubectl create secret generic gh-token --from-literal=token=<your-token> -n gh-s
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.kog.krateo.io/v1alpha1
+apiVersion: github.ogen.krateo.io/v1alpha1
 kind: BearerAuth
 metadata:
   name: gh-bearer
@@ -492,7 +485,7 @@ Create a custom resource for the `teamrepo` object. This is used to create, upda
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.kog.krateo.io/v1alpha1
+apiVersion: github.ogen.krateo.io/v1alpha1
 kind: TeamRepo
 metadata:
   name: test-teamrepo
@@ -511,7 +504,7 @@ EOF
 The controller should add the GitHub team "prova" to the repository "test-teamrepo" in the organization "krateoplatformops-test" with "admin" permission. Check the teamrepo creation status by running:
 
 ```bash
-kubectl describe teamrepo.github.kog.krateo.io/test-teamrepo -n gh-system
+kubectl describe teamrepo.github.ogen.krateo.io/test-teamrepo -n gh-system
 ```
 
 You should see the teamrepo creation status and any errors that occurred during the process.
@@ -624,7 +617,7 @@ metadata:
   namespace: gh-system
 spec:
   oasPath: configmap://gh-system/teamrepo-ws/teamrepo_ws.yaml
-  resourceGroup: github.kog.krateo.io
+  resourceGroup: github.ogen.krateo.io
   resource: 
     kind: TeamRepo
     additionalStatusFields:
@@ -653,7 +646,7 @@ We expect the controller to update the RestDefinition and start using the web se
 At this point, the `rest-dynamic-controller` should be able to handle the `get` operation for teamrepos using the web service. You can check the status of the TeamRepo resource by running:
 
 ```bash
-kubectl describe teamrepo.github.kog.krateo.io/test-teamrepo -n gh-system
+kubectl describe teamrepo.github.ogen.krateo.io/test-teamrepo -n gh-system
 ```
 
 You should see that the message field is now empty, which means the RestDefinition is ready and correctly observed by the controller. (Notes that you should wait for the reconciliation loop to run, which may take a few minutes.)
@@ -664,7 +657,7 @@ To check if the remote resource changes along with the custom resource, you can 
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: github.kog.krateo.io/v1alpha1
+apiVersion: github.ogen.krateo.io/v1alpha1
 kind: TeamRepo
 metadata:
   name: test-teamrepo
@@ -683,7 +676,7 @@ EOF
 After a few seconds, you should see that the teamrepo's permission is updated in GitHub. Check the teamrepo status by running:
 
 ```bash
-kubectl describe teamrepo.github.kog.krateo.io/test-teamrepo -n gh-system
+kubectl describe teamrepo.github.ogen.krateo.io/test-teamrepo -n gh-system
 ```
 
 You should see that the permission is updated to `pull`, the status is set to `Ready`: `True`, and events indicate that the external resource was updated successfully:
@@ -700,7 +693,7 @@ Events:
 To delete the teamrepo, you can delete the `TeamRepo` custom resource:
 
 ```bash
-kubectl delete teamrepo.github.kog.krateo.io test-teamrepo -n gh-system
+kubectl delete teamrepo.github.ogen.krateo.io test-teamrepo -n gh-system
 ```
 
 This will trigger the controller to delete the corresponding teamrepo in GitHub.

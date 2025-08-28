@@ -19,20 +19,13 @@ It enables seamless integration of API-defined resources into Kubernetes environ
   - [How to create a RestDefinition](#how-to-create-a-restdefinition)
   - [About Resource reconciliation and RestDefinition Actions](#about-resource-reconciliation-and-restdefinition-actions)
   - [Action `findby`](#action-findby)
-    - [Purpose of Identifiers](#purpose-of-identifiers)
-    - [Why Use `findby`?](#why-use-findby)
-    - [When the `findby` action is not needed](#when-the-findby-action-is-not-needed)
-    - [Why not only set `findby` and not `get`?](#why-not-only-set-findby-and-not-get)
   - [Action `get`](#action-get)
-    - [When the `get` action is sufficient](#when-the-get-action-is-sufficient)
-    - [Typical complete workflow with both `findby` and `get`](#typical-complete-workflow-with-both-findby-and-get)
   - [Action `create`](#action-create)
   - [Action `update`](#action-update)
   - [Action `delete`](#action-delete)
   - [API Endpoints consistency requirements](#api-endpoints-consistency-requirements)
   - [Type-Safe Status Fields](#type-safe-status-fields)
-    - [String Fallback Mechanism in Status Fields](#string-fallback-mechanism-in-status-fields)
-    - [Kubernetes API Server Validation example](#kubernetes-api-server-validation-example)
+- [Configuration resources](#configuration-resources)
 - [Usage guide](#usage-guide)
 - [Environment Variables and Flags](#environment-variables-and-flags)
 - [Security Features](#security-features)
@@ -409,6 +402,8 @@ status:
     status: "False"
     type: Synced
 ```
+
+## Configuration resources
 
 ## Usage guide
 
