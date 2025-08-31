@@ -405,6 +405,78 @@ status:
 
 ## Configuration resources
 
+OASGen provider generates a **configuration resource** for each RestDefinition created.
+This configuration resource is used to store **configuration and authentication details** needed to connect to the external API.
+
+For example, if a RestDefinition is created to manage a GitHub Repo resource, the generated resources will be:
+| Kind | ApiVersion |
+|------|------------|
+| Repo | github.ogen.krateo.io/v1alpha1 |
+| RepoConfiguration | github.ogen.krateo.io/v1alpha1 |
+
+By default, the generated configuration resource will include at least the authentication details needed to connect to the external API.
+
+For instance, in the case of GitHub, the configuration resource of the Repo resource can be configured as follows:
+```yaml
+apiVersion: github.ogen.krateo.io/v1alpha1
+kind: RepoConfiguration
+metadata:
+  name: my-repo-config
+  namespace: default
+spec:
+  authentication:
+    bearer:
+      # Reference to a secret containing the bearer token
+      tokenRef:
+        name: gh-token        # Name of the secret
+        namespace: default    # Namespace where the secret exists
+        key: token            # Key within the secret that contains the token
+```
+
+A more complex example of configuration is the Azure DevOps Pipeline resource, which contains configuration fields along with authentication details:
+```yaml
+apiVersion: azuredevops.ogen.krateo.io/v1alpha1
+kind: PipelineConfiguration
+metadata:
+  name: my-pipeline-config
+  namespace: default
+spec:
+  authentication:
+    basic:
+      usernameRef:
+        name: azuredevops-secret
+        namespace: default
+        key: token
+      passwordRef:
+        name: azuredevops-secret
+        namespace: default
+        key: token
+  configuration:
+    query:
+      create:
+        api-version: "7.2-preview.1"
+      delete:
+        api-version: "7.2-preview.1"
+      findby:
+        api-version: "7.2-preview.1"
+      get:
+        api-version: "7.2-preview.1"
+      update:
+        api-version: "7.2-preview.1"
+```
+
+The RestDefinition manifest must list which configuration fields are needed for the resource to work properly.
+The field `spec.resource.configurationFields` in the RestDefinition manifest is used to define the configuration fields that will be included in the generated configuration resource.
+An example of this field in a RestDefinition manifest is as follows:
+```yaml
+    configurationFields:
+    - fromOpenAPI:
+        name: api-version
+        in: query
+      fromRestDefinition:
+        actions: ["*"] # star means all actions set in the verbsDescription above
+```
+
 ## Usage guide
 
 A more practical usage guide with examples and troubleshooting tips can be found in the [Usage Guide](docs/USAGE_GUIDE.md).
