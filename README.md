@@ -255,7 +255,7 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 
 | Field (YAML path) | Type | Required | Immutable | Description | Constraints / Notes |
 | ----------------- | ---- | -------- | --------- | ----------- | ------------------- |
-| `oasPath` | string | ✔︎ | ✖︎ | Path to the OpenAPI specification. | **Pattern:**<br>`^(configmap://([a-z0-9-]+)/([a-z0-9-]+)/([a-zA-Z0-9.-_]+)|https?://\S+)$` |
+| `oasPath` | string | ✔︎ | ✖︎ | Path to the OpenAPI specification. | |
 | `resourceGroup` | string | ✔︎ | ✔︎ | API group of the generated resource(s). | Changing is rejected by validation. |
 | `resource` | object | ✔︎ | ✖︎ | Container for resource mapping and options. |  |
 | `resource.kind` | string | ✔︎ | ✔︎ | Name (Kind) of the resource to manage (generated CRD Kind). | Changing is rejected by validation. |
