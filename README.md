@@ -166,7 +166,129 @@ The RestDefinition CRD specification can be found here: [RestDefinition CRD](crd
 
 ### How to create a RestDefinition
 
-TODO
+This section shows how to author and apply a `RestDefinition` and provides a field-by-field reference extracted from the related CRD schema.
+
+#### Before you begin
+
+- Have an OpenAPI 3.0/3.1 spec reachable either via:
+  - `configmap://<namespace>/<name>/<key>`
+  - `http(s)://<url>`
+
+  The `spec.oasPath` field must match one of these forms (see the regex below). Be aware you can change `oasPath` over time **but avoid changing the request body of the `create` action** or its parameters when you do so. Otherwise, you may need to delete/recreate the RestDefinition.
+
+#### Minimal example
+
+```yaml
+apiVersion: ogen.krateo.io/v1alpha1
+kind: RestDefinition
+metadata:
+  name: my-resource
+  namespace: default
+spec:
+  # 1) Where the OAS file is
+  oasPath: https://example.com/openapi.yaml
+
+  # 2) Group for generated resources (immutable)
+  resourceGroup: example.ogen.krateo.io
+
+  # 3) What to manage and how
+  resource:
+    kind: Widget # immutable
+
+    # optional, used by the findby action to locate a resource
+    identifiers:
+      - name
+
+    # optional, adds more fields to status (e.g., technical IDs usually used in get action)
+    additionalStatusFields:
+      - id
+      - revision
+
+    # optional, declare configuration params to expose in the generated *Configuration CRD
+    configurationFields:
+      - fromOpenAPI:
+          name: api-version
+          in: query
+        fromRestDefinition:
+          actions: ["*"] # apply to all actions
+      - fromOpenAPI:
+          name: timeout
+          in: header
+        fromRestDefinition:
+          actions: 
+          - create
+          - update
+
+    # REQUIRED: map CRUD/find operations to HTTP endpoints
+    verbsDescription:
+      - action: findby
+        method: GET
+        path: /widgets
+      - action: get
+        method: GET
+        path: /widgets/{id}
+      - action: create
+        method: POST
+        path: /widgets
+      - action: update
+        method: PATCH
+        path: /widgets/{id}
+      - action: delete
+        method: DELETE
+        path: /widgets/{id}
+```
+
+Apply and verify:
+```sh
+kubectl apply -f sample-restdefinition.yaml
+kubectl get restdefinitions
+```
+
+The CRD exposes columns like `READY`, `AGE`, `API VERSION`, `KIND`, and `OAS PATH` to quickly inspect state.
+
+#### Field reference
+
+All paths are relative to `spec.*` unless stated otherwise. The “Immutable” column reflects Kubernetes validation rules; immutable fields require deleting/recreating the RestDefinition CR if you need to change them. 
+The content of this table is derived from the CRD’s OpenAPI schema.
+
+| Field (YAML path) | Type | Required | Immutable | Description | Constraints / Notes |
+| ----------------- | ---- | -------- | --------- | ----------- | ------------------- |
+| `oasPath` | string | ✔︎ | ✖︎ | Path to the OpenAPI specification. Intended to be updatable as the spec evolves; **do not change the `create` request body shape** when updating. | **Pattern:**<br>`^(configmap://([a-z0-9-]+)/([a-z0-9-]+)/([a-zA-Z0-9.-_]+)|https?://\S+)$` |
+| `resourceGroup` | string | ✔︎ | ✔︎ | API group of the generated resource(s). | Changing is rejected by validation. |
+| `resource` | object | ✔︎ | ✖︎ | Container for resource mapping and options. |  |
+| `resource.kind` | string | ✔︎ | ✔︎ | Name (Kind) of the resource to manage (generated CRD Kind). | Changing is rejected by validation. |
+| `resource.verbsDescription[]` | array<object> | ✔︎ | ✖︎ | List of CRUD/find mappings that the controller will execute. Each item is a single action mapping. | Must include at least the actions you plan to use in reconciliation. |
+| `resource.verbsDescription[].action` | string (enum) | ✔︎ | — | Action name. | One of: `create`, `update`, `get`, `delete`, `findby`. |
+| `resource.verbsDescription[].method` | string (enum) | ✔︎ | — | HTTP method to call. | One of: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`. |
+| `resource.verbsDescription[].path` | string | ✔︎ | — | HTTP path for the endpoint; must exist in the referenced OAS. | Should exactly match the OAS path you mapped. |
+| `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and surfaced in status. | Immutable once generated. |
+| `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid`, `revision`). | Immutable once generated. |
+| `resource.configurationFields[]` | array<object> | ✖︎ | ✔︎ | Declares config/auth/query/header params to surface in the generated `*Configuration` CRD. | Immutable once generated. |
+| `resource.configurationFields[].fromOpenAPI.in` | string | ✔︎ | — | Location of the parameter in the OAS. | Typically `query`, `header`, `path`, etc. |
+| `resource.configurationFields[].fromOpenAPI.name` | string | ✔︎ | — | Parameter name as defined in the OAS. | Must match the OAS exactly. |
+| `resource.configurationFields[].fromRestDefinition.actions[]` | array<string> | ✔︎ | — | Which actions the parameter applies to. | `["*"]` applies to all defined actions; at least 1 item is required. |
+
+**Required top-level fields:** `spec.oasPath`, `spec.resourceGroup`, and `spec.resource`. 
+**Within** `spec.resource`, `kind` and `verbsDescription` are mandatory.
+**Validation & mutability highlights**
+
+- `resourceGroup`, `resource.kind`, `resource.identifiers`, `resource.additionalStatusFields`, and `resource.configurationFields` are **immutable** (Kubernetes validation enforces `self == oldSelf`). Plan carefully before applying.
+- `verbsDescription[].action`/`method` are **enum**-restricted; `path` must point to an endpoint present in your OAS.
+- `oasPath` accepts either `configmap://...` or `http(s)://...` and can be updated over time; keep the `create` request body and parameters stable to avoid CRD/schema drift. Otherwise, you may need to delete/recreate the RestDefinition.
+
+#### Tips and best practices for RestDefinition authoring
+
+- Start with both `findby` and `get` actions where applicable: `findby` to locate a resource using human-friendly identifiers, `get` for subsequent, efficient lookups using technical IDs. (See the dedicated action sections below in this README.) 
+- Keep `identifiers` small, unique, and human-friendly (e.g., name, email), and place technical IDs (e.g., id, uuid) under `additionalStatusFields`.
+- Use `configurationFields` to expose cookies, headers, query and path parameters (e.g., api-version) across specific actions with a specific array or all actions with ["*"].
+
+#### Regex and enums (for reference)
+
+- `resource.oasPath` regex: `^(configmap:\/\/([a-z0-9-]+)\/([a-z0-9-]+)\/([a-zA-Z0-9.-_]+)|https?:\/\/\S+)$`
+
+- Allowed `verbsDescription[].action` values: `create`, `update`, `get`, `delete`, `findby`
+
+- Allowed HTTP `verbsDescription[].method` values: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`
 
 ### About Resource reconciliation and RestDefinition Actions
 
