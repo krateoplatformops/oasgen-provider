@@ -307,7 +307,7 @@ This will trigger the controller to update the repository in GitHub with the new
 
 ```bash
 kubectl describe repo.github.ogen.krateo.io/gh-repo-1 -n gh-system
-```{{exec}}
+```
 
 You should see an event for the Repo resource indicating that the external resource was updated successfully:
 
