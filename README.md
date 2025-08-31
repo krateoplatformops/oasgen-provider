@@ -262,7 +262,7 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 | `resource.verbsDescription[].action` | string (enum) | ✔︎ | — | Action name. | One of: `create`, `update`, `get`, `delete`, `findby`. |
 | `resource.verbsDescription[].method` | string (enum) | ✔︎ | — | HTTP method to call. | One of: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`. |
 | `resource.verbsDescription[].path` | string | ✔︎ | — | HTTP path for the endpoint; must exist in the referenced OAS. | Should exactly match the OAS path you mapped. |
-| `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and are written in status. | Immutable once generated. It is important to choose identifiers that are unique per resource. |
+| `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and are written in status. | Immutable once generated. It is important to choose identifiers that are unique per resource. If `findby` is not present use just `additionalStatusFields` and not `identifiers`. |
 | `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid`, `revision`). Usually some of these are used in the `get` action. | Immutable once generated. |
 | `resource.configurationFields[]` | array<object> | ✖︎ | ✔︎ | Declares configuration parameters in the generated `*Configuration` CRD. | Immutable once generated. Authentication is always included if needed. |
 | `resource.configurationFields[].fromOpenAPI.in` | string | ✔︎ | — | Location of the parameter in the OAS. | Could be `query`, `path`, `header`, `cookie` etc. |
@@ -614,7 +614,7 @@ An example of this field in a RestDefinition manifest is as follows:
 
 ## Usage guide
 
-A more practical usage guide with examples and troubleshooting tips can be found in the [Usage Guide](docs/USAGE_GUIDE.md).
+A more practical, step-by-step, usage guide with examples and troubleshooting tips can be found in the [Usage Guide](docs/USAGE_GUIDE.md).
 
 ## Environment Variables and Flags
 
