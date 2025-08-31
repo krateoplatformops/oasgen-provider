@@ -25,6 +25,7 @@ It enables seamless integration of API-defined resources into Kubernetes environ
   - [Action `delete`](#action-delete)
   - [API Endpoints consistency requirements](#api-endpoints-consistency-requirements)
   - [Type-Safe Status Fields](#type-safe-status-fields)
+- [Authentication](#authentication)
 - [Configuration resources](#configuration-resources)
 - [Usage guide](#usage-guide)
 - [Environment Variables and Flags](#environment-variables-and-flags)
