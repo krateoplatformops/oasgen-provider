@@ -199,7 +199,7 @@ spec:
     identifiers:
       - name
 
-    # optional, adds more fields to status (e.g., technical IDs usually used in get action)
+    # optional, adds more fields to status (e.g., technical IDs usually used in get action, and others fields you want to see in status that are returned in the response body of the API)
     additionalStatusFields:
       - id
       - revision
@@ -523,6 +523,18 @@ status:
     status: "False"
     type: Synced
 ```
+
+## Authentication
+
+The OASGen Provider currently supports 2 authentication mechanisms to connect to external APIs:
+1. **Bearer Token**: This method uses a bearer token for authentication.
+2. **Basic Authentication**: This method uses basic authentication with a username and password.
+
+The authentication method must be defined in the OpenAPI Specification (OAS) document using the `securitySchemes` component as better explained in the [Usage Guide](docs/USAGE_GUIDE.md#supported-authentication-methods).
+
+The authentication details are stored in the generated configuration resource, which is used by the `rest-dynamic-controller` to connect to the external API.
+The authentication details are referenced in the configuration resource using Kubernetes secrets.
+The section [Configuration resources](#configuration-resources) below provides more details and examples.
 
 ## Configuration resources
 
