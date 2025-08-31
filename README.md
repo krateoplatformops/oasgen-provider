@@ -158,7 +158,7 @@ In this secondo scenario, very similar to the first one, the Rest Dynamic Contro
 
 ## RestDefinition
 
-The `RestDefinition` is the core Custom Resource Definition (CRD) used by the OASGen Provider to define how API resources are managed in Kubernetes based on OpenAPI Specifications (OAS) 3.0/3.1 documents.
+The `RestDefinition` is the core Custom Resource Definition (CRD) used by the OASGen Provider to define how external API resources are managed in Kubernetes based on OpenAPI Specifications (OAS) 3.0/3.1 documents.
 
 ### CRD Specification
 
@@ -168,13 +168,13 @@ The RestDefinition CRD specification can be found here: [RestDefinition CRD](crd
 
 This section shows how to author and apply a `RestDefinition` and provides a field-by-field reference extracted from the related CRD schema.
 
-#### Before you begin
+#### Prerequisites
 
 - Have an OpenAPI 3.0/3.1 spec reachable either via:
   - `configmap://<namespace>/<name>/<key>`
   - `http(s)://<url>`
 
-  The `spec.oasPath` field must match one of these forms (see the regex below). Be aware you can change `oasPath` over time **but avoid changing the request body of the `create` action** or its parameters when you do so. Otherwise, you may need to delete/recreate the RestDefinition.
+  The `spec.oasPath` field must match one of these forms (see the regex below). Be aware you can change `oasPath` over time **but avoid changing the request body of the `create` action** or its parameters when you do so. Otherwise, you most likely need to delete/recreate the RestDefinition in order to avoid CRD/schema drift.
 
 #### Minimal example
 
@@ -188,14 +188,14 @@ spec:
   # 1) Where the OAS file is
   oasPath: https://example.com/openapi.yaml
 
-  # 2) Group for generated resources (immutable)
+  # 2) Group for generated resources
   resourceGroup: example.ogen.krateo.io
 
   # 3) What to manage and how
   resource:
-    kind: Widget # immutable
+    kind: Widget
 
-    # optional, used by the findby action to locate a resource
+    # optional, used by the findby action to locate a resource. Important: choose identifiers that are unique per resource.
     identifiers:
       - name
 
@@ -203,8 +203,9 @@ spec:
     additionalStatusFields:
       - id
       - revision
+      - createdAt
 
-    # optional, declare configuration params to expose in the generated *Configuration CRD
+    # optional, declare configuration params to expose in the generated *Configuration CRD (Authentication is always included if needed)
     configurationFields:
       - fromOpenAPI:
           name: api-version
@@ -253,7 +254,7 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 
 | Field (YAML path) | Type | Required | Immutable | Description | Constraints / Notes |
 | ----------------- | ---- | -------- | --------- | ----------- | ------------------- |
-| `oasPath` | string | ✔︎ | ✖︎ | Path to the OpenAPI specification. Intended to be updatable as the spec evolves; **do not change the `create` request body shape** when updating. | **Pattern:**<br>`^(configmap://([a-z0-9-]+)/([a-z0-9-]+)/([a-zA-Z0-9.-_]+)|https?://\S+)$` |
+| `oasPath` | string | ✔︎ | ✖︎ | Path to the OpenAPI specification. | **Pattern:**<br>`^(configmap://([a-z0-9-]+)/([a-z0-9-]+)/([a-zA-Z0-9.-_]+)|https?://\S+)$` |
 | `resourceGroup` | string | ✔︎ | ✔︎ | API group of the generated resource(s). | Changing is rejected by validation. |
 | `resource` | object | ✔︎ | ✖︎ | Container for resource mapping and options. |  |
 | `resource.kind` | string | ✔︎ | ✔︎ | Name (Kind) of the resource to manage (generated CRD Kind). | Changing is rejected by validation. |
@@ -261,10 +262,10 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 | `resource.verbsDescription[].action` | string (enum) | ✔︎ | — | Action name. | One of: `create`, `update`, `get`, `delete`, `findby`. |
 | `resource.verbsDescription[].method` | string (enum) | ✔︎ | — | HTTP method to call. | One of: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`. |
 | `resource.verbsDescription[].path` | string | ✔︎ | — | HTTP path for the endpoint; must exist in the referenced OAS. | Should exactly match the OAS path you mapped. |
-| `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and surfaced in status. | Immutable once generated. |
-| `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid`, `revision`). | Immutable once generated. |
-| `resource.configurationFields[]` | array<object> | ✖︎ | ✔︎ | Declares config/auth/query/header params to surface in the generated `*Configuration` CRD. | Immutable once generated. |
-| `resource.configurationFields[].fromOpenAPI.in` | string | ✔︎ | — | Location of the parameter in the OAS. | Typically `query`, `header`, `path`, etc. |
+| `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and are written in status. | Immutable once generated. It is important to choose identifiers that are unique per resource. |
+| `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid`, `revision`). Usually some of these are used in the `get` action. | Immutable once generated. |
+| `resource.configurationFields[]` | array<object> | ✖︎ | ✔︎ | Declares configuration parameters in the generated `*Configuration` CRD. | Immutable once generated. Authentication is always included if needed. |
+| `resource.configurationFields[].fromOpenAPI.in` | string | ✔︎ | — | Location of the parameter in the OAS. | Could be `query`, `path`, `header`, `cookie` etc. |
 | `resource.configurationFields[].fromOpenAPI.name` | string | ✔︎ | — | Parameter name as defined in the OAS. | Must match the OAS exactly. |
 | `resource.configurationFields[].fromRestDefinition.actions[]` | array<string> | ✔︎ | — | Which actions the parameter applies to. | `["*"]` applies to all defined actions; at least 1 item is required. |
 
@@ -278,16 +279,14 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 
 #### Tips and best practices for RestDefinition authoring
 
-- Start with both `findby` and `get` actions where applicable: `findby` to locate a resource using human-friendly identifiers, `get` for subsequent, efficient lookups using technical IDs. (See the dedicated action sections below in this README.) 
-- Keep `identifiers` small, unique, and human-friendly (e.g., name, email), and place technical IDs (e.g., id, uuid) under `additionalStatusFields`.
-- Use `configurationFields` to expose cookies, headers, query and path parameters (e.g., api-version) across specific actions with a specific array or all actions with ["*"].
+- Start with both `findby` and `get` actions where applicable: `findby` to locate a resource using human-friendly identifiers, `get` for subsequent, efficient lookups using technical IDs. (See the dedicated action sections below: [action `findby`](#action-findby) and [action `get`](#action-get).)
+- Keep `identifiers` small, unique, and human-friendly (e.g., name, email), and place technical IDs (e.g., id, uuid) under `additionalStatusFields`. It is important to choose identifiers that are unique per resource.
+- Use `configurationFields` to expose cookies, headers, query and path parameters (e.g., `api-version`) across specific actions with a specific array or all actions with ["*"].
 
 #### Regex and enums (for reference)
 
 - `resource.oasPath` regex: `^(configmap:\/\/([a-z0-9-]+)\/([a-z0-9-]+)\/([a-zA-Z0-9.-_]+)|https?:\/\/\S+)$`
-
 - Allowed `verbsDescription[].action` values: `create`, `update`, `get`, `delete`, `findby`
-
 - Allowed HTTP `verbsDescription[].method` values: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`
 
 ### About Resource reconciliation and RestDefinition Actions
@@ -624,11 +623,11 @@ A more practical usage guide with examples and troubleshooting tips can be found
 
 ## Best Practices
 
-1. Always use OAS 3.0+ specifications
-2. Maintain consistent field naming across API endpoints
-3. Use web service wrappers when API interfaces are inconsistent
-4. Regularly update OAS documents to match API changes
-5. Monitor controller logs with `krateo.io/connector-verbose: "true"`
+1. Always use only OAS 3.0+ specifications as lower versions are not supported.
+2. Maintain consistent field naming across API endpoints.
+3. Use web service wrappers when API interfaces are inconsistent.
+4. Regularly update OAS documents to match API changes.
+5. Monitor controller logs with `krateo.io/connector-verbose: "true"`.
 
 ## Unsupported features
 
