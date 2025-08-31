@@ -530,6 +530,8 @@ The OASGen Provider currently supports 2 authentication mechanisms to connect to
 1. **Bearer Token**: This method uses a bearer token for authentication.
 2. **Basic Authentication**: This method uses basic authentication with a username and password.
 
+This means that the external API must support one of these authentication methods to be compatible with the OASGen Provider.
+
 The authentication method must be defined in the OpenAPI Specification (OAS) document using the `securitySchemes` component as better explained in the [Usage Guide](docs/USAGE_GUIDE.md#supported-authentication-methods).
 
 The authentication details are stored in the generated configuration resource, which is used by the `rest-dynamic-controller` to connect to the external API.
