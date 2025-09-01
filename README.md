@@ -104,10 +104,8 @@ Instead of writing and maintaining custom operators for each API, OASGen leverag
 | **Consistency with API** | High risk of schema drift if the API evolves. | Always matches OAS contract (type-safe CRDs + validation). |
 | **Handling API Inconsistencies** | Requires patching code in the operator. | Use an optional Plugin (Wrapper Web Service) without modifying the core provider. |
 | **Extensibility** | New APIs require new operators or significant code changes. | New APIs supported by simply adding a new `RestDefinition` with an OAS file. |
-| **Security & Config** | Custom implementation per operator. | Auto-generated `*Configuration` CRDs integrated with Kubernetes secrets. |
+| **Security & Configuration** | Custom implementation per operator. | Auto-generated `*Configuration` CRDs integrated with Kubernetes secrets. |
 | **Blast Radius on errors** | Bugs in custom code can lead to crashes or misbehavior. A bug for Resource A can affect Resources B, C and D if in the same operator. | Isolated controllers per `RestDefinition`. Bugs are contained; one faulty API does not affect others. Generic controllers with well-defined behavior; less custom code means fewer bugs. |
-
-
 
 ## Architecture
 
