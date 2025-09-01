@@ -63,7 +63,6 @@ helm install oasgen-provider krateo/oasgen-provider --namespace krateo-system
 | **Resource reconciliation** | The process of ensuring that the state of resources in the external system matches the desired state defined in Kubernetes resources which is the source of truth. |
 | **Plugin** | An **optional** wrapper web service to implement to maintain consistent API interfaces when needed. Can be also viewed as an **adapter pattern** / proxy service since it add a layer of indirection between the Rest Dynamic Controller and the external API. |
 
-
 ## Architecture
 
 In the following diagrams, we illustrate the architecture and workflow of the OASGen Provider in two scenarios: a standard scenario and a scenario that includes an optional Plugin (Wrapper Web Service).
@@ -259,13 +258,13 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 | `resourceGroup` | string | ✔︎ | ✔︎ | API group of the generated resource(s). | Changing is rejected by validation. |
 | `resource` | object | ✔︎ | ✖︎ | Container for resource mapping and options. |  |
 | `resource.kind` | string | ✔︎ | ✔︎ | Name (Kind) of the resource to manage (generated CRD Kind). | Changing is rejected by validation. |
-| `resource.verbsDescription[]` | array<object> | ✔︎ | ✖︎ | List of CRUD/find mappings that the controller will execute. Each item is a single action mapping. | Must include at least the actions you plan to use in reconciliation. |
+| `resource.verbsDescription[]` | array<object> | ✔︎ | ✖︎ | List of actions that the controller will execute. Each item is a single action mapping. | Must include at least the actions you plan to use in reconciliation. |
 | `resource.verbsDescription[].action` | string (enum) | ✔︎ | — | Action name. | One of: `create`, `update`, `get`, `delete`, `findby`. |
 | `resource.verbsDescription[].method` | string (enum) | ✔︎ | — | HTTP method to call. | One of: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`. |
 | `resource.verbsDescription[].path` | string | ✔︎ | — | HTTP path for the endpoint; must exist in the referenced OAS. | Should exactly match the OAS path you mapped. |
 | `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and are written in status. | Immutable once generated. It is important to choose identifiers that are unique per resource. If `findby` is not present use just `additionalStatusFields` and not `identifiers`. |
-| `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid`, `revision`). Usually some of these are used in the `get` action. | Immutable once generated. |
-| `resource.configurationFields[]` | array<object> | ✖︎ | ✔︎ | Declares configuration parameters in the generated `*Configuration` CRD. | Immutable once generated. Authentication is always included if needed. |
+| `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid` but also others returned by the API you want to see in status). Usually some of these are used in the `get` action. | Immutable once generated. |
+| `resource.configurationFields[]` | array<object> | ✖︎ | ✔︎ | Declares configuration parameters in the generated `*Configuration` CRD. | Immutable once generated. Authentication is always included if needed (you do not need to specify it here). |
 | `resource.configurationFields[].fromOpenAPI.in` | string | ✔︎ | — | Location of the parameter in the OAS. | Could be `query`, `path`, `header`, `cookie` etc. |
 | `resource.configurationFields[].fromOpenAPI.name` | string | ✔︎ | — | Parameter name as defined in the OAS. | Must match the OAS exactly. |
 | `resource.configurationFields[].fromRestDefinition.actions[]` | array<string> | ✔︎ | — | Which actions the parameter applies to. | `["*"]` applies to all defined actions; at least 1 item is required. |
@@ -476,7 +475,7 @@ Some consistency requirements includes but may not be limited to:
 
 Any API behavior that does not match these requirements will require a web service wrapper to normalize / fix the API interface. 
 This is common with APIs that do not follow consistent naming conventions or have different response structures.
-To learn more about web service wrappers, please refer to the [usage guide](docs/USAGE_GUIDE.md#extended-example-external-api-that-requires-a-webservice-to-handle-external-api-calls).
+To learn more about web service wrappers, please refer to the [usage guide](docs/USAGE_GUIDE.md#extended-example-external-api-that-requires-a-plugin-to-handle-external-api-calls).
 
 ### Type-Safe Status Fields
 
@@ -484,9 +483,9 @@ The OASGen Provider automatically generates a `status` subresource for the gener
 The fields within the status are derived from two sources in your `RestDefinition`:
 
 - `identifiers`: Fields used to uniquely identify the resource with a `findby` action.
-- `additionalStatusFields`: Any other fields you wish to expose in the status. So also technical identifiers like `id`, `uuid`, etc. can be added here.
+- `additionalStatusFields`: Any other fields you wish to expose in the status. So also technical identifiers like `id`, `uuid`, etc. can be added here and can be used in the `get` action.
 
-To ensure type safety, the provider inspects the response schema of the `get` (or `findby` as a fallback) action in your OpenAPI specification. It uses the types defined in the OAS to generate the corresponding fields in the CRD's status schema.
+To ensure type safety, the `oasgen-provider` inspects the response schema of the `get` (or `findby` as a fallback) action in your OpenAPI specification. It uses the types defined in the OAS to generate the corresponding fields in the CRD's status schema.
 
 #### String Fallback Mechanism in Status Fields
 
@@ -633,7 +632,6 @@ A more practical, step-by-step, usage guide with examples and troubleshooting ti
 
 - Automatic generation of Kubernetes RBAC policies for custom resources
 - Secure credential management through Kubernetes secrets
-- Field validation based on OAS schemas
 - Optional web service wrappers for additional security layers
 
 ## Best Practices
