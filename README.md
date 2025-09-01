@@ -8,6 +8,9 @@ It enables seamless integration of API-defined resources into Kubernetes environ
 - [Requirements](#requirements)
 - [How to Install](#how-to-install)
 - [Glossary](#glossary)
+- [Why OASGen Provider?](#why-oasgen-provider)
+  - [Key Advantages](#key-advantages)
+  - [Comparison with Traditional Operator approach](#comparison-with-traditional-operator-approach)
 - [Architecture](#architecture)
   - [Standard scenario](#standard-scenario)
   - [Scenario with Plugin (Wrapper Web Service)](#scenario-with-plugin-wrapper-web-service)
@@ -37,7 +40,7 @@ It enables seamless integration of API-defined resources into Kubernetes environ
 ## Requirements
 
 - Kubernetes cluster (v1.20+ recommended).
-- OpenAPI Specification 3.0/3.1 documents for the APIs you want to manage.
+- OpenAPI Specification 3.0/3.1 documents for the APIs you want to manage. Please refer to the [Usage Guide section](docs/USAGE_GUIDE.md#what-to-do-when-the-openapi-specification-oas-is-missingincomplete-or-not-at-version-30) for more details on the OAS document management.
 - Network access to API endpoints from the cluster.
 
 ## How to Install
@@ -62,6 +65,47 @@ helm install oasgen-provider krateo/oasgen-provider --namespace krateo-system
 | **External system / External APIs** | The service or API that we want to manage through Kubernetes resources. |
 | **Resource reconciliation** | The process of ensuring that the state of resources in the external system matches the desired state defined in Kubernetes resources which is the source of truth. |
 | **Plugin** | An **optional** wrapper web service to implement to maintain consistent API interfaces when needed. Can be also viewed as an **adapter pattern** / proxy service since it add a layer of indirection between the Rest Dynamic Controller and the external API. |
+
+## Why OASGen Provider?
+
+The **OASGen Provider** aims to reduce the complexity and effort required to manage external APIs in Kubernetes environments normally experienced with traditional custom operators.
+Instead of writing and maintaining custom operators for each API, OASGen leverages the OAS definition to **automatically generate CRDs and controllers**, making **any OpenAPI-compliant API manageable as a first-class Kubernetes resource**.
+
+### Key Advantages
+
+1. **No operator boilerplate**  
+   - Traditional operators require writing controllers, CRDs, RBACs, and more manually.  
+   - OASGen eliminates this burden: from a single `RestDefinition` manifest pointing to an OAS file, it **generates CRDs and a controller** (`Rest Dynamic Controller`) ready to reconcile resources.
+
+2. **OAS as the single source of truth**  
+   - By consuming the OpenAPI Specification, OASGen ensures **type safety, schema validation, and consistency** directly from the API contract.  
+   - Resource definitions in Kubernetes always match the schema of the underlying API.
+
+3. **Pluggable architecture for inconsistent APIs**  
+   - Not all APIs are consistent in their identifiers, response bodies, or field naming.  
+   - OASGen supports **Plugins (Wrapper Web Services)** to normalize such APIs without changing the user experience in Kubernetes.
+
+4. **Extensibility with zero-code changes**  
+   - To add support for a new external API, you don’t need to write Go code or recompile anything.  
+   - Just supply an OAS document and author a `RestDefinition`.  
+   - OASGen takes care of generating the CRD and deploying the controller.
+
+5. **Authentication and configuration management**  
+   - OASGen automatically generates configuration CRDs that handle **authentication and configuration parameters**.  
+   - Credentials are securely managed via Kubernetes secrets.
+
+### Comparison with Traditional Operator approach
+
+| Aspect | Traditional Operator | OASGen Provider |
+|--------|----------------------|-----------------|
+| **Development Effort** | Usually requires writing Go code, CRDs, RBAC, testing, and lifecycle management. | Zero code – generate CRDs/controllers directly from OAS + `RestDefinition`. |
+| **Schema Definition** | Must be manually translated into Kubernetes CRDs. | Automatically inferred from OAS schema. |
+| **Reconciliation Logic** | Custom-written per operator. | Generic, auto-generated reconciliation (create, update, delete, observe). |
+| **Consistency with API** | High risk of schema drift if the API evolves. | Always matches OAS contract (type-safe CRDs + validation). |
+| **Handling API Inconsistencies** | Requires patching code in the operator. | Use an optional Plugin (Wrapper Web Service) without modifying the core provider. |
+| **Extensibility** | New APIs require new operators or significant code changes. | New APIs supported by simply adding a new `RestDefinition` with an OAS file. |
+| **Security & Configuration** | Custom implementation per operator. | Auto-generated `*Configuration` CRDs integrated with Kubernetes secrets. |
+| **Blast Radius on errors** | Bugs in custom code can lead to crashes or misbehavior. A bug for Resource A can affect Resources B, C and D if in the same operator. | Isolated controllers per `RestDefinition`. Bugs are contained; one faulty API does not affect others. Generic controllers with well-defined behavior; less custom code means fewer bugs. |
 
 ## Architecture
 
@@ -630,12 +674,16 @@ A more practical, step-by-step, usage guide with examples and troubleshooting ti
 
 ## Security Features
 
+The OASGen Provider incorporates several security features, at different levels, to ensure safe operation within a Kubernetes environment:
 - Automatic generation of Kubernetes RBAC policies for custom resources
 - Secure credential management through Kubernetes secrets
-- Optional web service wrappers for additional security layers
+
+Additionally, whenever needed you can leverage custom web service wrappers for additional security layers if needed. For instance, you can use a web service wrapper to add **request signing**, or other security mechanisms that are not natively supported by the OASGen Provider.
+
 
 ## Best Practices
 
+To ensure optimal performance and reliability when using the OASGen Provider, consider the following best practices:
 1. Always use only OAS 3.0+ specifications as lower versions are not supported.
 2. Maintain consistent field naming across API endpoints.
 3. Use web service wrappers when API interfaces are inconsistent.
