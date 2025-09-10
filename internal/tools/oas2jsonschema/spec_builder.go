@@ -75,6 +75,16 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredField
 
 	uniqueParams := make(map[string]struct{})
 
+	// Helper function to check if property already exists in schema
+	propertyExists := func(name string) bool {
+		for _, prop := range schema.Properties {
+			if prop.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, verb := range g.resourceConfig.Verbs {
 
 		// 1. Path lookup
@@ -109,10 +119,16 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredField
 				continue
 			}
 
-			// Add parameter to spec only if not already present.
-			if _, exists := uniqueParams[param.Name]; !exists {
+			// Add parameter to spec only if not already present in uniqueParams AND not in existing base schema
+			// Therefore we give precedence to base schema properties over parameters.
+			if _, exists := uniqueParams[param.Name]; !exists && !propertyExists(param.Name) {
+				//fmt.Printf("Adding parameter: %s to spec schema\n", param.Name)
 				param.Schema.Description = fmt.Sprintf("PARAMETER: %s - %s", param.In, param.Description)
 				schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: param.Schema})
+				//schema.Required = append(schema.Required, param.Name) // Feature blocked until technical id can be removed in a smart and safe way.
+				if param.Schema.Default != nil {
+					schema.Default = param.Schema.Default
+				}
 				//fmt.Printf("Adding parameter: %s to spec schema\n", param.Name)
 				uniqueParams[param.Name] = struct{}{}
 			}
