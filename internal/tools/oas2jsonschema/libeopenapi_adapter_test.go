@@ -440,18 +440,238 @@ func TestAdapterEdgeCases(t *testing.T) {
 		assert.True(t, ok)
 	})
 
-	t.Run("convertLibopenapiSchema returns nil on schema build panic", func(t *testing.T) {
-		// This test confirms that our adapter's defer/recover logic correctly
-		// handles a panic from the underlying library.
-
-		// 1. Create a schema proxy that is known to cause a panic when BuildSchema is called
-		// on it without a valid document context.
+	t.Run("convertLibopenapiSchema returns non-nil on schema build error", func(t *testing.T) {
+		// This test confirms that our adapter's logic correctly
+		// handles an error from the underlying library by returning a placeholder.
 		proxy := base.CreateSchemaProxyRef("#/components/schemas/NonExistent")
-
-		// 2. Call the conversion function. The defer/recover should catch the panic.
 		schema := convertLibopenapiSchema(proxy)
-
-		// 3. Assert that the function returned nil instead of crashing.
-		assert.Nil(t, schema)
+		assert.NotNil(t, schema)
 	})
+}
+
+func TestParse_WithCircularReferences(t *testing.T) {
+	testCases := []struct {
+		name         string
+		openapiSpec  string
+		assertSchema func(t *testing.T, doc OASDocument)
+	}{
+		{
+			name: "Direct Circular Reference in Properties",
+			openapiSpec: `
+openapi: 3.0.0
+info:
+  title: Circular Test
+  version: 1.0.0
+paths:
+  /test:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+components:
+  schemas:
+    Employee:
+      type: object
+      properties:
+        name:
+          type: string
+        manager:
+          $ref: '#/components/schemas/Employee'
+`,
+			assertSchema: func(t *testing.T, doc OASDocument) {
+				path, ok := doc.FindPath("/test")
+				assert.True(t, ok)
+				if !ok {
+					return
+				}
+
+				ops := path.GetOperations()
+				resp, ok := ops["get"].GetResponses()[200]
+				assert.True(t, ok)
+				if !ok {
+					return
+				}
+
+				schema := resp.Content["application/json"]
+				assert.NotNil(t, schema)
+				if schema == nil {
+					return
+				}
+
+				assert.Equal(t, []string{"object"}, schema.Type)
+				assert.Len(t, schema.Properties, 2)
+
+				var managerProp *Property
+				for i := range schema.Properties {
+					if schema.Properties[i].Name == "manager" {
+						managerProp = &schema.Properties[i]
+						break
+					}
+				}
+				assert.NotNil(t, managerProp, "manager property not found")
+				if managerProp == nil {
+					return
+				}
+
+				assert.Same(t, schema, managerProp.Schema, "manager schema should be the same instance as the parent Employee schema")
+			},
+		},
+		{
+			name: "Direct Circular Reference in Array Items",
+			openapiSpec: `
+openapi: 3.0.0
+info:
+  title: Circular Test
+  version: 1.0.0
+paths:
+  /test:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+components:
+  schemas:
+    Category:
+      type: object
+      properties:
+        name:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+`,
+			assertSchema: func(t *testing.T, doc OASDocument) {
+				path, ok := doc.FindPath("/test")
+				assert.True(t, ok)
+				if !ok {
+					return
+				}
+
+				ops := path.GetOperations()
+				resp, ok := ops["get"].GetResponses()[200]
+				assert.True(t, ok)
+				if !ok {
+					return
+				}
+
+				schema := resp.Content["application/json"]
+				assert.NotNil(t, schema)
+				if schema == nil {
+					return
+				}
+
+				assert.Equal(t, []string{"object"}, schema.Type)
+
+				var childrenProp *Property
+				for i := range schema.Properties {
+					if schema.Properties[i].Name == "children" {
+						childrenProp = &schema.Properties[i]
+						break
+					}
+				}
+				assert.NotNil(t, childrenProp, "children property not found")
+				if childrenProp == nil {
+					return
+				}
+
+				assert.Equal(t, []string{"array"}, childrenProp.Schema.Type)
+
+				itemsSchema := childrenProp.Schema.Items
+				assert.NotNil(t, itemsSchema)
+				if itemsSchema == nil {
+					return
+				}
+
+				assert.Same(t, schema, itemsSchema, "items schema should be the same instance as the parent Category schema")
+			},
+		},
+		{
+			name: "Indirect Circular Reference A->B->A",
+			openapiSpec: `
+openapi: 3.0.0
+info:
+  title: Circular Test
+  version: 1.0.0
+paths:
+  /test:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/A'
+components:
+  schemas:
+    A:
+      type: object
+      properties:
+        b:
+          $ref: '#/components/schemas/B'
+    B:
+      type: object
+      properties:
+        a:
+          $ref: '#/components/schemas/A'
+`,
+			assertSchema: func(t *testing.T, doc OASDocument) {
+				path, ok := doc.FindPath("/test")
+				assert.True(t, ok)
+				if !ok {
+					return
+				}
+
+				ops := path.GetOperations()
+				resp, ok := ops["get"].GetResponses()[200]
+				assert.True(t, ok)
+				if !ok {
+					return
+				}
+
+				schemaA := resp.Content["application/json"]
+				assert.NotNil(t, schemaA)
+				if schemaA == nil {
+					return
+				}
+				assert.Equal(t, []string{"object"}, schemaA.Type)
+
+				assert.Len(t, schemaA.Properties, 1)
+				schemaB := schemaA.Properties[0].Schema
+
+				assert.NotNil(t, schemaB)
+				if schemaB == nil {
+					return
+				}
+				assert.Equal(t, []string{"object"}, schemaB.Type)
+
+				assert.Len(t, schemaB.Properties, 1)
+
+				assert.Same(t, schemaA, schemaB.Properties[0].Schema, "schema B's 'a' property should reference the same instance as schema A")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			parser := NewLibOASParser()
+			doc, err := parser.Parse([]byte(tc.openapiSpec))
+
+			assert.NoError(t, err)
+			assert.NotNil(t, doc)
+
+			if doc != nil {
+				tc.assertSchema(t, doc)
+			}
+		})
+	}
 }

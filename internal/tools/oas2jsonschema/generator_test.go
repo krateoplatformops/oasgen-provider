@@ -428,7 +428,7 @@ func TestPrepareSchemaForCRD(t *testing.T) {
 			},
 		}
 
-		err := prepareSchemaForCRD(schema)
+		err := prepareSchemaForCRD(schema, DefaultGeneratorConfig())
 
 		if err != nil {
 			t.Fatalf("Expected no error, but got: %v", err)
@@ -468,7 +468,7 @@ func TestPrepareSchemaForCRD(t *testing.T) {
 			},
 		}
 
-		err := prepareSchemaForCRD(schema)
+		err := prepareSchemaForCRD(schema, DefaultGeneratorConfig())
 
 		if err != nil {
 			t.Fatalf("Expected no error, but got: %v", err)
@@ -482,7 +482,7 @@ func TestPrepareSchemaForCRD(t *testing.T) {
 	t.Run("should handle empty schema", func(t *testing.T) {
 		schema := &Schema{}
 
-		err := prepareSchemaForCRD(schema)
+		err := prepareSchemaForCRD(schema, DefaultGeneratorConfig())
 
 		if err != nil {
 			t.Fatalf("Expected no error, but got: %v", err)
@@ -490,7 +490,7 @@ func TestPrepareSchemaForCRD(t *testing.T) {
 	})
 
 	t.Run("should handle nil schema", func(t *testing.T) {
-		err := prepareSchemaForCRD(nil)
+		err := prepareSchemaForCRD(nil, DefaultGeneratorConfig())
 
 		if err != nil {
 			t.Fatalf("Expected no error, but got: %v", err)

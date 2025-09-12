@@ -22,11 +22,11 @@ func (g *OASSchemaGenerator) BuildStatusSchema() ([]byte, []error, error) {
 	statusSchema, buildWarnings := composeStatusSchema(allStatusFields, responseSchema)
 	warnings = append(warnings, buildWarnings...)
 
-	if err := prepareSchemaForCRD(statusSchema); err != nil {
+	if err := prepareSchemaForCRD(statusSchema, g.generatorConfig); err != nil {
 		return nil, warnings, fmt.Errorf("could not prepare status schema for CRD: %w", err)
 	}
 
-	byteSchema, err := GenerateJsonSchema(statusSchema)
+	byteSchema, err := GenerateJsonSchema(statusSchema, g.generatorConfig)
 	if err != nil {
 		return nil, warnings, fmt.Errorf("could not generate final JSON schema for status: %w", err)
 	}

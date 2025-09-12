@@ -183,11 +183,100 @@ func TestCompareSchemas(t *testing.T) {
 			expectErr: true,
 			errCount:  1,
 		},
+		{
+			name: "Compatible schemas with circular reference",
+			schema1: func() *Schema {
+				s := &Schema{
+					Type:        []string{"object"},
+					Description: "circular",
+				}
+				s.Properties = []Property{{Name: "next", Schema: s}}
+				return s
+			}(),
+			schema2: func() *Schema {
+				s := &Schema{
+					Type:        []string{"object"},
+					Description: "circular",
+				}
+				s.Properties = []Property{{Name: "next", Schema: s}}
+				return s
+			}(),
+			expectErr: false,
+		},
+		{
+			name: "Correctly validates non-cyclic multi-use of a sub-schema",
+			schema1: func() *Schema {
+				common := &Schema{
+					Type: []string{"object"},
+					Properties: []Property{
+						{Name: "id", Schema: &Schema{Type: []string{"string"}}},
+					},
+				}
+				return &Schema{
+					Type: []string{"object"},
+					Properties: []Property{
+						{Name: "itemA", Schema: common},
+						{Name: "itemB", Schema: common},
+					},
+				}
+			}(),
+			schema2: func() *Schema {
+				common := &Schema{
+					Type: []string{"object"},
+					Properties: []Property{
+						{Name: "id", Schema: &Schema{Type: []string{"string"}}},
+					},
+				}
+				return &Schema{
+					Type: []string{"object"},
+					Properties: []Property{
+						{Name: "itemA", Schema: common},
+						{Name: "itemB", Schema: common},
+					},
+				}
+			}(),
+			expectErr: false,
+		},
+		{
+			name: "Compatible schemas with nullable type",
+			schema1: &Schema{
+				Properties: []Property{
+					{Name: "name", Schema: &Schema{Type: []string{"string", "null"}}},
+				},
+			},
+			schema2: &Schema{
+				Properties: []Property{
+					{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "Incompatible array of primitives",
+			schema1: &Schema{
+				Properties: []Property{
+					{Name: "tags", Schema: &Schema{
+						Type:  []string{"array"},
+						Items: &Schema{Type: []string{"string"}},
+					}},
+				},
+			},
+			schema2: &Schema{
+				Properties: []Property{
+					{Name: "tags", Schema: &Schema{
+						Type:  []string{"array"},
+						Items: &Schema{Type: []string{"integer"}},
+					}},
+				},
+			},
+			expectErr: true,
+			errCount:  1,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			errs := compareSchemas(".", tc.schema1, tc.schema2, "action1", "action2")
+			errs := compareSchemas(".", tc.schema1, tc.schema2, "action1", "action2", DefaultGeneratorConfig())
 			if tc.expectErr {
 				assert.NotEmpty(t, errs, "Expected errors, but got none")
 				assert.Len(t, errs, tc.errCount, "Unexpected number of errors")
@@ -199,6 +288,37 @@ func TestCompareSchemas(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompareSchemas_RecursionLimit(t *testing.T) {
+	// Create a schema that is deeply nested
+	var createDeepSchema func(depth int) *Schema
+	createDeepSchema = func(depth int) *Schema {
+		if depth <= 0 {
+			return &Schema{Type: []string{"string"}}
+		}
+		return &Schema{
+			Type: []string{"object"},
+			Properties: []Property{
+				{Name: "child", Schema: createDeepSchema(depth - 1)},
+			},
+		}
+	}
+
+	deepSchema := createDeepSchema(20)
+	config := &GeneratorConfig{
+		MaxRecursionDepth: 10, // Set a limit lower than the schema depth
+	}
+
+	t.Run("should fail with recursion depth error", func(t *testing.T) {
+		errs := compareSchemas(".", deepSchema, deepSchema, "action1", "action2", config)
+
+		assert.NotEmpty(t, errs, "Expected a recursion error, but got none")
+		validationErr, ok := errs[0].(SchemaValidationError)
+		assert.True(t, ok, "Error is not of type SchemaValidationError")
+		assert.Equal(t, CodeRecursionLimitExceeded, validationErr.Code)
+		assert.Contains(t, validationErr.Error(), "recursion limit exceeded")
+	})
 }
 
 // TestValidateSchemas
@@ -558,18 +678,18 @@ func TestDetermineBaseAction(t *testing.T) {
 
 func TestCompareSchemas_NilCases(t *testing.T) {
 	t.Run("should return no error if both schemas are nil", func(t *testing.T) {
-		errs := compareSchemas(".", nil, nil, "action1", "action2")
+		errs := compareSchemas(".", nil, nil, "action1", "action2", DefaultGeneratorConfig())
 		assert.Empty(t, errs)
 	})
 
 	t.Run("should return an error if first schema is nil", func(t *testing.T) {
-		errs := compareSchemas(".", nil, &Schema{}, "action1", "action2")
+		errs := compareSchemas(".", nil, &Schema{}, "action1", "action2", DefaultGeneratorConfig())
 		assert.NotEmpty(t, errs)
 		assert.Contains(t, errs[0].Error(), "first schema is nil")
 	})
 
 	t.Run("should return an error if second schema is nil", func(t *testing.T) {
-		errs := compareSchemas(".", &Schema{}, nil, "action1", "action2")
+		errs := compareSchemas(".", &Schema{}, nil, "action1", "action2", DefaultGeneratorConfig())
 		assert.NotEmpty(t, errs)
 		assert.Contains(t, errs[0].Error(), "second schema is nil")
 	})
@@ -588,7 +708,7 @@ func TestCompareSchemas_ArrayCases(t *testing.T) {
 			},
 		}
 
-		errs := compareSchemas(".", schema1, schema2, "action1", "action2")
+		errs := compareSchemas(".", schema1, schema2, "action1", "action2", DefaultGeneratorConfig())
 		assert.NotEmpty(t, errs)
 		assert.Equal(t, CodePropertyMismatch, errs[0].(SchemaValidationError).Code)
 		assert.Contains(t, errs[0].Error(), "schema for property 'tags' is nil")
@@ -606,7 +726,7 @@ func TestCompareSchemas_ArrayCases(t *testing.T) {
 			},
 		}
 
-		errs := compareSchemas(".", schema1, schema2, "action1", "action2")
+		errs := compareSchemas(".", schema1, schema2, "action1", "action2", DefaultGeneratorConfig())
 		assert.NotEmpty(t, errs)
 		assert.Equal(t, CodeMissingArrayItems, errs[0].(SchemaValidationError).Code)
 		assert.Contains(t, errs[0].Error(), "second schema has no items for array")
@@ -624,7 +744,7 @@ func TestCompareSchemas_ArrayCases(t *testing.T) {
 			},
 		}
 
-		errs := compareSchemas(".", schema1, schema2, "action1", "action2")
+		errs := compareSchemas(".", schema1, schema2, "action1", "action2", DefaultGeneratorConfig())
 		assert.NotEmpty(t, errs)
 		assert.Equal(t, CodeMissingArrayItems, errs[0].(SchemaValidationError).Code)
 		assert.Contains(t, errs[0].Error(), "first schema has no items for array")

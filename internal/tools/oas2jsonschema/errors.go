@@ -85,6 +85,8 @@ const (
 	CodePropertyMismatch ValidationCode = "PropertyMismatch"
 	// CodeMissingArrayItems indicates that one schema has array items while the other does not.
 	CodeMissingArrayItems ValidationCode = "MissingArrayItems"
+	// CodeRecursionLimitExceeded indicates that the recursion limit was exceeded during validation.
+	CodeRecursionLimitExceeded ValidationCode = "RecursionLimitExceeded"
 )
 
 // SchemaValidationError defines a structured error for schema validation.

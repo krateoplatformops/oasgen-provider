@@ -57,8 +57,9 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 				})
 			}
 
-			// Add the parameter's schema to the action's schema.
-			actionSchema.Properties = append(actionSchema.Properties, Property{Name: param.Name, Schema: param.Schema})
+			// Add a deep copy of the parameter's schema to the action's schema
+			// to prevent issues with shared schema references.
+			actionSchema.Properties = append(actionSchema.Properties, Property{Name: param.Name, Schema: param.Schema.deepCopy()})
 		}
 	}
 
@@ -84,7 +85,7 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 		addAuthMethods(rootSchema, authMethodsSchemas)
 	}
 
-	return GenerateJsonSchema(rootSchema)
+	return GenerateJsonSchema(rootSchema, g.generatorConfig)
 }
 
 // buildAuthMethodsSchemaMap generates the JSON schemas for the authentication methods.

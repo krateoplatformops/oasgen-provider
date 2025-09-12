@@ -1,7 +1,10 @@
 package oas2jsonschema
 
 import (
+	"context"
 	"fmt"
+
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
 )
 
 const (
@@ -78,10 +81,39 @@ func compareActionResponseSchemas(doc OASDocument, verbs []Verb, action1, action
 		}}
 	}
 
-	return compareSchemas(".", schema1, schema2, action1, action2)
+	return compareSchemas(".", schema1, schema2, action1, action2, config)
 }
 
-func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 string) []error {
+type schemaPair struct {
+	s1 *Schema
+	s2 *Schema
+}
+
+func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 string, config *GeneratorConfig) []error {
+	guard := safety.NewRecursionGuard(config.MaxRecursionDepth, config.MaxRecursionNodes, config.RecursionTimeout)
+	ctx, cancel := guard.WithContext()
+	defer cancel()
+
+	visited := make(map[schemaPair]bool)
+	return compareSchemasRec(ctx, guard, visited, 0, path, schema1, schema2, action1, action2)
+}
+
+func compareSchemasRec(ctx context.Context, guard *safety.RecursionGuard, visited map[schemaPair]bool, depth int, path string, schema1, schema2 *Schema, action1, action2 string) []error {
+	if err := guard.Check(ctx, depth); err != nil {
+		return []error{SchemaValidationError{
+			Path:    path,
+			Code:    CodeRecursionLimitExceeded,
+			Message: fmt.Sprintf("recursion limit exceeded at path '%s': %v", path, err),
+		}}
+	}
+
+	pair := schemaPair{s1: schema1, s2: schema2}
+	if visited[pair] {
+		return nil // Cycle detected, stop comparison here.
+	}
+	visited[pair] = true
+	defer delete(visited, pair) // Clean up after recursion in order to allow validations of other branches
+
 	var errors []error
 
 	if schema1 == nil && schema2 == nil {
@@ -98,7 +130,6 @@ func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 stri
 	schema2HasProps := len(schema2.Properties) > 0
 
 	if !schema1HasProps && !schema2HasProps {
-		// Check if primary types are compatible
 		if !areTypesCompatible(schema1.Type, schema2.Type) {
 			errors = append(errors, SchemaValidationError{
 				Path:     path,
@@ -114,7 +145,6 @@ func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 stri
 	if schema1HasProps != schema2HasProps {
 		msg := "schema mismatch: response for action '%s' has properties but response for action '%s' does not"
 		if !schema1HasProps {
-			// Swap the message to be accurate
 			msg = "schema mismatch: response for action '%s' does not have properties but response for action '%s' does"
 		}
 		errors = append(errors, SchemaValidationError{
@@ -139,7 +169,7 @@ func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 stri
 		currentPath := buildPath(path, prop1.Name)
 
 		if prop1.Schema == nil || prop2.Schema == nil {
-			if prop1.Schema != prop2.Schema { // One is nil, the other is not
+			if prop1.Schema != prop2.Schema {
 				errors = append(errors, SchemaValidationError{
 					Path:    currentPath,
 					Code:    CodePropertyMismatch,
@@ -163,11 +193,11 @@ func compareSchemas(path string, schema1, schema2 *Schema, action1, action2 stri
 		switch getPrimaryType(prop1.Schema.Type) {
 		case "object":
 			// recursively compare object schemas
-			errors = append(errors, compareSchemas(currentPath, prop1.Schema, prop2.Schema, action1, action2)...)
+			errors = append(errors, compareSchemasRec(ctx, guard, visited, depth+1, currentPath, prop1.Schema, prop2.Schema, action1, action2)...)
 		case "array":
 			if prop1.Schema.Items != nil && prop2.Schema.Items != nil {
 				// recursively compare array item schemas
-				errors = append(errors, compareSchemas(currentPath, prop1.Schema.Items, prop2.Schema.Items, action1, action2)...)
+				errors = append(errors, compareSchemasRec(ctx, guard, visited, depth+1, currentPath, prop1.Schema.Items, prop2.Schema.Items, action1, action2)...)
 			} else if prop1.Schema.Items != nil && prop2.Schema.Items == nil {
 				errors = append(errors, SchemaValidationError{
 					Path:    currentPath,

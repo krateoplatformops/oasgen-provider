@@ -1,11 +1,16 @@
 package oas2jsonschema
 
 import (
+	"context"
 	"errors"
 	"log"
 	"strconv"
+	"time"
 
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
 	"github.com/pb33f/libopenapi"
+
+	//"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
@@ -23,6 +28,12 @@ func NewLibOASParser() Parser {
 // Parse takes raw OpenAPI specification content and returns a document
 // that conforms to the OASDocument interface.
 func (p *libOASParser) Parse(content []byte) (OASDocument, error) {
+
+	// to check if needed
+	//docConfig := datamodel.NewDocumentConfiguration()
+	//docConfig.IgnoreArrayCircularReferences = true
+	//d, err := libopenapi.NewDocumentWithConfiguration(content, docConfig)
+
 	d, err := libopenapi.NewDocument(content)
 	if err != nil {
 		return nil, ParserError{
@@ -48,6 +59,7 @@ func (p *libOASParser) Parse(content []byte) (OASDocument, error) {
 	}
 
 	// Resolve model references
+	// Ensures that all $ref pointers are properly resolved before further processing.
 	resolvingErrors := doc.Index.GetResolver().Resolve()
 	if len(resolvingErrors) > 0 {
 		var errs []error
@@ -165,29 +177,76 @@ func (a *libOASOperationAdapter) GetResponses() map[int]ResponseInfo {
 
 // --- Conversion Utilities ---
 
-func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
+// convertLibopenapiSchema is the entry point for schema conversion. It sets up a
+// map to track visited schema proxies to prevent infinite recursion in the case
+// of circular references.
+func convertLibopenapiSchema(proxy *base.SchemaProxy) *Schema {
+
+	guard := safety.NewRecursionGuard(50, 5000, 30*time.Second)
+	ctx, cancel := guard.WithContext()
+	defer cancel()
+
+	return convertLibopenapiSchemaWithVisited(ctx, proxy, guard, make(map[string]*Schema), 0)
+}
+
+// convertLibopenapiSchemaWithVisited is the recursive implementation of the schema conversion.
+// It uses the 'visited' map to detect and handle circular references.
+func convertLibopenapiSchemaWithVisited(
+	ctx context.Context,
+	proxy *base.SchemaProxy,
+	guard *safety.RecursionGuard,
+	visited map[string]*Schema,
+	depth int,
+) *Schema {
+
+	if proxy == nil {
+		return nil
+	}
+
+	if err := guard.Check(ctx, depth); err != nil {
+		log.Printf("schema recursion aborted: %v", err)
+		return &Schema{Type: []string{"object"}}
+	}
+
+	// Use the reference pointer string as the unique key for cycle detection,
+	// but only if the proxy is actually a reference.
+	if proxy.IsReference() {
+		ref := proxy.GetReference()
+		if ref != "" {
+			if existingSchema, ok := visited[ref]; ok {
+				log.Printf("Circular reference detected at depth %d for ref '%s'. Returning placeholder schema to break the loop.", depth, ref)
+				return existingSchema
+			}
+		}
+	}
+
+	// Create a new schema placeholder and add it to the visited map before building or processing the schema.
+	// This is used to break the recursion.
+	domainSchema := &Schema{}
+	if proxy.IsReference() {
+		ref := proxy.GetReference()
+		if ref != "" {
+			visited[ref] = domainSchema
+		}
+	}
+
 	// Gracefully handle panics from the underlying library, which can occur with
 	// invalid schemas (e.g., dangling references).
 	defer func() {
 		if r := recover(); r != nil {
 			// Log the panic for debugging
 			log.Printf("Schema conversion panic: %v", r)
-			domainSchema = nil
 		}
 	}()
-
-	if proxy == nil {
-		return nil
-	}
 
 	s, err := proxy.BuildSchema()
 	if err != nil {
 		log.Printf("Schema build error: %v", err)
-		return nil
+		return domainSchema // Return the placeholder to avoid breaking parent
 	}
 
 	if s == nil {
-		return nil
+		return domainSchema
 	}
 
 	var defaultVal interface{}
@@ -197,12 +256,12 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 		}
 	}
 
-	domainSchema = &Schema{
-		Type:        s.Type,
-		Description: s.Description,
-		Required:    s.Required,
-		Default:     defaultVal,
-	}
+	// Populate the placeholder schema we created earlier by modifying its fields directly.
+	// Do not reassign domainSchema as that would break the circular reference handling
+	domainSchema.Type = s.Type
+	domainSchema.Description = s.Description
+	domainSchema.Required = s.Required
+	domainSchema.Default = defaultVal
 
 	// Enum handling
 	var enumValues []interface{}
@@ -225,10 +284,8 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 			// Boolean form: allows or disallows any additional properties
 			domainSchema.AdditionalProperties = s.AdditionalProperties.B
 		case s.AdditionalProperties.IsA():
-			// Schema form: recurse so you don't lose detail
-			// TODO: handle this case properly
-			//domainSchema.AdditionalPropertiesSchema = convertLibopenapiSchema(s.AdditionalProperties.A)
-			log.Printf("Warning: AdditionalProperties schema form not fully supported")
+			// Schema form: recurse to handle nested schemas properly
+			// Currently not handled in `oasgen-provider`
 		default:
 			log.Printf("Warning: Unknown AdditionalProperties type")
 		}
@@ -241,10 +298,11 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 
 	// Properties handling
 	if s.Properties != nil {
+		domainSchema.Properties = make([]Property, 0, s.Properties.Len())
 		for pair := s.Properties.First(); pair != nil; pair = pair.Next() {
 			domainSchema.Properties = append(domainSchema.Properties, Property{
 				Name:   pair.Key(),
-				Schema: convertLibopenapiSchema(pair.Value()),
+				Schema: convertLibopenapiSchemaWithVisited(ctx, pair.Value(), guard, visited, depth+1),
 			})
 		}
 	}
@@ -254,25 +312,20 @@ func convertLibopenapiSchema(proxy *base.SchemaProxy) (domainSchema *Schema) {
 		switch {
 		case s.Items.IsA():
 			// Single schema (OAS 3.0 style or OAS 3.1 single schema)
-			domainSchema.Items = convertLibopenapiSchema(s.Items.A)
-
-			// Edge case: boolean schemas in OAS 3.1
-			// if domainSchema.Items != nil && domainSchema.Items.IsBooleanSchema {
-			//     domainSchema.ItemsBoolean = domainSchema.Items.BooleanValue
-			//     domainSchema.Items = nil
-			// }
+			domainSchema.Items = convertLibopenapiSchemaWithVisited(ctx, s.Items.A, guard, visited, depth+1)
 
 		case s.Items.IsB():
 			// OAS 3.1 tuple validation: array of schemas
-			// for _, sub := range s.Items.B {
-			//     domainSchema.TupleItems = append(domainSchema.TupleItems, convertLibopenapiSchema(sub))
-			// }
+			// Currently not handled in `oasgen-provider`
 		}
 	}
 
 	// Handle AllOf
-	for _, allOfProxy := range s.AllOf {
-		domainSchema.AllOf = append(domainSchema.AllOf, convertLibopenapiSchema(allOfProxy))
+	if len(s.AllOf) > 0 {
+		domainSchema.AllOf = make([]*Schema, 0, len(s.AllOf))
+		for _, allOfProxy := range s.AllOf {
+			domainSchema.AllOf = append(domainSchema.AllOf, convertLibopenapiSchemaWithVisited(ctx, allOfProxy, guard, visited, depth+1))
+		}
 	}
 
 	return domainSchema

@@ -25,11 +25,6 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	// Create a lookup set of configured fields for efficient filtering.
 	configuredFieldsSet := g.getConfiguredFieldsSet()
 
-	// Remove any properties from the base schema that are defined as configuration fields.
-	// TODO: understand if this is actually needed
-	// If we decide that a field in the request body cannot be a configuration field, then this is not needed.
-	//filterConfiguredProperties(baseSchema, configuredFieldsSet)
-
 	// Add parameters to the spec schema, excluding those that are defined as configuration fields.
 	warnings = append(warnings, g.addParametersToSpec(baseSchema, configuredFieldsSet)...)
 
@@ -39,12 +34,12 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	}
 
 	// Schema preparation for CRD compatibility.
-	if err := prepareSchemaForCRD(baseSchema); err != nil {
+	if err := prepareSchemaForCRD(baseSchema, g.generatorConfig); err != nil {
 		return nil, warnings, fmt.Errorf("could not prepare spec schema for CRD: %w", err)
 	}
 
 	// Convert the schema to JSON schema format.
-	byteSchema, err := GenerateJsonSchema(baseSchema)
+	byteSchema, err := GenerateJsonSchema(baseSchema, g.generatorConfig)
 	if err != nil {
 		return nil, warnings, fmt.Errorf("could not generate final JSON schema: %w", err)
 	}
@@ -175,19 +170,6 @@ func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 		}
 	}
 }
-
-// TODO: understand if this is actually needed
-// If we decide that a field in the request body cannot be a configuration field, then this is not needed.
-//func filterConfiguredProperties(schema *Schema, configuredFields map[string]struct{}) {
-//	var filteredProps []Property
-//	for _, prop := range schema.Properties {
-//		key := fmt.Sprintf("body-%s", prop.Name)
-//		if _, isConfigured := configuredFields[key]; !isConfigured {
-//			filteredProps = append(filteredProps, prop)
-//		}
-//	}
-//	schema.Properties = filteredProps
-//}
 
 // isAuthorizationHeader checks if the given parameter is an authorization header (case-insensitive).
 func isAuthorizationHeader(param ParameterInfo) bool {

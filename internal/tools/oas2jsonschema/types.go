@@ -1,6 +1,8 @@
 package oas2jsonschema
 
 import (
+	"time"
+
 	rtv1 "github.com/krateoplatformops/provider-runtime/apis/common/v1"
 )
 
@@ -9,6 +11,9 @@ type GeneratorConfig struct {
 	AcceptedMIMETypes        []string
 	SuccessCodes             []int
 	IncludeIdentifiersInSpec bool
+	MaxRecursionDepth        int
+	MaxRecursionNodes        int32
+	RecursionTimeout         time.Duration
 }
 
 // DefaultGeneratorConfig returns a new GeneratorConfig with default values.
@@ -17,6 +22,9 @@ func DefaultGeneratorConfig() *GeneratorConfig {
 		AcceptedMIMETypes:        []string{"application/json"},
 		SuccessCodes:             []int{200, 201},
 		IncludeIdentifiersInSpec: false,
+		MaxRecursionDepth:        50,
+		MaxRecursionNodes:        5000,
+		RecursionTimeout:         30 * time.Second,
 	}
 }
 
@@ -138,4 +146,63 @@ type BasicAuth struct {
 
 type BearerAuth struct {
 	TokenRef rtv1.SecretKeySelector `json:"tokenRef"`
+}
+
+// deepCopy creates a deep, recursion-safe copy of the Schema.
+func (s *Schema) deepCopy() *Schema {
+	// Initialize a map to track visited schemas to handle circular references.
+	visited := make(map[*Schema]*Schema)
+	return s.deepCopyRec(visited)
+}
+
+func (s *Schema) deepCopyRec(visited map[*Schema]*Schema) *Schema {
+	if s == nil {
+		return nil
+	}
+
+	// If we have already copied this schema, return the existing copy to break the cycle.
+	if copied, ok := visited[s]; ok {
+		return copied
+	}
+
+	// Create a new schema and register it in the visited map before recursing.
+	newSchema := &Schema{}
+	visited[s] = newSchema
+
+	// Copy scalar fields and slices of basic types.
+	newSchema.Type = append([]string{}, s.Type...)
+	newSchema.Description = s.Description
+	newSchema.Required = append([]string{}, s.Required...)
+	newSchema.Default = s.Default
+	newSchema.AdditionalProperties = s.AdditionalProperties
+	newSchema.MaxProperties = s.MaxProperties
+
+	if len(s.Enum) > 0 {
+		newSchema.Enum = make([]interface{}, len(s.Enum))
+		copy(newSchema.Enum, s.Enum)
+	}
+
+	// Recursively copy nested schemas, passing the visited map along.
+	if s.Items != nil {
+		newSchema.Items = s.Items.deepCopyRec(visited)
+	}
+
+	if len(s.Properties) > 0 {
+		newSchema.Properties = make([]Property, len(s.Properties))
+		for i, p := range s.Properties {
+			newSchema.Properties[i] = Property{
+				Name:   p.Name,
+				Schema: p.Schema.deepCopyRec(visited),
+			}
+		}
+	}
+
+	if len(s.AllOf) > 0 {
+		newSchema.AllOf = make([]*Schema, len(s.AllOf))
+		for i, allOfSchema := range s.AllOf {
+			newSchema.AllOf[i] = allOfSchema.deepCopyRec(visited)
+		}
+	}
+
+	return newSchema
 }
