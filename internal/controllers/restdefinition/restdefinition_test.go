@@ -120,9 +120,9 @@ func TestLifecycle_Simple(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			os.Setenv("RDC_TEMPLATE_DEPLOYMENT_PATH", filepath.Join(testdataPath, "rdc", "deployment.yaml"))
-			os.Setenv("RDC_TEMPLATE_CONFIGMAP_PATH", filepath.Join(testdataPath, "rdc", "configmap.yaml"))
-			os.Setenv("RDC_RBAC_CONFIG_FOLDER", filepath.Join(testdataPath, "rdc", "rbac"))
+			os.Setenv("RDC_TEMPLATE_DEPLOYMENT_PATH", filepath.Join(testdataPath, "setup/rdc", "deployment.yaml"))
+			os.Setenv("RDC_TEMPLATE_CONFIGMAP_PATH", filepath.Join(testdataPath, "setup/rdc", "configmap.yaml"))
+			os.Setenv("RDC_RBAC_CONFIG_FOLDER", filepath.Join(testdataPath, "setup/rdc", "rbac"))
 
 			scenarioDir := filepath.Join(testdataPath, "simple")
 			err = decoder.DecodeEachFile(ctx, os.DirFS(scenarioDir),
@@ -267,7 +267,7 @@ func TestLifecycle_Simple(t *testing.T) {
 		err = objects.CreateK8sObject(&depl, gvr, types.NamespacedName{
 			Namespace: mg.GetNamespace(),
 			Name:      mg.GetName(),
-		}, filepath.Join(testdataPath, "rdc", "deployment.yaml"))
+		}, filepath.Join(testdataPath, "setup/rdc", "deployment.yaml"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -304,9 +304,9 @@ func TestLifecycle_GitHubWorkflows(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			os.Setenv("RDC_TEMPLATE_DEPLOYMENT_PATH", filepath.Join(testdataPath, "rdc", "deployment.yaml"))
-			os.Setenv("RDC_TEMPLATE_CONFIGMAP_PATH", filepath.Join(testdataPath, "rdc", "configmap.yaml"))
-			os.Setenv("RDC_RBAC_CONFIG_FOLDER", filepath.Join(testdataPath, "rdc", "rbac"))
+			os.Setenv("RDC_TEMPLATE_DEPLOYMENT_PATH", filepath.Join(testdataPath, "setup/rdc", "deployment.yaml"))
+			os.Setenv("RDC_TEMPLATE_CONFIGMAP_PATH", filepath.Join(testdataPath, "setup/rdc", "configmap.yaml"))
+			os.Setenv("RDC_RBAC_CONFIG_FOLDER", filepath.Join(testdataPath, "setup/rdc", "rbac"))
 
 			scenarioDir := filepath.Join(testdataPath, "github_workflows")
 			err = decoder.DecodeEachFile(ctx, os.DirFS(scenarioDir),
@@ -491,7 +491,7 @@ func TestLifecycle_GitHubWorkflows(t *testing.T) {
 			err = objects.CreateK8sObject(&depl, gvr, types.NamespacedName{
 				Namespace: mg.GetNamespace(),
 				Name:      mg.GetName(),
-			}, filepath.Join(testdataPath, "rdc", "deployment.yaml"))
+			}, filepath.Join(testdataPath, "setup/rdc", "deployment.yaml"))
 			if err != nil {
 				t.Fatal(err)
 			}

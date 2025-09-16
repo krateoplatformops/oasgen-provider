@@ -36,6 +36,7 @@ type ResourceConfig struct {
 	Identifiers            []string
 	AdditionalStatusFields []string
 	ConfigurationFields    []ConfigurationField
+	ExcludedSpecFields     []string
 }
 
 type ConfigurationField struct {
@@ -61,28 +62,30 @@ type Verb struct {
 
 // --- Library-Agnostic Domain Models ---
 
-// Property represents a single key-value pair in a schema's properties.
-// Using a slice of these preserves order.
-type Property struct {
-	Name   string
-	Schema *Schema
-}
-
 // Schema is a library-agnostic representation of a JSON Schema Object, which is used
 // within the OpenAPI specification to define the structure of data payloads.
 // It is not a representation of the entire OpenAPI document itself.
 // Potentially, this struct could be modified to include more fields in the future.
+// It is the domainSchema defined in this domain (oas2jsonschema).
 type Schema struct {
 	Type                 []string // OAS 3.1 allows multiple types (e.g., ["string", "null"])
 	Description          string
-	Properties           []Property
-	Items                *Schema // For array types, this defines the schema of items in the array
+	Properties           []Property // Using a slice to preserve order of properties (TODO: consider using a map)
+	Items                *Schema    // For array types, this defines the schema of items in the array
 	AllOf                []*Schema
 	Required             []string
 	Default              interface{} // Default value for the schema
 	Enum                 []interface{}
 	AdditionalProperties bool
 	MaxProperties        int
+	Format               string // not validated but added value to description if present
+}
+
+// Property represents a single key-value pair in a schema's properties.
+// Using a slice of these preserves order.
+type Property struct {
+	Name   string
+	Schema *Schema
 }
 
 // SecuritySchemeType defines the type of a security scheme (e.g., http, apiKey).
@@ -115,17 +118,18 @@ type ParameterInfo struct {
 	Name        string
 	In          string
 	Description string
+	Required    bool
 	Schema      *Schema
 }
 
 // RequestBodyInfo is a library-agnostic representation of a request body.
-// Type name reflect the OpenAPI spec's 'requestBody' object
+// The Go type name reflects the OpenAPI spec's 'requestBody' object
 type RequestBodyInfo struct {
 	Content map[string]*Schema
 }
 
 // ResponseInfo is a library-agnostic representation of a response.
-// Type name reflects the OpenAPI spec's single response object under the 'responses' map.
+// The Go type name reflects the OpenAPI spec's single response object under the 'responses' map.
 type ResponseInfo struct {
 	Content map[string]*Schema
 }

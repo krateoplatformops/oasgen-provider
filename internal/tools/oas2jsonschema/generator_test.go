@@ -132,12 +132,267 @@ func TestGenerateSpecSchema(t *testing.T) {
 		if !strings.Contains(schemaStr, `"verbose"`) {
 			t.Error("Schema should contain parameter 'verbose' from the get operation")
 		}
-		if !strings.Contains(schemaStr, `"PARAMETER: query - "`) {
+		if !strings.Contains(schemaStr, `"PARAMETER: query"`) {
 			t.Error("Parameter description was not added correctly")
 		}
 	})
 
-	t.Run("should exclude configured parameters from the spec schema", func(t *testing.T) {
+	t.Run("should include enum validation for string properties", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+		}
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{
+									"application/json": {
+										Type: []string{"object"},
+										Properties: []Property{
+											{
+												Name: "status",
+												Schema: &Schema{
+													Type: []string{"string"},
+													Enum: []interface{}{"active", "inactive"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// Act
+		result, err := generator.Generate()
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		// Assert
+		schemaStr := string(result.SpecSchema)
+		// Check for the key parts separately to be less sensitive to indentation and exact formatting.
+		if !strings.Contains(schemaStr, `"status"`) {
+			t.Error("Schema is missing 'status' property")
+		}
+		if !strings.Contains(schemaStr, `"enum"`) {
+			t.Error("Schema is missing 'enum' key for status property")
+		}
+		if !strings.Contains(schemaStr, `"active"`) || !strings.Contains(schemaStr, `"inactive"`) {
+			t.Error("Schema is missing enum values 'active' or 'inactive'")
+		}
+	})
+
+	t.Run("should exclude a top-level field from the spec schema", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+			ExcludedSpecFields: []string{"size"},
+		}
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{
+									"application/json": {
+										Type: []string{"object"},
+										Properties: []Property{
+											{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+											{Name: "size", Schema: &Schema{Type: []string{"number"}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// Act
+		result, err := generator.Generate()
+
+		// Assert
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		schemaStr := string(result.SpecSchema)
+		if strings.Contains(schemaStr, `"size"`) {
+			t.Error("Schema should NOT contain 'size' as it is an excluded field")
+		}
+	})
+
+	t.Run("should exclude a nested field from the spec schema", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+			ExcludedSpecFields: []string{"dimensions.width"},
+		}
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{
+									"application/json": {
+										Type: []string{"object"},
+										Properties: []Property{
+											{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+											{Name: "dimensions", Schema: &Schema{
+												Type: []string{"object"},
+												Properties: []Property{
+													{Name: "width", Schema: &Schema{Type: []string{"number"}}},
+													{Name: "height", Schema: &Schema{Type: []string{"number"}}},
+												},
+											}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// Act
+		result, err := generator.Generate()
+
+		// Assert
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		schemaStr := string(result.SpecSchema)
+		if strings.Contains(schemaStr, `"width"`) {
+			t.Error("Schema should NOT contain 'width' as it is an excluded field")
+		}
+	})
+
+	t.Run("should exclude many fields from the spec schema", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+			ExcludedSpecFields: []string{"name", "dimensions.height"},
+		}
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{
+									"application/json": {
+										Type: []string{"object"},
+										Properties: []Property{
+											{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+											{Name: "dimensions", Schema: &Schema{
+												Type: []string{"object"},
+												Properties: []Property{
+													{Name: "width", Schema: &Schema{Type: []string{"number"}}},
+													{Name: "height", Schema: &Schema{Type: []string{"number"}}},
+												},
+											}},
+											{Name: "color", Schema: &Schema{Type: []string{"string"}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+		// Act
+		result, err := generator.Generate()
+		// Assert
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+		schemaStr := string(result.SpecSchema)
+		if strings.Contains(schemaStr, `"name"`) {
+			t.Error("Schema should NOT contain 'name' as it is an excluded field")
+		}
+		if strings.Contains(schemaStr, `"height"`) {
+			t.Error("Schema should NOT contain 'height' as it is an excluded field")
+		}
+		if !strings.Contains(schemaStr, `"width"`) {
+			t.Error("Schema should contain 'width' as it is NOT an excluded field")
+		}
+		if !strings.Contains(schemaStr, `"color"`) {
+			t.Error("Schema should contain 'color' as it is NOT an excluded field")
+		}
+	})
+
+	t.Run("should generate a warning when an excluded field is not found", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+			ExcludedSpecFields: []string{"non_existent_field"},
+		}
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{
+									"application/json": {
+										Type: []string{"object"},
+										Properties: []Property{
+											{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// Act
+		result, err := generator.Generate()
+
+		// Assert
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		if len(result.GenerationWarnings) != 2 {
+			t.Fatalf("Expected 2 generation warnings for missing fields, but got %d", len(result.GenerationWarnings))
+		}
+		if !strings.Contains(result.GenerationWarnings[0].Error(), "non_existent_field") {
+			t.Errorf("Warning message should mention 'non_existent_field'")
+		}
+	})
+
+	t.Run("should exclude a configured field from the spec schema", func(t *testing.T) {
 		// Arrange
 		resourceConfig := &ResourceConfig{
 			Verbs: []Verb{
@@ -170,74 +425,231 @@ func TestGenerateSpecSchema(t *testing.T) {
 
 		// Act
 		result, err := generator.Generate()
+
+		// Assert
 		if err != nil {
 			t.Fatalf("Expected no error, but got: %v", err)
 		}
 
-		// Assert
 		schemaStr := string(result.SpecSchema)
 		if strings.Contains(schemaStr, `"api-version"`) {
-            t.Error("Schema should NOT contain 'api-version' as it is a configuration field")
-        }
-    })
+			t.Error("Schema should NOT contain 'api-version' as it is a configuration field")
+		}
+	})
 
-    t.Run("should include enum validation for string properties", func(t *testing.T) {
-        // Arrange
-        resourceConfig := &ResourceConfig{
-            Verbs: []Verb{
-                {Action: "create", Path: "/widgets", Method: "post"},
-            },
-        }
-        mockDoc := &mockOASDocument{
-            Paths: map[string]*mockPathItem{
-                "/widgets": {
-                    Ops: map[string]Operation{
-                        "post": &mockOperation{
-                            RequestBody: RequestBodyInfo{
-                                Content: map[string]*Schema{
-                                    "application/json": {
-                                        Type: []string{"object"},
-                                        Properties: []Property{
-                                            {
-                                                Name: "status",
-                                                Schema: &Schema{
-                                                    Type: []string{"string"},
-                                                    Enum: []interface{}{"active", "inactive"},
-                                                },
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        }
-        generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+	t.Run("should exclude a nested configured field from the spec schema", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+			ConfigurationFields: []ConfigurationField{
+				{
+					FromOpenAPI:        FromOpenAPI{Name: "credentials.username", In: "header"},
+					FromRestDefinition: FromRestDefinition{Actions: []string{"create"}},
+				},
+			},
+		}
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{
+									"application/json": {
+										Type: []string{"object"},
+										Properties: []Property{
+											{Name: "credentials", Schema: &Schema{
+												Type: []string{"object"},
+												Properties: []Property{
+													{Name: "username", Schema: &Schema{Type: []string{"string"}}},
+													{Name: "password", Schema: &Schema{Type: []string{"string"}}},
+												},
+											}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
 
-        // Act
-        result, err := generator.Generate()
-        if err != nil {
-            t.Fatalf("Expected no error, but got: %v", err)
-        }
+		// Act
+		result, err := generator.Generate()
 
-        // Assert
+		// Assert
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
 		schemaStr := string(result.SpecSchema)
-		// Check for the key parts separately to be less sensitive to indentation and exact formatting.
-		if !strings.Contains(schemaStr, `"status"`) {
-			t.Error("Schema is missing 'status' property")
+		if strings.Contains(schemaStr, `"username"`) {
+			t.Error("Schema should NOT contain 'username' as it is a configuration field")
 		}
-		if !strings.Contains(schemaStr, `"enum"`) {
-			t.Error("Schema is missing 'enum' key for status property")
+	})
+
+	t.Run("should generate a warning when a configured field is not found", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+			ConfigurationFields: []ConfigurationField{
+				{
+					FromOpenAPI:        FromOpenAPI{Name: "non_existent_field", In: "query"},
+					FromRestDefinition: FromRestDefinition{Actions: []string{"create"}},
+				},
+			},
 		}
-		if !strings.Contains(schemaStr, `"active"`) || !strings.Contains(schemaStr, `"inactive"`) {
-			t.Error("Schema is missing enum values 'active' or 'inactive'")
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{"application/json": {Type: []string{"object"}}},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// Act
+		result, err := generator.Generate()
+
+		// Assert
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		if len(result.GenerationWarnings) != 2 {
+			t.Fatalf("Expected 2 generation warning for missing field, but got %d", len(result.GenerationWarnings))
+		}
+		if !strings.Contains(result.GenerationWarnings[0].Error(), "non_existent_field") {
+			t.Errorf("Warning message should mention 'non_existent_field'")
+		}
+	})
+
+	t.Run("should handle required fields in the spec schema", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+		}
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{
+									"application/json": {
+										Type:     []string{"object"},
+										Required: []string{"name"},
+										Properties: []Property{
+											{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+											{Name: "size", Schema: &Schema{Type: []string{"integer"}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// Act
+		result, err := generator.Generate()
+		// Assert
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		schemaStr := string(result.SpecSchema)
+		if !strings.Contains(schemaStr, `"name"`) {
+			t.Error("Schema should contain 'name' property from request body")
+		}
+		if !strings.Contains(schemaStr, `"size"`) {
+			t.Error("Schema should contain 'size' property from request body")
+		}
+		if !strings.Contains(schemaStr, `"required": [ "name" ]`) && strings.Contains(schemaStr, `"required": [ "size" ]`) {
+			t.Error("Schema should mark 'name' as a required property and not 'size'")
+		}
+	})
+
+	t.Run("should correctly handle allOf with an empty referenced schema", func(t *testing.T) {
+		// Arrange
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+			},
+		}
+
+		// Define the empty schema that will be "referenced"
+		emptySchema := &Schema{
+			Type:       []string{"object"},
+			Properties: []Property{}, // Explicitly empty properties
+		}
+
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{
+									"application/json": {
+										Type: []string{"object"},
+										Properties: []Property{
+											{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+										},
+										AllOf: []*Schema{
+											emptySchema, // Point directly to the schema instance
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// Act
+		result, err := generator.Generate()
+
+		// Assert
+		if err != nil {
+			t.Fatalf("Expected no error, but got: %v", err)
+		}
+
+		schemaStr := string(result.SpecSchema)
+
+		// 1. Verify the parent's own property is still there.
+		if !strings.Contains(schemaStr, `"name"`) {
+			t.Error("Schema should still contain 'name' property from the parent")
+		}
+
+		// 2. Verify the allOf keyword has been successfully removed.
+		if strings.Contains(schemaStr, `allOf`) {
+			t.Error("Schema should not contain 'allOf' after processing")
 		}
 	})
 }
 
+
 func TestGenerateStatusSchema(t *testing.T) {
+
 	t.Run("should generate a status schema from the get action response", func(t *testing.T) {
 		// Arrange
 		resourceConfig := &ResourceConfig{

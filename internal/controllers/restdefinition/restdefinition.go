@@ -353,6 +353,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Identifiers:            cr.Spec.Resource.Identifiers,
 			AdditionalStatusFields: cr.Spec.Resource.AdditionalStatusFields,
 			ConfigurationFields:    configurationFields,
+			ExcludedSpecFields:     cr.Spec.Resource.ExcludedSpecFields,
 		}
 
 		// Create the OAS schema generator
@@ -368,9 +369,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("generating schemas: %w", err)
 		}
 		for _, er := range result.GenerationWarnings {
+			e.log.Debug("Some schema generation warnings were found, below the list")
 			e.log.Debug("Schema generation warning", "Warning", er)
 		}
 		for _, er := range result.ValidationWarnings {
+			e.log.Debug("Some schema validation warnings were found, below the list")
 			e.log.Debug("Schema validation warning", "Warning", er)
 		}
 

@@ -39,6 +39,10 @@ type Resource struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="ConfigurationFields are immutable, you cannot change them once the CRD has been generated"
 	// +optional
 	ConfigurationFields []ConfigurationField `json:"configurationFields,omitempty"`
+	// ExcludedSpecFields: the list of fields to exclude from the spec of the generated CRD (for example server-generated technical IDs could be excluded)
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="ExcludedSpecFields are immutable, you cannot change them once the CRD has been generated"
+	// +optional
+	ExcludedSpecFields []string `json:"excludedSpecFields,omitempty"`
 }
 
 // RestDefinitionSpec is the specification of a RestDefinition.

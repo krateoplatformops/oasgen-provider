@@ -30,8 +30,7 @@ func (g *OASSchemaGenerator) findParameterInOAS(field ConfigurationField) (*Para
 }
 
 // getBaseSchemaForSpec returns the base schema for the spec, which is the request body of the 'create' action.
-// TODO: what about no create action but only update? TO BE DISCUSSED
-// maybe this could be configured in the GeneratorConfig
+// TODO: what about no create action but only update? TO BE DISCUSSED (maybe this could be configured in the GeneratorConfig)
 func (g *OASSchemaGenerator) getBaseSchemaForSpec() (*Schema, error) {
 	for _, verb := range g.resourceConfig.Verbs {
 		if verb.Action != ActionCreate { // Right now we hardcode the action to 'create'
@@ -62,8 +61,7 @@ func (g *OASSchemaGenerator) getBaseSchemaForSpec() (*Schema, error) {
 }
 
 // getBaseSchemaForStatus returns the base schema for the status, which is the response body of the 'get' or 'findby' action.
-// TODO: what about no get/findby action but only update? TO BE DISCUSSED
-// maybe this could be configured in the GeneratorConfig
+// TODO: what about no get/findby action but only update? TO BE DISCUSSED (maybe this could be configured in the GeneratorConfig)
 func (g *OASSchemaGenerator) getBaseSchemaForStatus() (*Schema, error) {
 	actions := []string{ActionGet, ActionFindBy}
 	for _, action := range actions {

@@ -2,6 +2,7 @@ package oas2jsonschema
 
 import (
 	"fmt"
+	"log"
 )
 
 // OASSchemaGenerator orchestrates the generation of CRD schemas from an OpenAPI document.
@@ -35,12 +36,20 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	}
 	generationWarnings = append(generationWarnings, warnings...)
 
+	log.Print("======= Final Spec Schema =======")
+	log.Print(string(specSchema))
+	log.Print("======= End Spec Schema =======")
+
 	statusSchema, warnings, err := g.BuildStatusSchema()
 	if err != nil {
 		// A failure to generate status schema is not considered a fatal error. (TO BE DISCUSSED)
 		generationWarnings = append(generationWarnings, fmt.Errorf("failed to generate status schema: %w", err))
 	}
 	generationWarnings = append(generationWarnings, warnings...)
+
+	log.Print("======= Status Schema =======")
+	log.Print(string(statusSchema))
+	log.Print("======= End Status Schema =======")
 
 	validationWarnings := ValidateSchemas(g.doc, g.resourceConfig.Verbs, g.generatorConfig)
 

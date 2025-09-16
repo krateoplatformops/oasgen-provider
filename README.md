@@ -248,6 +248,10 @@ spec:
       - id
       - revision
       - createdAt
+    
+    # optional, fields to exclude from spec (e.g., server-generated technical IDs you don't want users to set)
+    excludedSpecFields:
+      - id  
 
     # optional, declare configuration params to expose in the generated *Configuration CRD (Authentication is always included if needed)
     configurationFields:
@@ -308,6 +312,7 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 | `resource.verbsDescription[].path` | string | ✔︎ | — | HTTP path for the endpoint; must exist in the referenced OAS. | Should exactly match the OAS path you mapped. |
 | `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and are written in status. | Immutable once generated. It is important to choose identifiers that are unique per resource. If `findby` is not present use just `additionalStatusFields` and not `identifiers`. |
 | `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid` but also others returned by the API you want to see in status). Usually some of these are used in the `get` action. | Immutable once generated. |
+| `resource.excludedSpecFields[]` | array<string> | ✖︎ | ✔︎ | Fields to exclude from spec (e.g., server-generated technical IDs you don't want users to set). | Immutable once generated. |
 | `resource.configurationFields[]` | array<object> | ✖︎ | ✔︎ | Declares configuration parameters in the generated `*Configuration` CRD. | Immutable once generated. Authentication is always included if needed (you do not need to specify it here). |
 | `resource.configurationFields[].fromOpenAPI.in` | string | ✔︎ | — | Location of the parameter in the OAS. | Could be `query`, `path`, `header`, `cookie` etc. |
 | `resource.configurationFields[].fromOpenAPI.name` | string | ✔︎ | — | Parameter name as defined in the OAS. | Must match the OAS exactly. |
@@ -315,9 +320,9 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 
 **Required top-level fields:** `spec.oasPath`, `spec.resourceGroup`, and `spec.resource`. 
 **Within** `spec.resource`, `kind` and `verbsDescription` are mandatory.
-**Validation & mutability highlights**
 
-- `resourceGroup`, `resource.kind`, `resource.identifiers`, `resource.additionalStatusFields`, and `resource.configurationFields` are **immutable** (Kubernetes validation enforces `self == oldSelf`). Plan carefully before applying.
+**Validation & mutability highlights**:
+- `resourceGroup`, `resource.kind`, `resource.identifiers`, `resource.additionalStatusFields`, `resource.excludedSpecFields`, and `resource.configurationFields` are **immutable** (Kubernetes validation enforces `self == oldSelf`). Plan carefully before applying.
 - `verbsDescription[].action`/`method` are **enum**-restricted; `path` must point to an endpoint present in your OAS.
 - `oasPath` accepts either `configmap://...` or `http(s)://...` and can be updated over time; keep the `create` request body and parameters stable to avoid CRD/schema drift. Otherwise, you may need to delete/recreate the RestDefinition.
 
@@ -325,7 +330,8 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 
 - Start with both `findby` and `get` actions where applicable: `findby` to locate a resource using human-friendly identifiers, `get` for subsequent, efficient lookups using technical IDs. (See the dedicated action sections below: [action `findby`](#action-findby) and [action `get`](#action-get).)
 - Keep `identifiers` small, unique, and human-friendly (e.g., name, email), and place technical IDs (e.g., id, uuid) under `additionalStatusFields`. It is important to choose identifiers that are unique per resource.
-- Use `configurationFields` to expose cookies, headers, query and path parameters (e.g., `api-version`) across specific actions with a specific array or all actions with ["*"].
+- Use `excludedSpecFields` to avoid putting server-generated fields in spec (e.g., `id`).
+- Use `configurationFields` to expose cookies, headers, query and path parameters (e.g., `api-version`) across specific actions with a specific array or all actions with ["*"]. It is duty of the platform engineer to decide whether a parameter should be considered a configuration parameter rather than an application parameter.
 
 #### Regex and enums (for reference)
 
@@ -686,19 +692,22 @@ Additionally, whenever needed you can leverage custom web service wrappers for a
 To ensure optimal performance and reliability when using the OASGen Provider, consider the following best practices:
 1. Always use only OAS 3.0+ specifications as lower versions are not supported.
 2. Maintain consistent field naming across API endpoints.
-3. Use web service wrappers when API interfaces are inconsistent.
+3. Use web service wrappers when API interfaces are inconsistent or additional processing is needed.
 4. Regularly update OAS documents to match API changes.
-5. Monitor controller logs with `krateo.io/connector-verbose: "true"`.
+5. Monitor controller logs with the `krateo.io/connector-verbose: "true"` annotation added to the CR of the resource you want to monitor.
 
 ## Unsupported features
 
-Currently, the following OAS features are not supported by OASGen provider:
+Currently, the following OAS features are not supported by OASGen Provider:
 
 - `nullable` is not supported. `nullable` was removed in OAS 3.1 in favor of using `null` type in the array `type`.
-- `anyOf` and `oneOf` are not supported.
-- `format` is not supported.
+- `anyOf`, `oneOf`, `not` are not supported.
+- `additionalProperties` is supported only in the boolean form (i.e., `additionalProperties: true`). If `additionalProperties` is an object, it is not supported.
+- `format` is not supported: if OASGen Provider encounters a `format` field, it will simply append it into the description of the field as a note, but it will not use it to generate a more specific type.
+- `minItems`, `maxItems`, `minLength`, `maxLength`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, and `pattern` are not supported.
+- `readOnly` and `writeOnly` are not supported.
 
-Note that this list may not be exhaustive and other features may also be unsupported. 
+Note that this list **may not be exhaustive** and other features may also be unsupported. 
 
 ### OAS 3.0 vs OAS 3.1
 

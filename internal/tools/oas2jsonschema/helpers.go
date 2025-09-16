@@ -116,6 +116,7 @@ func prepareSchemaForCRDWithVisited(
 				}
 			}
 		}
+		schema.AllOf = nil // Clear AllOf after merging TODO testing
 	}
 
 	// Process object properties
@@ -261,7 +262,12 @@ func schemaToMapWithVisited(
 	}
 
 	// Process AllOf
+	// In theory, allOf should have been merged already during CRD preparation (prepareSchemaForCRD).
+	// Therefore no `allOf` should remain at this point.
+	// Kept here for safety.
 	if len(schema.AllOf) > 0 {
+		// consider adding a log here to indicate unexpected allOf presence
+		//log.Printf("Processing allOf inside schemaToMapWithVisited at depth %d", depth)
 		allOfList := make([]interface{}, 0, len(schema.AllOf))
 		for i, s := range schema.AllOf {
 			allOfMap, err := schemaToMapWithVisited(ctx, s, guard, visited, depth+1)
@@ -295,9 +301,6 @@ func GenerateJsonSchema(schema *Schema, config *GeneratorConfig) ([]byte, error)
 	if schemaMap == nil {
 		return []byte("null"), nil
 	}
-
-	// Add standard JSON schema fields
-	schemaMap["$schema"] = "http://json-schema.org/draft-07/schema#"
 
 	return json.MarshalIndent(schemaMap, "", "  ")
 }

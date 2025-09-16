@@ -3,6 +3,7 @@ package oas2jsonschema
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"time"
@@ -137,6 +138,7 @@ func (a *libOASOperationAdapter) GetParameters() []ParameterInfo {
 			Name:        p.Name,
 			In:          p.In,
 			Description: p.Description,
+			Required:    p.Required != nil && *p.Required,
 			Schema:      convertLibopenapiSchema(p.Schema),
 		})
 	}
@@ -222,6 +224,7 @@ func convertLibopenapiSchemaWithVisited(
 
 	// Create a new schema placeholder and add it to the visited map before building or processing the schema.
 	// This is used to break the recursion.
+	// domainSchema is the schema defined in this domain (oas2jsonschema)
 	domainSchema := &Schema{}
 	if proxy.IsReference() {
 		ref := proxy.GetReference()
@@ -230,8 +233,7 @@ func convertLibopenapiSchemaWithVisited(
 		}
 	}
 
-	// Gracefully handle panics from the underlying library, which can occur with
-	// invalid schemas (e.g., dangling references).
+	// Gracefully handle panics from the underlying library, which can occur with invalid schemas (e.g., dangling references).
 	defer func() {
 		if r := recover(); r != nil {
 			// Log the panic for debugging
@@ -249,6 +251,7 @@ func convertLibopenapiSchemaWithVisited(
 		return domainSchema
 	}
 
+	// Default handling
 	var defaultVal interface{}
 	if s.Default != nil {
 		if err := s.Default.Decode(&defaultVal); err != nil {
@@ -285,15 +288,24 @@ func convertLibopenapiSchemaWithVisited(
 			domainSchema.AdditionalProperties = s.AdditionalProperties.B
 		case s.AdditionalProperties.IsA():
 			// Schema form: recurse to handle nested schemas properly
-			// Currently not handled in `oasgen-provider`
+			// Currently not handled in `oasgen-provider`, ignored
+			//log.Print("Warning: Schema form of AdditionalProperties is not currently handled")
 		default:
-			log.Printf("Warning: Unknown AdditionalProperties type")
+			//log.Print("Warning: Unknown AdditionalProperties type")
 		}
 	}
 
-	// Assign MaxProperties if present, as per JSON Schema spec (any non-negative integer).
+	// MaxProperties handling
+	// as per JSON Schema spec (any non-negative integer).
 	if s.MaxProperties != nil {
 		domainSchema.MaxProperties = int(*s.MaxProperties)
+	}
+
+	// Format handling
+	// If a format is specified, append it to the description for additional context.
+	// There is no format validation
+	if s.Format != "" {
+		domainSchema.Description = appendFormatToDescription(domainSchema.Description, s.Format)
 	}
 
 	// Properties handling
@@ -317,10 +329,13 @@ func convertLibopenapiSchemaWithVisited(
 		case s.Items.IsB():
 			// OAS 3.1 tuple validation: array of schemas
 			// Currently not handled in `oasgen-provider`
+			log.Print("Warning: array of schemas in 'items' is not currently handled")
+		default:
+			log.Print("Warning: Unknown 'items' type")
 		}
 	}
 
-	// Handle AllOf
+	// AllOf handling
 	if len(s.AllOf) > 0 {
 		domainSchema.AllOf = make([]*Schema, 0, len(s.AllOf))
 		for _, allOfProxy := range s.AllOf {
@@ -331,7 +346,17 @@ func convertLibopenapiSchemaWithVisited(
 	return domainSchema
 }
 
-// Note: currently not used
+// appendFormatToDescription appends the format information to the description string.
+// If the format is empty, it returns the original description unchanged.
+// This is a simple utility to enhance schema descriptions with format details.
+func appendFormatToDescription(description, format string) string {
+	if format == "" {
+		return description
+	}
+	return fmt.Sprintf("%s (format: %s)", description, format)
+}
+
+// Note: function currently not used
 func convertToLibopenapiSchema(schema *Schema) *base.Schema {
 	if schema == nil {
 		return nil

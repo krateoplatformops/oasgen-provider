@@ -53,6 +53,8 @@ const (
 	CodeNoRootSchema GenerationCode = "NoRootSchema"
 	// CodeNoStatusSchema indicates that no schema could be found for the status.
 	CodeNoStatusSchema GenerationCode = "NoStatusSchema"
+	// CodeFieldNotFound indicates that a field was not found in the schema.
+	CodeFieldNotFound GenerationCode = "FieldNotFound"
 )
 
 // SchemaGenerationError defines a structured error for schema generation warnings.

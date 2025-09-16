@@ -15,6 +15,7 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 		return nil, nil
 	}
 
+	// Root schema for the entire configuration.
 	rootSchema := &Schema{
 		Type:       []string{"object"},
 		Properties: []Property{},
@@ -48,7 +49,7 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 					break
 				}
 			}
-			// If not found, create a new schema for the action.
+			// If not found, create a new schema for the action (e.g., "get").
 			if !found {
 				actionSchema = &Schema{Type: []string{"object"}, Properties: []Property{}}
 				paramTypeSchema.Properties = append(paramTypeSchema.Properties, Property{
@@ -60,6 +61,9 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 			// Add a deep copy of the parameter's schema to the action's schema
 			// to prevent issues with shared schema references.
 			actionSchema.Properties = append(actionSchema.Properties, Property{Name: param.Name, Schema: param.Schema.deepCopy()})
+			if param.Required {
+				actionSchema.Required = append(actionSchema.Required, param.Name)
+			}
 		}
 	}
 
@@ -95,7 +99,7 @@ func (g *OASSchemaGenerator) buildAuthMethodsSchemaMap() (map[string]*Schema, er
 		authSchema, err := createSchemaForSecurityScheme(secScheme)
 		if err != nil {
 			// Skip unsupported security schemes
-			// TODO: add logging here
+			// TODO: Consider logging a warning here.
 			continue
 		}
 		schemaMap[secScheme.Scheme] = authSchema

@@ -119,6 +119,17 @@ spec:
                     - message: ConfigurationFields are immutable, you cannot change
                         them once the CRD has been generated
                       rule: self == oldSelf
+                  excludedSpecFields:
+                    description: 'ExcludedSpecFields: the list of fields to exclude
+                      from the spec of the generated CRD (for example server-generated
+                      technical IDs could be excluded)'
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-validations:
+                    - message: ExcludedSpecFields are immutable, you cannot change
+                        them once the CRD has been generated
+                      rule: self == oldSelf
                   identifiers:
                     description: 'Identifiers: the list of fields to use as identifiers
                       - used to populate the status of the resource'
