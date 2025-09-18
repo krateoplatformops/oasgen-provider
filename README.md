@@ -185,18 +185,18 @@ In this secondo scenario, very similar to the first one, the Rest Dynamic Contro
 ### Standard scenario
 
 1. User applies a RestDefinition CR.
-2. oasegn-provider fetches the OAS specification.
-3. oasegn-provider generates a CRD based on the OAS schema.
-4. oasegn-provider deploys the specific Rest Dynamic Controller.
+2. `oasgen-provider` fetches the OAS specification.
+3. `oasgen-provider` generates a CRD based on the OAS schema.
+4. `oasgen-provider` deploys the specific Rest Dynamic Controller.
 5. Rest Dynamic Controller manages custom resources according to API specifications.
 6. Resources states are synchronized with external APIs (observe, create, update, delete).
 
 ### Scenario with Plugin (Wrapper Web Service)
 
 1. User applies a RestDefinition CR.
-2. oasegn-provider fetches the OAS specification.
-3. oasegn-provider generates a CRD based on the OAS schema.
-4. oasegn-provider deploys the specific Rest Dynamic Controller.
+2. `oasgen-provider` fetches the OAS specification.
+3. `oasgen-provider` generates a CRD based on the OAS schema.
+4. `oasgen-provider` deploys the specific Rest Dynamic Controller.
 5. Rest Dynamic Controller manages custom resources according to API specifications.
 6. Resources states are synchronized with external APIs (observe, create, update, delete) **through the Plugin (Wrapper Web Service) as an intermediary**.
 
@@ -371,8 +371,8 @@ graph LR
     B[Observed <br> current state]
   end
 
-  A -->|create <br> update <br> delete| B
-  B -->|findby <br> get| A
+  A -->|**Act** <br> create <br> update <br> delete| B
+  A -->|**Observe** <br> findby <br> get| B
 ```
 
 ### Action `findby`

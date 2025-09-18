@@ -21,14 +21,11 @@ func NewOASSchemaGenerator(doc OASDocument, config *GeneratorConfig, resourceCon
 	}
 }
 
-// Note on convention used in this package:
-// - Methods: stateful operations that use the generator's state
-// - Functions: stateless operations that do not rely on the generator's state
-
 // Generate orchestrates the full schema (spec + status) generation process along with configuration schema if needed.
 func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	var generationWarnings []error
 
+	// Generate Spec Schema
 	specSchema, warnings, err := g.BuildSpecSchema()
 	if err != nil {
 		// fatal error
@@ -40,9 +37,10 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	log.Print(string(specSchema))
 	log.Print("======= End Spec Schema =======")
 
+	// Generate Status Schema
 	statusSchema, warnings, err := g.BuildStatusSchema()
 	if err != nil {
-		// A failure to generate status schema is not considered a fatal error. (TO BE DISCUSSED)
+		// A failure to generate status schema is currently not considered a fatal error.
 		generationWarnings = append(generationWarnings, fmt.Errorf("failed to generate status schema: %w", err))
 	}
 	generationWarnings = append(generationWarnings, warnings...)
@@ -51,8 +49,10 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	log.Print(string(statusSchema))
 	log.Print("======= End Status Schema =======")
 
+	// Validate Status Schema
 	validationWarnings := ValidateSchemas(g.doc, g.resourceConfig.Verbs, g.generatorConfig)
 
+	// Generate Configuration Schema if needed
 	var configurationSchema []byte
 	if len(g.resourceConfig.ConfigurationFields) > 0 || len(g.doc.SecuritySchemes()) > 0 {
 		var err error

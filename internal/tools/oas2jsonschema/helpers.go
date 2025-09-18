@@ -142,7 +142,8 @@ func convertNumberToInteger(schema *Schema) {
 }
 
 // schemaToMap converts our domain-specific Schema object into a map[string]interface{}
-// suitable for JSON marshalling. It handles circular references to prevent stack overflow.
+// suitable for JSON marshalling.
+// It handles circular references to prevent stack overflow.
 func schemaToMap(schema *Schema, config *GeneratorConfig) (map[string]interface{}, error) {
 	if schema == nil {
 		return nil, nil
@@ -262,11 +263,12 @@ func schemaToMapWithVisited(
 	}
 
 	// Process AllOf
-	// In theory, allOf should have been merged already during CRD preparation (prepareSchemaForCRD).
-	// Therefore no `allOf` should remain at this point.
+	// In theory, AllOf should have been merged already during CRD preparation (prepareSchemaForCRD).
+	// And the `AllOf` field should be empty after that.
+	// Therefore no `AllOf` should remain at this point.
 	// Kept here for safety.
 	if len(schema.AllOf) > 0 {
-		// consider adding a log here to indicate unexpected allOf presence
+		// consider adding a log here to indicate unexpected AllOf presence
 		//log.Printf("Processing allOf inside schemaToMapWithVisited at depth %d", depth)
 		allOfList := make([]interface{}, 0, len(schema.AllOf))
 		for i, s := range schema.AllOf {

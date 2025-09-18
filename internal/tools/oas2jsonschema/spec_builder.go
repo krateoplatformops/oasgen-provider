@@ -62,7 +62,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 
 	uniqueParams := make(map[string]struct{})
 
-	// Helper function to check if property already exists in schema
+	// Internal helper function to check if property already exists in schema
 	propertyExists := func(name string) bool {
 		for _, prop := range schema.Properties {
 			if prop.Name == name {
@@ -90,7 +90,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 
 		// 3. Parameters lookup
 		for _, param := range op.GetParameters() {
-			// if is authorizaion header, skip it as it is managed by the configuration CR withing the autehntication section.
+			// if is authorization header, skip it as it is managed by the Configuration CR within the authentication section.
 			if isAuthorizationHeader(param) {
 				//fmt.Printf("Skipping authorization header: %s\n", param.Name)
 				continue
@@ -99,7 +99,6 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 			// Add parameter to spec only if not already present in uniqueParams AND not in existing base schema
 			// Therefore we give precedence to base schema properties over parameters.
 			if _, exists := uniqueParams[param.Name]; !exists && !propertyExists(param.Name) {
-				//fmt.Printf("Adding parameter: %s to spec schema\n", param.Name)
 				if param.Description == "" {
 					param.Schema.Description = fmt.Sprintf("PARAMETER: %s", param.In)
 				} else {
@@ -110,7 +109,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 				if param.Schema.Default != nil {
 					schema.Default = param.Schema.Default
 				}
-				//fmt.Printf("Adding parameter: %s to spec schema\n", param.Name)
+
 				uniqueParams[param.Name] = struct{}{}
 			}
 		}
@@ -119,7 +118,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 	return warnings
 }
 
-// addConfigurationRefToSpec adds the configurationRef property to the schema.
+// addConfigurationRefToSpec adds the `configurationRef` property to the schema.
 func addConfigurationRefToSpec(schema *Schema) {
 	configRefSchema := &Schema{
 		Type:        []string{"object"},
@@ -128,13 +127,14 @@ func addConfigurationRefToSpec(schema *Schema) {
 			{Name: "name", Schema: &Schema{Type: []string{"string"}}},
 			{Name: "namespace", Schema: &Schema{Type: []string{"string"}, Description: "Namespace of the referenced Configuration CR. If not provided, the same namespace will be used."}},
 		},
-		Required: []string{"name"}, // If namespace is not provided, it is RDC duty to use the same namespace as the resource.
+		Required: []string{"name"}, // If namespace is not provided, it is Rest Dynamic Controller's duty to use the same namespace as the resource.
 	}
 	schema.Properties = append(schema.Properties, Property{Name: "configurationRef", Schema: configRefSchema})
 	schema.Required = append(schema.Required, "configurationRef")
 }
 
 // addIdentifiersToSpec adds the identifiers to the schema.
+// Kept for legacy reasons, disabled by default.
 func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	for _, identifier := range identifiers {
 		found := false
@@ -211,6 +211,8 @@ func (g *OASSchemaGenerator) removeFieldAtPath(schema *Schema, fields []string) 
 	ctx, cancel := guard.WithContext()
 	defer cancel()
 
+	log.Printf("Initial schema properties: %v", schema.Properties)
+
 	return g.removeFieldAtPathRec(ctx, schema, fields, guard, 0)
 }
 
@@ -225,7 +227,9 @@ func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *S
 	}
 
 	fieldName := fields[0]
+	log.Printf("Processing field: %s", fieldName)
 	remainingFields := fields[1:]
+	log.Printf("Remaining fields to process: %v", remainingFields)
 
 	var newProperties []Property
 	found := false
@@ -239,7 +243,8 @@ func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *S
 				}
 				newProperties = append(newProperties, prop)
 			} else {
-				// This is the field to remove. We just don't add it to the new list.
+				// This is the field to remove since there are no more remaining fields (last in the "dot" path).
+				// We just don't add it to the new list.
 				found = true
 			}
 		} else {
@@ -247,7 +252,9 @@ func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *S
 		}
 	}
 	schema.Properties = newProperties
+	log.Printf("After processing, schema properties are now: %v", schema.Properties)
 
+	// If the field was found and removed, also remove it from the required list
 	if found && len(remainingFields) == 0 {
 		// Remove from required list
 		var newRequired []string
