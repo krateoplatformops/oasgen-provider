@@ -377,6 +377,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			e.log.Debug("Schema validation warning", "Warning", er)
 		}
 
+		e.log.Debug("Generating CRD for", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 		resource := crdgen.Generate(ctx, crdgen.Options{
 			Managed:                true,
 			WorkDir:                fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
@@ -394,6 +395,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("unmarshalling CRD: %w", err)
 		}
 
+		e.log.Debug("Applying CRD for", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 		err = kube.Apply(ctx, e.kube, crdu, kube.ApplyOptions{})
 		if err != nil {
 			return fmt.Errorf("installing CRD: %w", err)
@@ -407,6 +409,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind) + "Configuration",
 		}
 
+		e.log.Debug("Generating Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
 		cfgResource := crdgen.Generate(ctx, crdgen.Options{
 			Managed:              false, // Configuration is not a managed resource
 			WorkDir:              fmt.Sprintf("gen-crds/%s", cfgGVK.Kind),
@@ -423,18 +426,19 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("unmarshalling configuration CRD: %w", err)
 		}
 
+		e.log.Debug("Applying Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
 		err = kube.Apply(ctx, e.kube, cfgCRDU, kube.ApplyOptions{})
 		if err != nil {
 			return fmt.Errorf("installing configuration CRD: %w", err)
 		}
-		e.log.Debug("Created Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
+		e.log.Debug("Applied Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
 
 		cr.SetConditions(rtv1.Creating())
 		err = e.kube.Status().Update(ctx, cr)
 		if err != nil {
 			return fmt.Errorf("updating status: %w", err)
 		}
-		e.log.Debug("Created CRD", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+		e.log.Debug("Applied CRD", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
 		e.rec.Eventf(cr, corev1.EventTypeNormal, "RestDefinitionCreating",
 			"RestDefinition '%s/%s' creating", cr.Spec.Resource.Kind, cr.Spec.ResourceGroup)
 

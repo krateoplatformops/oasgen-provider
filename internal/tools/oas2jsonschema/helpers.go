@@ -111,12 +111,12 @@ func prepareSchemaForCRDWithVisited(
 					allOfPrimaryType := getPrimaryType(allOfSchema.Type)
 					// Only merge properties from object-like schemas
 					if allOfPrimaryType == "object" || allOfPrimaryType == "" {
-						schema.Properties = append(schema.Properties, allOfSchema.Properties...)
+						schema.Properties = append(schema.Properties, allOfSchema.Properties...) // Merging properties that were in AllOf into Properties
 					}
 				}
 			}
 		}
-		schema.AllOf = nil // Clear AllOf after merging TODO testing
+		schema.AllOf = nil // Clear AllOf field after merging
 	}
 
 	// Process object properties
@@ -263,7 +263,7 @@ func schemaToMapWithVisited(
 	}
 
 	// Process AllOf
-	// In theory, AllOf should have been merged already during CRD preparation (prepareSchemaForCRD).
+	// In theory, AllOf should have been merged already during CRD preparation (`prepareSchemaForCRD` function).
 	// And the `AllOf` field should be empty after that.
 	// Therefore no `AllOf` should remain at this point.
 	// Kept here for safety.

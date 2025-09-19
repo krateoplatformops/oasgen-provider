@@ -11,7 +11,6 @@ import (
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
 	"github.com/pb33f/libopenapi"
 
-	//"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
@@ -29,11 +28,6 @@ func NewLibOASParser() Parser {
 // Parse takes raw OpenAPI specification content and returns a document
 // that conforms to the OASDocument interface.
 func (p *libOASParser) Parse(content []byte) (OASDocument, error) {
-
-	// to check if needed
-	//docConfig := datamodel.NewDocumentConfiguration()
-	//docConfig.IgnoreArrayCircularReferences = true
-	//d, err := libopenapi.NewDocumentWithConfiguration(content, docConfig)
 
 	d, err := libopenapi.NewDocument(content)
 	if err != nil {
@@ -61,6 +55,7 @@ func (p *libOASParser) Parse(content []byte) (OASDocument, error) {
 
 	// Resolve model references
 	// Ensures that all $ref pointers are properly resolved before further processing.
+	// This is just a validation step, there is no replacement of references in the model
 	resolvingErrors := doc.Index.GetResolver().Resolve()
 	if len(resolvingErrors) > 0 {
 		var errs []error
@@ -241,7 +236,7 @@ func convertLibopenapiSchemaWithVisited(
 		}
 	}()
 
-	s, err := proxy.BuildSchema()
+	s, err := proxy.BuildSchema() // This step resolves the reference if it's a $ref
 	if err != nil {
 		log.Printf("Schema build error: %v", err)
 		return domainSchema // Return the placeholder to avoid breaking parent

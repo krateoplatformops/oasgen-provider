@@ -3,7 +3,6 @@ package oas2jsonschema
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
@@ -105,9 +104,9 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 					param.Schema.Description = fmt.Sprintf("PARAMETER: %s - %s", param.In, param.Description)
 				}
 				schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: param.Schema})
-				schema.Required = append(schema.Required, param.Name)
-				if param.Schema.Default != nil {
-					schema.Default = param.Schema.Default
+				if param.Required {
+					//log.Printf("Adding required path / query parameter: %s\n", param.Name)
+					schema.Required = append(schema.Required, param.Name)
 				}
 
 				uniqueParams[param.Name] = struct{}{}
@@ -165,14 +164,14 @@ func isAuthorizationHeader(param ParameterInfo) bool {
 // removeConfiguredFields removes the fields from the schema that are defined in the configurationFields list.
 func (g *OASSchemaGenerator) removeConfiguredFields(schema *Schema) []error {
 	if len(g.resourceConfig.ConfigurationFields) == 0 {
-		log.Printf("No configurationFields to remove.")
+		//log.Printf("No configurationFields to remove.")
 		return nil
 	}
 
-	log.Printf("Removing configurationFields: ")
-	for _, field := range g.resourceConfig.ConfigurationFields {
-		log.Printf("- %s", field.FromOpenAPI.Name)
-	}
+	//log.Printf("Removing configurationFields: ")
+	//for _, field := range g.resourceConfig.ConfigurationFields {
+	//	log.Printf("- %s", field.FromOpenAPI.Name)
+	//}
 
 	var warnings []error
 	for _, field := range g.resourceConfig.ConfigurationFields {
@@ -186,11 +185,11 @@ func (g *OASSchemaGenerator) removeConfiguredFields(schema *Schema) []error {
 // removeExcludedSpecFields removes the fields from the schema that are defined in the excludedSpecFields list.
 func (g *OASSchemaGenerator) removeExcludedSpecFields(schema *Schema) []error {
 	if len(g.resourceConfig.ExcludedSpecFields) == 0 {
-		log.Printf("No excludedSpecFields to remove.")
+		//log.Printf("No excludedSpecFields to remove.")
 		return nil
 	}
 
-	log.Printf("Removing excludedSpecFields: %v", g.resourceConfig.ExcludedSpecFields)
+	//log.Printf("Removing excludedSpecFields: %v", g.resourceConfig.ExcludedSpecFields)
 
 	var warnings []error
 	for _, excludedField := range g.resourceConfig.ExcludedSpecFields {
@@ -205,13 +204,13 @@ func (g *OASSchemaGenerator) removeExcludedSpecFields(schema *Schema) []error {
 // It sets up a recursion guard and calls the recursive implementation.
 func (g *OASSchemaGenerator) removeFieldAtPath(schema *Schema, fields []string) bool {
 
-	log.Printf("Removing field at path: %v", fields)
+	//log.Printf("Removing field at path: %v", fields)
 
 	guard := safety.NewRecursionGuard(g.generatorConfig.MaxRecursionDepth, g.generatorConfig.MaxRecursionNodes, g.generatorConfig.RecursionTimeout)
 	ctx, cancel := guard.WithContext()
 	defer cancel()
 
-	log.Printf("Initial schema properties: %v", schema.Properties)
+	//log.Printf("Initial schema properties: %v", schema.Properties)
 
 	return g.removeFieldAtPathRec(ctx, schema, fields, guard, 0)
 }
@@ -227,9 +226,9 @@ func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *S
 	}
 
 	fieldName := fields[0]
-	log.Printf("Processing field: %s", fieldName)
+	//log.Printf("Processing field: %s", fieldName)
 	remainingFields := fields[1:]
-	log.Printf("Remaining fields to process: %v", remainingFields)
+	//log.Printf("Remaining fields to process: %v", remainingFields)
 
 	var newProperties []Property
 	found := false
@@ -243,7 +242,7 @@ func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *S
 				}
 				newProperties = append(newProperties, prop)
 			} else {
-				// This is the field to remove since there are no more remaining fields (last in the "dot" path).
+				// This is the field to remove since there are no more remaining fields (last element in the "dot" path).
 				// We just don't add it to the new list.
 				found = true
 			}
@@ -252,7 +251,7 @@ func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *S
 		}
 	}
 	schema.Properties = newProperties
-	log.Printf("After processing, schema properties are now: %v", schema.Properties)
+	//log.Printf("After processing, schema properties are now: %v", schema.Properties)
 
 	// If the field was found and removed, also remove it from the required list
 	if found && len(remainingFields) == 0 {
