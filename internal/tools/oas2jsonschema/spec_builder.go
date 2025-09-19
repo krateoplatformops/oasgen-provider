@@ -1,8 +1,11 @@
 package oas2jsonschema
 
 import (
+	"context"
 	"fmt"
 	"strings"
+
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
 )
 
 // BuildSpecSchema generates the complete spec schema for a given resource.
@@ -16,35 +19,35 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 		return nil, nil, fmt.Errorf("could not determine base schema for spec: %w", err)
 	}
 
-	// If the resource has configuration fields, add a reference to the configuration schema.
-	// This is done only if there are configuration fields or security schemes defined.
-	if len(g.resourceConfig.ConfigurationFields) > 0 || len(g.doc.SecuritySchemes()) > 0 {
-		addConfigurationRefToSpec(baseSchema)
-	}
-
-	// Create a lookup set of configured fields for efficient filtering.
-	configuredFieldsSet := g.getConfiguredFieldsSet()
-
-	// Remove any properties from the base schema that are defined as configuration fields.
-	// TODO: understand if this is actually needed
-	// If we decide that a field in the request body cannot be a configuration field, then this is not needed.
-	//filterConfiguredProperties(baseSchema, configuredFieldsSet)
-
-	// Add parameters to the spec schema, excluding those that are defined as configuration fields.
-	warnings = append(warnings, g.addParametersToSpec(baseSchema, configuredFieldsSet)...)
+	// Add parameters to the spec schema.
+	warnings = append(warnings, g.addParametersToSpec(baseSchema)...)
 
 	// Add identifiers to the spec schema, if configured.
 	if g.generatorConfig.IncludeIdentifiersInSpec {
 		addIdentifiersToSpec(baseSchema, g.resourceConfig.Identifiers)
 	}
 
+	// If the resource has configuration fields, add a reference to the configuration schema.
+	// This is done only if there are configuration fields or security schemes defined.
+	if len(g.resourceConfig.ConfigurationFields) > 0 || len(g.doc.SecuritySchemes()) > 0 {
+		addConfigurationRefToSpec(baseSchema)
+	}
+
+	// Remove configured fields from the spec schema.
+	warnings = append(warnings, g.removeConfiguredFields(baseSchema)...)
+
+	// Remove excluded fields from the spec schema.
+	warnings = append(warnings, g.removeExcludedSpecFields(baseSchema)...)
+
 	// Schema preparation for CRD compatibility.
-	if err := prepareSchemaForCRD(baseSchema); err != nil {
+	if err := prepareSchemaForCRD(baseSchema, g.generatorConfig); err != nil {
 		return nil, warnings, fmt.Errorf("could not prepare spec schema for CRD: %w", err)
 	}
 
+	//log.Printf("Spec schema AFTER prepareSchemaForCRD: %+v", baseSchema)
+
 	// Convert the schema to JSON schema format.
-	byteSchema, err := GenerateJsonSchema(baseSchema)
+	byteSchema, err := GenerateJsonSchema(baseSchema, g.generatorConfig)
 	if err != nil {
 		return nil, warnings, fmt.Errorf("could not generate final JSON schema: %w", err)
 	}
@@ -52,28 +55,21 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	return byteSchema, warnings, nil
 }
 
-// getConfiguredFieldsSet creates a map where keys are configured field identifiers
-// and values are a set of actions they apply to.
-func (g *OASSchemaGenerator) getConfiguredFieldsSet() map[string]map[string]struct{} {
-	configuredFields := make(map[string]map[string]struct{})
-	for _, field := range g.resourceConfig.ConfigurationFields {
-		key := fmt.Sprintf("%s-%s", field.FromOpenAPI.In, field.FromOpenAPI.Name)
-		if _, ok := configuredFields[key]; !ok {
-			configuredFields[key] = make(map[string]struct{})
-		}
-		for _, action := range field.FromRestDefinition.Actions {
-			configuredFields[key][action] = struct{}{}
-		}
-	}
-	return configuredFields
-}
-
-// addParametersToSpec adds the parameters from all verbs to the schema,
-// excluding those that are defined as configuration fields for that specific verb.
-func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredFields map[string]map[string]struct{}) []error {
+// addParametersToSpec adds the parameters from all verbs to the schema.
+func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 	var warnings []error
 
 	uniqueParams := make(map[string]struct{})
+
+	// Internal helper function to check if property already exists in schema
+	propertyExists := func(name string) bool {
+		for _, prop := range schema.Properties {
+			if prop.Name == name {
+				return true
+			}
+		}
+		return false
+	}
 
 	for _, verb := range g.resourceConfig.Verbs {
 
@@ -93,27 +89,26 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredField
 
 		// 3. Parameters lookup
 		for _, param := range op.GetParameters() {
-
-			// Check if this parameter is configured for the current action.
-			key := fmt.Sprintf("%s-%s", param.In, param.Name)
-			//fmt.Printf("Checking parameter: %s for action: %s\n", key, verb.Action)
-			if actions, ok := configuredFields[key]; ok {
-				if _, isConfiguredForAction := actions[verb.Action]; isConfiguredForAction {
-					continue // Skip this parameter as it's a configuration field for this action.
-				}
-			}
-
-			// if is authorizaion header, skip it as it is managed by the configuration CR withing the autehntication section.
+			// if is authorization header, skip it as it is managed by the Configuration CR within the authentication section.
 			if isAuthorizationHeader(param) {
 				//fmt.Printf("Skipping authorization header: %s\n", param.Name)
 				continue
 			}
 
-			// Add parameter to spec only if not already present.
-			if _, exists := uniqueParams[param.Name]; !exists {
-				param.Schema.Description = fmt.Sprintf("PARAMETER: %s - %s", param.In, param.Description)
+			// Add parameter to spec only if not already present in uniqueParams AND not in existing base schema
+			// Therefore we give precedence to base schema properties over parameters.
+			if _, exists := uniqueParams[param.Name]; !exists && !propertyExists(param.Name) {
+				if param.Description == "" {
+					param.Schema.Description = fmt.Sprintf("PARAMETER: %s", param.In)
+				} else {
+					param.Schema.Description = fmt.Sprintf("PARAMETER: %s - %s", param.In, param.Description)
+				}
 				schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: param.Schema})
-				//fmt.Printf("Adding parameter: %s to spec schema\n", param.Name)
+				if param.Required {
+					//log.Printf("Adding required path / query parameter: %s\n", param.Name)
+					schema.Required = append(schema.Required, param.Name)
+				}
+
 				uniqueParams[param.Name] = struct{}{}
 			}
 		}
@@ -122,22 +117,23 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema, configuredField
 	return warnings
 }
 
-// addConfigurationRefToSpec adds the configurationRef property to the schema.
+// addConfigurationRefToSpec adds the `configurationRef` property to the schema.
 func addConfigurationRefToSpec(schema *Schema) {
 	configRefSchema := &Schema{
 		Type:        []string{"object"},
-		Description: "A reference to the Configuration CR that holds all the needed configuration for this resource.",
+		Description: "A reference to the Configuration CR that holds all the needed configuration for this resource. OASGen Provider added this field automatically.",
 		Properties: []Property{
 			{Name: "name", Schema: &Schema{Type: []string{"string"}}},
-			{Name: "namespace", Schema: &Schema{Type: []string{"string"}, Description: "Namespace of the referenced Configuration. If not provided, the same namespace will be used."}},
+			{Name: "namespace", Schema: &Schema{Type: []string{"string"}, Description: "Namespace of the referenced Configuration CR. If not provided, the same namespace will be used."}},
 		},
-		Required: []string{"name"}, // If namespace is not provided, it is RDC duty to use the same namespace as the resource.
+		Required: []string{"name"}, // If namespace is not provided, it is Rest Dynamic Controller's duty to use the same namespace as the resource.
 	}
 	schema.Properties = append(schema.Properties, Property{Name: "configurationRef", Schema: configRefSchema})
 	schema.Required = append(schema.Required, "configurationRef")
 }
 
 // addIdentifiersToSpec adds the identifiers to the schema.
+// Kept for legacy reasons, disabled by default.
 func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	for _, identifier := range identifiers {
 		found := false
@@ -160,20 +156,114 @@ func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	}
 }
 
-// TODO: understand if this is actually needed
-// If we decide that a field in the request body cannot be a configuration field, then this is not needed.
-//func filterConfiguredProperties(schema *Schema, configuredFields map[string]struct{}) {
-//	var filteredProps []Property
-//	for _, prop := range schema.Properties {
-//		key := fmt.Sprintf("body-%s", prop.Name)
-//		if _, isConfigured := configuredFields[key]; !isConfigured {
-//			filteredProps = append(filteredProps, prop)
-//		}
-//	}
-//	schema.Properties = filteredProps
-//}
-
 // isAuthorizationHeader checks if the given parameter is an authorization header (case-insensitive).
 func isAuthorizationHeader(param ParameterInfo) bool {
 	return strings.EqualFold(param.In, "header") && strings.Contains(strings.ToLower(param.Name), "authorization")
+}
+
+// removeConfiguredFields removes the fields from the schema that are defined in the configurationFields list.
+func (g *OASSchemaGenerator) removeConfiguredFields(schema *Schema) []error {
+	if len(g.resourceConfig.ConfigurationFields) == 0 {
+		//log.Printf("No configurationFields to remove.")
+		return nil
+	}
+
+	//log.Printf("Removing configurationFields: ")
+	//for _, field := range g.resourceConfig.ConfigurationFields {
+	//	log.Printf("- %s", field.FromOpenAPI.Name)
+	//}
+
+	var warnings []error
+	for _, field := range g.resourceConfig.ConfigurationFields {
+		if !g.removeFieldAtPath(schema, strings.Split(field.FromOpenAPI.Name, ".")) {
+			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("field '%s' set in configurationFields not found in schema", field.FromOpenAPI.Name)})
+		}
+	}
+	return warnings
+}
+
+// removeExcludedSpecFields removes the fields from the schema that are defined in the excludedSpecFields list.
+func (g *OASSchemaGenerator) removeExcludedSpecFields(schema *Schema) []error {
+	if len(g.resourceConfig.ExcludedSpecFields) == 0 {
+		//log.Printf("No excludedSpecFields to remove.")
+		return nil
+	}
+
+	//log.Printf("Removing excludedSpecFields: %v", g.resourceConfig.ExcludedSpecFields)
+
+	var warnings []error
+	for _, excludedField := range g.resourceConfig.ExcludedSpecFields {
+		if !g.removeFieldAtPath(schema, strings.Split(excludedField, ".")) {
+			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("field '%s' set in excludedSpecFields not found in schema", excludedField)})
+		}
+	}
+	return warnings
+}
+
+// removeFieldAtPath is the public entry point for removing a nested field from a schema.
+// It sets up a recursion guard and calls the recursive implementation.
+func (g *OASSchemaGenerator) removeFieldAtPath(schema *Schema, fields []string) bool {
+
+	//log.Printf("Removing field at path: %v", fields)
+
+	guard := safety.NewRecursionGuard(g.generatorConfig.MaxRecursionDepth, g.generatorConfig.MaxRecursionNodes, g.generatorConfig.RecursionTimeout)
+	ctx, cancel := guard.WithContext()
+	defer cancel()
+
+	//log.Printf("Initial schema properties: %v", schema.Properties)
+
+	return g.removeFieldAtPathRec(ctx, schema, fields, guard, 0)
+}
+
+// removeFieldAtPathRec recursively traverses the schema and removes the specified nested field.
+func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *Schema, fields []string, guard *safety.RecursionGuard, depth int) bool {
+	if schema == nil || len(fields) == 0 {
+		return false
+	}
+
+	if err := guard.Check(ctx, depth); err != nil {
+		return false
+	}
+
+	fieldName := fields[0]
+	//log.Printf("Processing field: %s", fieldName)
+	remainingFields := fields[1:]
+	//log.Printf("Remaining fields to process: %v", remainingFields)
+
+	var newProperties []Property
+	found := false
+	for _, prop := range schema.Properties {
+		if prop.Name == fieldName {
+			if len(remainingFields) > 0 {
+				// We are in a nested path, so we recurse.
+				// We keep the parent property, but with a potentially modified schema.
+				if g.removeFieldAtPathRec(ctx, prop.Schema, remainingFields, guard, depth+1) {
+					found = true
+				}
+				newProperties = append(newProperties, prop)
+			} else {
+				// This is the field to remove since there are no more remaining fields (last element in the "dot" path).
+				// We just don't add it to the new list.
+				found = true
+			}
+		} else {
+			newProperties = append(newProperties, prop)
+		}
+	}
+	schema.Properties = newProperties
+	//log.Printf("After processing, schema properties are now: %v", schema.Properties)
+
+	// If the field was found and removed, also remove it from the required list
+	if found && len(remainingFields) == 0 {
+		// Remove from required list
+		var newRequired []string
+		for _, req := range schema.Required {
+			if req != fieldName {
+				newRequired = append(newRequired, req)
+			}
+		}
+		schema.Required = newRequired
+	}
+
+	return found
 }

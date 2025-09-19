@@ -185,18 +185,18 @@ In this secondo scenario, very similar to the first one, the Rest Dynamic Contro
 ### Standard scenario
 
 1. User applies a RestDefinition CR.
-2. oasegn-provider fetches the OAS specification.
-3. oasegn-provider generates a CRD based on the OAS schema.
-4. oasegn-provider deploys the specific Rest Dynamic Controller.
+2. `oasgen-provider` fetches the OAS specification.
+3. `oasgen-provider` generates a CRD based on the OAS schema.
+4. `oasgen-provider` deploys the specific Rest Dynamic Controller.
 5. Rest Dynamic Controller manages custom resources according to API specifications.
 6. Resources states are synchronized with external APIs (observe, create, update, delete).
 
 ### Scenario with Plugin (Wrapper Web Service)
 
 1. User applies a RestDefinition CR.
-2. oasegn-provider fetches the OAS specification.
-3. oasegn-provider generates a CRD based on the OAS schema.
-4. oasegn-provider deploys the specific Rest Dynamic Controller.
+2. `oasgen-provider` fetches the OAS specification.
+3. `oasgen-provider` generates a CRD based on the OAS schema.
+4. `oasgen-provider` deploys the specific Rest Dynamic Controller.
 5. Rest Dynamic Controller manages custom resources according to API specifications.
 6. Resources states are synchronized with external APIs (observe, create, update, delete) **through the Plugin (Wrapper Web Service) as an intermediary**.
 
@@ -248,8 +248,12 @@ spec:
       - id
       - revision
       - createdAt
+    
+    # optional, fields to exclude from spec (e.g., server-generated technical IDs you don't want users to set)
+    excludedSpecFields:
+      - id  
 
-    # optional, declare configuration params to expose in the generated *Configuration CRD (Authentication is always included if needed)
+    # optional, declare configuration params to expose in the generated Configuration CRD (Authentication is always included if needed)
     configurationFields:
       - fromOpenAPI:
           name: api-version
@@ -257,12 +261,12 @@ spec:
         fromRestDefinition:
           actions: ["*"] # apply to all actions
       - fromOpenAPI:
-          name: timeout
-          in: header
+          name: per_page
+          in: query
         fromRestDefinition:
           actions: 
-          - create
-          - update
+          - get
+          - findby
 
     # REQUIRED: map CRUD/find operations to HTTP endpoints
     verbsDescription:
@@ -308,6 +312,7 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 | `resource.verbsDescription[].path` | string | ✔︎ | — | HTTP path for the endpoint; must exist in the referenced OAS. | Should exactly match the OAS path you mapped. |
 | `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and are written in status. | Immutable once generated. It is important to choose identifiers that are unique per resource. If `findby` is not present use just `additionalStatusFields` and not `identifiers`. |
 | `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid` but also others returned by the API you want to see in status). Usually some of these are used in the `get` action. | Immutable once generated. |
+| `resource.excludedSpecFields[]` | array<string> | ✖︎ | ✔︎ | Fields to exclude from spec (e.g., server-generated technical IDs you don't want users to set). | Immutable once generated. |
 | `resource.configurationFields[]` | array<object> | ✖︎ | ✔︎ | Declares configuration parameters in the generated `*Configuration` CRD. | Immutable once generated. Authentication is always included if needed (you do not need to specify it here). |
 | `resource.configurationFields[].fromOpenAPI.in` | string | ✔︎ | — | Location of the parameter in the OAS. | Could be `query`, `path`, `header`, `cookie` etc. |
 | `resource.configurationFields[].fromOpenAPI.name` | string | ✔︎ | — | Parameter name as defined in the OAS. | Must match the OAS exactly. |
@@ -315,9 +320,9 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 
 **Required top-level fields:** `spec.oasPath`, `spec.resourceGroup`, and `spec.resource`. 
 **Within** `spec.resource`, `kind` and `verbsDescription` are mandatory.
-**Validation & mutability highlights**
 
-- `resourceGroup`, `resource.kind`, `resource.identifiers`, `resource.additionalStatusFields`, and `resource.configurationFields` are **immutable** (Kubernetes validation enforces `self == oldSelf`). Plan carefully before applying.
+**Validation & mutability highlights**:
+- `resourceGroup`, `resource.kind`, `resource.identifiers`, `resource.additionalStatusFields`, `resource.excludedSpecFields`, and `resource.configurationFields` are **immutable** (Kubernetes validation enforces `self == oldSelf`). Plan carefully before applying.
 - `verbsDescription[].action`/`method` are **enum**-restricted; `path` must point to an endpoint present in your OAS.
 - `oasPath` accepts either `configmap://...` or `http(s)://...` and can be updated over time; keep the `create` request body and parameters stable to avoid CRD/schema drift. Otherwise, you may need to delete/recreate the RestDefinition.
 
@@ -325,7 +330,8 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 
 - Start with both `findby` and `get` actions where applicable: `findby` to locate a resource using human-friendly identifiers, `get` for subsequent, efficient lookups using technical IDs. (See the dedicated action sections below: [action `findby`](#action-findby) and [action `get`](#action-get).)
 - Keep `identifiers` small, unique, and human-friendly (e.g., name, email), and place technical IDs (e.g., id, uuid) under `additionalStatusFields`. It is important to choose identifiers that are unique per resource.
-- Use `configurationFields` to expose cookies, headers, query and path parameters (e.g., `api-version`) across specific actions with a specific array or all actions with ["*"].
+- Use `excludedSpecFields` to avoid putting server-generated fields in spec (e.g., `id`). Usually we want to avoid users setting these fields but rather have them in status.
+- Use `configurationFields` to expose cookies, headers, query and path parameters (e.g., `api-version`) across specific actions with a specific array or all actions with ["*"]. It is duty of the platform engineer to decide whether a parameter should be considered a configuration parameter rather than an application parameter.
 
 #### Regex and enums (for reference)
 
@@ -365,8 +371,8 @@ graph LR
     B[Observed <br> current state]
   end
 
-  A -->|create <br> update <br> delete| B
-  B -->|findby <br> get| A
+  A -->|**Act** <br> create <br> update <br> delete| B
+  A -->|**Observe** <br> findby <br> get| B
 ```
 
 ### Action `findby`
@@ -436,6 +442,8 @@ In the majority of cases, the `get` and the `findby` actions use different ident
 - `get` uses "technical identifiers" that are typically generated by the external system upon resource creation (e.g., `id`, `uuid`, `resourceId`).
 
 Therefore the `get` action is typically used by the Observe verb during subsequent reconciliation loops (after the first one onward), after the resource has been created and the unique technical identifier (id, uuid, etc.) is known and stored in the resource status.
+
+Note: since the `get` action usually uses a unique technical identifier (id, uuid, etc.) that is generated by the external system upon resource creation, it is useful to use the field `excludedSpecFields` in the RestDefinition manifest to exclude these fields from the resource spec, so that the generated CRD does not allow users to set these fields in the resource spec. These fields should be set by the controller in the resource status only.
 
 #### When the `get` action is sufficient
 
@@ -678,27 +686,30 @@ The OASGen Provider incorporates several security features, at different levels,
 - Automatic generation of Kubernetes RBAC policies for custom resources
 - Secure credential management through Kubernetes secrets
 
-Additionally, whenever needed you can leverage custom web service wrappers for additional security layers if needed. For instance, you can use a web service wrapper to add **request signing**, or other security mechanisms that are not natively supported by the OASGen Provider.
-
+Additionally, whenever needed you can leverage custom web service wrappers for additional security layers if needed. For instance, you can use a web service wrapper to add request signing, or other security mechanisms that are not natively supported by the OASGen Provider.
 
 ## Best Practices
 
 To ensure optimal performance and reliability when using the OASGen Provider, consider the following best practices:
 1. Always use only OAS 3.0+ specifications as lower versions are not supported.
 2. Maintain consistent field naming across API endpoints.
-3. Use web service wrappers when API interfaces are inconsistent.
+3. Use web service wrappers when API interfaces are inconsistent or additional processing is needed.
 4. Regularly update OAS documents to match API changes.
-5. Monitor controller logs with `krateo.io/connector-verbose: "true"`.
+5. Monitor controller logs with the `krateo.io/connector-verbose: "true"` annotation added to the CR of the resource you want to monitor.
 
 ## Unsupported features
 
-Currently, the following OAS features are not supported by OASGen provider:
+Currently, the following OAS features are not supported by OASGen Provider:
 
+- `number` type is not supported. Use `integer` or `string` instead. During the generation of the CRD schema, if a `number` type is encountered, it will be converted to `integer`. Validation errors (during CRD generation) may happen if the API returns a `number` in response bodies for other actions (e.g., `create`, `update`, etc.). Rest Dynamic Controller will perform a similar conversion when dealing with response bodies.
 - `nullable` is not supported. `nullable` was removed in OAS 3.1 in favor of using `null` type in the array `type`.
-- `anyOf` and `oneOf` are not supported.
-- `format` is not supported.
+- `anyOf`, `oneOf`, `not` are not supported.
+- `additionalProperties` is supported only in the boolean form (i.e., `additionalProperties: true`). If `additionalProperties` is an object, it is not supported.
+- `format` is not supported: if OASGen Provider encounters a `format` field, it will simply append it into the description of the field as a note, but it will not use it to generate a more specific type.
+- `minItems`, `maxItems`, `minLength`, `maxLength`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, and `pattern` are not supported.
+- `readOnly` and `writeOnly` are not supported.
 
-Note that this list may not be exhaustive and other features may also be unsupported. 
+Note that this list **may not be exhaustive** and other features may also be unsupported. 
 
 ### OAS 3.0 vs OAS 3.1
 

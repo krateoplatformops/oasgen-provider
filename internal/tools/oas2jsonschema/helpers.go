@@ -1,11 +1,15 @@
 package oas2jsonschema
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
 )
 
-// getPrimaryType returns the primary type from a slice of types
+// getPrimaryType returns the primary type from a slice of types.
 // The "type" slice of types was introduced in OpenAPI 3.1 which allows multiple types including "null".
 // Source: https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0
 func getPrimaryType(types []string) string {
@@ -31,37 +35,105 @@ func areTypesCompatible(types1, types2 []string) bool {
 	return primaryType1 == primaryType2
 }
 
-func prepareSchemaForCRD(schema *Schema) error {
+// prepareSchemaForCRD prepares a schema for Kubernetes CRD generation by applying transformations.
+// It handles circular references by tracking visited schemas to prevent infinite recursion.
+func prepareSchemaForCRD(schema *Schema, config *GeneratorConfig) error {
 	if schema == nil {
 		return nil
 	}
 
+	guard := safety.NewRecursionGuard(config.MaxRecursionDepth, config.MaxRecursionNodes, config.RecursionTimeout)
+	ctx, cancel := guard.WithContext()
+	defer cancel()
+
+	return prepareSchemaForCRDWithVisited(ctx, schema, guard, make(map[*Schema]*Schema), 0)
+}
+
+// prepareSchemaForCRDWithVisited is the internal implementation that tracks visited schemas
+// to handle circular references safely using placeholder schemas.
+func prepareSchemaForCRDWithVisited(
+	ctx context.Context,
+	schema *Schema,
+	guard *safety.RecursionGuard,
+	visited map[*Schema]*Schema,
+	depth int,
+) error {
+	if schema == nil {
+		return nil
+	}
+
+	// Check recursion limits
+	if err := guard.Check(ctx, depth); err != nil {
+		log.Printf("CRD preparation recursion aborted at depth %d: %v", depth, err)
+		return fmt.Errorf("recursion limit exceeded: %w", err)
+	}
+
+	// Detect circular references - if we've seen this schema before, skip processing
+	if _, exists := visited[schema]; exists {
+		return nil // Already processed or being processed
+	}
+
+	// Mark this schema as being processed
+	visited[schema] = schema
+
+	// Gracefully handle any panics during processing
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("CRD preparation panic at depth %d: %v", depth, r)
+		}
+	}()
+
+	// Convert number types to integer for CRD compatibility
 	if getPrimaryType(schema.Type) == "number" {
 		convertNumberToInteger(schema)
 	}
 
-	if getPrimaryType(schema.Type) == "array" {
-		return prepareSchemaForCRD(schema.Items)
+	// Process array items
+	if getPrimaryType(schema.Type) == "array" && schema.Items != nil {
+		if err := prepareSchemaForCRDWithVisited(ctx, schema.Items, guard, visited, depth+1); err != nil {
+			return fmt.Errorf("failed to process array items: %w", err)
+		}
 	}
 
+	// Process AllOf schemas and merge properties for object types
+	if len(schema.AllOf) > 0 {
+		for _, allOfSchema := range schema.AllOf {
+			if err := prepareSchemaForCRDWithVisited(ctx, allOfSchema, guard, visited, depth+1); err != nil {
+				return fmt.Errorf("failed to process allOf schema: %w", err)
+			}
+		}
+
+		// Only merge AllOf properties if this is an object type or untyped schema
+		primaryType := getPrimaryType(schema.Type)
+		if primaryType == "object" || primaryType == "" {
+			for _, allOfSchema := range schema.AllOf {
+				if allOfSchema != nil {
+					allOfPrimaryType := getPrimaryType(allOfSchema.Type)
+					// Only merge properties from object-like schemas
+					if allOfPrimaryType == "object" || allOfPrimaryType == "" {
+						schema.Properties = append(schema.Properties, allOfSchema.Properties...) // Merging properties that were in AllOf into Properties
+					}
+				}
+			}
+		}
+		schema.AllOf = nil // Clear AllOf field after merging
+	}
+
+	// Process object properties
 	for _, prop := range schema.Properties {
-		if err := prepareSchemaForCRD(prop.Schema); err != nil {
-			return err
+		if err := prepareSchemaForCRDWithVisited(ctx, prop.Schema, guard, visited, depth+1); err != nil {
+			return fmt.Errorf("failed to process property '%s': %w", prop.Name, err)
 		}
-	}
-
-	for _, allOfSchema := range schema.AllOf {
-		if err := prepareSchemaForCRD(allOfSchema); err != nil {
-			return err
-		}
-		schema.Properties = append(schema.Properties, allOfSchema.Properties...)
 	}
 
 	return nil
 }
 
-// convertNumberToInteger converts "number" types to "integer" types.
+// convertNumberToInteger converts "number" types to "integer" types for CRD compatibility.
 func convertNumberToInteger(schema *Schema) {
+	if schema == nil {
+		return
+	}
 	for i, t := range schema.Type {
 		if t == "number" {
 			schema.Type[i] = "integer"
@@ -70,16 +142,66 @@ func convertNumberToInteger(schema *Schema) {
 }
 
 // schemaToMap converts our domain-specific Schema object into a map[string]interface{}
-// suitable for JSON marshalling. This is the key to making the generator library-agnostic.
-func schemaToMap(schema *Schema) (map[string]interface{}, error) {
+// suitable for JSON marshalling.
+// It handles circular references to prevent stack overflow.
+func schemaToMap(schema *Schema, config *GeneratorConfig) (map[string]interface{}, error) {
 	if schema == nil {
 		return nil, nil
 	}
 
-	m := make(map[string]interface{})
+	guard := safety.NewRecursionGuard(config.MaxRecursionDepth, config.MaxRecursionNodes, config.RecursionTimeout)
+	ctx, cancel := guard.WithContext()
+	defer cancel()
 
+	return schemaToMapWithVisited(ctx, schema, guard, make(map[*Schema]map[string]interface{}), 0)
+}
+
+// schemaToMapWithVisited is the internal implementation that tracks visited schemas
+// to handle circular references by creating reference placeholders instead of preserving cycles.
+func schemaToMapWithVisited(
+	ctx context.Context,
+	schema *Schema,
+	guard *safety.RecursionGuard,
+	visited map[*Schema]map[string]interface{},
+	depth int,
+) (map[string]interface{}, error) {
+	if schema == nil {
+		return nil, nil
+	}
+
+	// Check recursion limits
+	if err := guard.Check(ctx, depth); err != nil {
+		log.Printf("Schema to map conversion recursion aborted at depth %d: %v", depth, err)
+		// Return a simple reference placeholder to break the cycle
+		return map[string]interface{}{
+			"type":        "object",
+			"description": "Circular reference detected - processing aborted",
+		}, nil
+	}
+
+	// Return existing map if we've already started processing this schema
+	if _, exists := visited[schema]; exists {
+		// Instead of returning the same reference (which could cause JSON marshalling issues),
+		// return a reference placeholder
+		return map[string]interface{}{
+			"type":        "object",
+			"description": "Circular reference",
+		}, nil
+	}
+
+	// Create new map and register it before processing to handle circular references
+	m := make(map[string]interface{})
+	visited[schema] = m
+
+	// Gracefully handle any panics during conversion
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Schema to map conversion panic at depth %d: %v", depth, r)
+		}
+	}()
+
+	// Process type field
 	if len(schema.Type) > 0 {
-		// Handle single vs. multiple types for JSON output
 		if len(schema.Type) == 1 {
 			m["type"] = schema.Type[0]
 		} else {
@@ -87,67 +209,83 @@ func schemaToMap(schema *Schema) (map[string]interface{}, error) {
 		}
 	}
 
+	// Process optional string fields
 	if schema.Description != "" {
 		m["description"] = schema.Description
 	}
 
+	// Process required fields
 	if len(schema.Required) > 0 {
 		m["required"] = schema.Required
 	}
 
-	// TODO: add unit tests for this
+	// Process default value
 	if schema.Default != nil {
 		m["default"] = schema.Default
 	}
 
-	// TODO: add unit tests for this
+	// Process additional properties
 	if schema.AdditionalProperties {
 		m["additionalProperties"] = true
 	}
 
-	// TODO: add unit tests for this
+	// Process max properties
 	if schema.MaxProperties > 0 {
 		m["maxProperties"] = schema.MaxProperties
 	}
 
+	// Process object properties
 	if len(schema.Properties) > 0 {
 		props := make(map[string]interface{})
 		for _, p := range schema.Properties {
-			propMap, err := schemaToMap(p.Schema)
+			propMap, err := schemaToMapWithVisited(ctx, p.Schema, guard, visited, depth+1)
 			if err != nil {
-				return nil, fmt.Errorf("could not convert property '%s': %w", p.Name, err)
+				return nil, fmt.Errorf("failed to convert property '%s': %w", p.Name, err)
 			}
 			if propMap != nil {
 				props[p.Name] = propMap
 			}
 		}
-		m["properties"] = props
+		if len(props) > 0 {
+			m["properties"] = props
+		}
 	}
 
+	// Process array items
 	if schema.Items != nil {
-		itemsMap, err := schemaToMap(schema.Items)
+		itemsMap, err := schemaToMapWithVisited(ctx, schema.Items, guard, visited, depth+1)
 		if err != nil {
-			return nil, fmt.Errorf("could not convert items schema: %w", err)
+			return nil, fmt.Errorf("failed to convert items schema: %w", err)
 		}
 		if itemsMap != nil {
 			m["items"] = itemsMap
 		}
 	}
 
+	// Process AllOf
+	// In theory, AllOf should have been merged already during CRD preparation (`prepareSchemaForCRD` function).
+	// And the `AllOf` field should be empty after that.
+	// Therefore no `AllOf` should remain at this point.
+	// Kept here for safety.
 	if len(schema.AllOf) > 0 {
-		var allOfList []interface{}
-		for _, s := range schema.AllOf {
-			allOfMap, err := schemaToMap(s)
+		// consider adding a log here to indicate unexpected AllOf presence
+		//log.Printf("Processing allOf inside schemaToMapWithVisited at depth %d", depth)
+		allOfList := make([]interface{}, 0, len(schema.AllOf))
+		for i, s := range schema.AllOf {
+			allOfMap, err := schemaToMapWithVisited(ctx, s, guard, visited, depth+1)
 			if err != nil {
-				return nil, fmt.Errorf("could not convert allOf item: %w", err)
+				return nil, fmt.Errorf("failed to convert allOf item %d: %w", i, err)
 			}
 			if allOfMap != nil {
 				allOfList = append(allOfList, allOfMap)
 			}
 		}
-		m["allOf"] = allOfList
+		if len(allOfList) > 0 {
+			m["allOf"] = allOfList
+		}
 	}
 
+	// Process enum values
 	if len(schema.Enum) > 0 {
 		m["enum"] = schema.Enum
 	}
@@ -156,14 +294,15 @@ func schemaToMap(schema *Schema) (map[string]interface{}, error) {
 }
 
 // GenerateJsonSchema converts a domain-specific Schema object into a JSON schema byte slice.
-func GenerateJsonSchema(schema *Schema) ([]byte, error) {
-	schemaMap, err := schemaToMap(schema)
+func GenerateJsonSchema(schema *Schema, config *GeneratorConfig) ([]byte, error) {
+	schemaMap, err := schemaToMap(schema, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert schema to map: %w", err)
 	}
 
-	// Add standard JSON schema fields
-	schemaMap["$schema"] = "http://json-schema.org/draft-07/schema#"
+	if schemaMap == nil {
+		return []byte("null"), nil
+	}
 
 	return json.MarshalIndent(schemaMap, "", "  ")
 }

@@ -1,9 +1,11 @@
 package oas2jsonschema
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAreTypesCompatible(t *testing.T) {
@@ -67,6 +69,83 @@ func TestAreTypesCompatible(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actual := areTypesCompatible(tc.types1, tc.types2)
 			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestPrepareSchemaForCRD_WithRecursionGuard(t *testing.T) {
+	// Get the default config to make the test robust against changes in default values.
+	defaultConfig := DefaultGeneratorConfig()
+	limit := defaultConfig.MaxRecursionDepth
+
+	testCases := []struct {
+		name                  string
+		depth                 int
+		expectError           bool
+		expectedErrorContains string
+	}{
+		{
+			name:                  "should return an error when max recursion depth is exceeded",
+			depth:                 limit + 1,
+			expectError:           true,
+			expectedErrorContains: "recursion limit exceeded",
+		},
+		{
+			name:        "should correctly prepare a deeply nested schema well within the recursion limit",
+			depth:       limit / 2,
+			expectError: false,
+		},
+		{
+			name:        "should succeed at the exact recursion depth limit",
+			depth:       limit,
+			expectError: false,
+		},
+		{
+			name:        "should succeed with a single level of nesting",
+			depth:       1,
+			expectError: false,
+		},
+		{
+			name:        "should succeed with no nesting",
+			depth:       0,
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange: Create a schema with the specified depth.
+			root := &Schema{Type: []string{"object"}}
+			current := root
+
+			for i := 0; i < tc.depth; i++ {
+				next := &Schema{Type: []string{"object"}}
+				current.Properties = []Property{
+					{Name: "nested", Schema: next},
+				}
+				current = next
+			}
+
+			// Act
+			err := prepareSchemaForCRD(root, defaultConfig)
+
+			// Assert
+			if tc.expectError {
+				require.Error(t, err, "Expected an error but got none")
+				assert.True(t, strings.Contains(err.Error(), tc.expectedErrorContains),
+					"Error message should contain '%s'", tc.expectedErrorContains)
+			} else {
+				require.NoError(t, err, "Expected no error but got one")
+
+				// Also, verify that the schema structure is preserved and wasn't truncated.
+				var finalDepth int
+				current = root
+				for len(current.Properties) > 0 && current.Properties[0].Schema != nil {
+					finalDepth++
+					current = current.Properties[0].Schema
+				}
+				assert.Equal(t, tc.depth, finalDepth, "The final schema depth should be preserved")
+			}
 		})
 	}
 }
