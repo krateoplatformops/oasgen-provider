@@ -1,8 +1,14 @@
 package oas2jsonschema
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"strings"
 
-// generateStatusSchema generates the complete status schema for a given resource.
+	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
+)
+
+// BuildStatusSchema generates the complete status schema for a given resource.
 func (g *OASSchemaGenerator) BuildStatusSchema() ([]byte, []error, error) {
 	var warnings []error
 
@@ -19,12 +25,12 @@ func (g *OASSchemaGenerator) BuildStatusSchema() ([]byte, []error, error) {
 		warnings = append(warnings, SchemaGenerationError{Code: CodeNoStatusSchema, Message: "could not find a GET or FINDBY response schema for status generation"})
 	}
 
-	statusSchema, buildWarnings := composeStatusSchema(allStatusFields, responseSchema)
-	warnings = append(warnings, buildWarnings...)
-
-	if err := prepareSchemaForCRD(statusSchema, g.generatorConfig); err != nil {
+	if err := prepareSchemaForCRD(responseSchema, g.generatorConfig); err != nil {
 		return nil, warnings, fmt.Errorf("could not prepare status schema for CRD: %w", err)
 	}
+
+	statusSchema, buildWarnings := g.composeStatusSchema(allStatusFields, responseSchema)
+	warnings = append(warnings, buildWarnings...)
 
 	byteSchema, err := GenerateJsonSchema(statusSchema, g.generatorConfig)
 	if err != nil {
@@ -34,31 +40,110 @@ func (g *OASSchemaGenerator) BuildStatusSchema() ([]byte, []error, error) {
 	return byteSchema, warnings, nil
 }
 
-// buildStatusSchema builds the status schema from the response schema and the list of status fields.
-func composeStatusSchema(allStatusFields []string, responseSchema *Schema) (*Schema, []error) {
+// composeStatusSchema builds the status schema by finding nested fields in the response schema
+// and constructing a corresponding nested structure in the new status schema.
+func (g *OASSchemaGenerator) composeStatusSchema(allStatusFields []string, responseSchema *Schema) (*Schema, []error) {
 	var warnings []error
-	var props []Property
-
-	responsePropsMap := indexPropertiesByName(responseSchema)
+	statusSchema := &Schema{Type: []string{"object"}, Properties: []Property{}}
 
 	for _, fieldName := range allStatusFields {
-		if p, found := responsePropsMap[fieldName]; found {
-			props = append(props, p)
+		pathParts := strings.Split(fieldName, ".")
+
+		// Find the property in the source response schema.
+		foundProp, found := g.findPropertyByPath(responseSchema, pathParts)
+		if found {
+			// Build the nested structure in the destination status schema.
+			g.addPropertyByPath(statusSchema, pathParts, foundProp)
 		} else {
+			// Fallback for fields not found in the response schema.
 			warnings = append(warnings, SchemaGenerationError{Code: CodeStatusFieldNotFound, Message: fmt.Sprintf("status field '%s' not found in response, defaulting to string", fieldName)})
-			props = append(props, Property{Name: fieldName, Schema: &Schema{Type: []string{"string"}}})
+			fallbackProp := Property{Name: pathParts[len(pathParts)-1], Schema: &Schema{Type: []string{"string"}}} // Fallback to string type
+			g.addPropertyByPath(statusSchema, pathParts, fallbackProp)
 		}
 	}
-	return &Schema{Type: []string{"object"}, Properties: props}, warnings
+	return statusSchema, warnings
 }
 
-// indexPropertiesByName creates a map of property names to Property structs for efficient lookups.
-func indexPropertiesByName(schema *Schema) map[string]Property {
-	indexedProps := make(map[string]Property)
-	if schema != nil {
-		for _, p := range schema.Properties {
-			indexedProps[p.Name] = p
+// findPropertyByPath is the public entry point for finding a nested property.
+// It sets up a recursion guard, inspired by the pattern in spec_builder.go.
+func (g *OASSchemaGenerator) findPropertyByPath(schema *Schema, path []string) (Property, bool) {
+	guard := safety.NewRecursionGuard(g.generatorConfig.MaxRecursionDepth, g.generatorConfig.MaxRecursionNodes, g.generatorConfig.RecursionTimeout)
+	ctx, cancel := guard.WithContext()
+	defer cancel()
+	return g.findPropertyByPathRec(ctx, schema, path, guard, 0)
+}
+
+// findPropertyByPathRec recursively traverses a schema to find a nested property.
+func (g *OASSchemaGenerator) findPropertyByPathRec(ctx context.Context, schema *Schema, path []string, guard *safety.RecursionGuard, depth int) (Property, bool) {
+	if schema == nil || len(path) == 0 || guard.Check(ctx, depth) != nil {
+		return Property{}, false
+	}
+
+	fieldName := path[0]
+	//log.Printf("Processing field: %s", fieldName)
+	remainingPath := path[1:]
+	//log.Printf("Remaining fields to process: %v", remainingPath)
+
+	for _, prop := range schema.Properties {
+		if prop.Name == fieldName {
+			if len(remainingPath) == 0 {
+				return prop, true // Found the target property
+			}
+			// Continue traversing into the sub-schema.
+			return g.findPropertyByPathRec(ctx, prop.Schema, remainingPath, guard, depth+1)
 		}
 	}
-	return indexedProps
+
+	return Property{}, false // Not found at this level
+}
+
+// addPropertyByPath is the public entry point for adding a nested property.
+// It sets up a recursion guard for safety.
+func (g *OASSchemaGenerator) addPropertyByPath(schema *Schema, path []string, propToAdd Property) {
+	guard := safety.NewRecursionGuard(g.generatorConfig.MaxRecursionDepth, g.generatorConfig.MaxRecursionNodes, g.generatorConfig.RecursionTimeout)
+	ctx, cancel := guard.WithContext()
+	defer cancel()
+	g.addPropertyByPathRec(ctx, schema, path, propToAdd, guard, 0)
+}
+
+// addPropertyByPathRec recursively builds the nested object structure in a schema
+// and adds the target property at the correct location.
+func (g *OASSchemaGenerator) addPropertyByPathRec(ctx context.Context, schema *Schema, path []string, propToAdd Property, guard *safety.RecursionGuard, depth int) {
+	if schema == nil || len(path) == 0 || guard.Check(ctx, depth) != nil {
+		return
+	}
+
+	fieldName := path[0]
+	remainingPath := path[1:]
+
+	// If this is the last part of the path, add the property here.
+	if len(remainingPath) == 0 {
+		// Avoid adding duplicates.
+		for _, p := range schema.Properties {
+			if p.Name == fieldName {
+				return
+			}
+		}
+		schema.Properties = append(schema.Properties, propToAdd)
+		return
+	}
+
+	//  Intermediate path segment. Find or create the next object schema.
+	var nextSchema *Schema
+	found := false
+	for _, p := range schema.Properties {
+		if p.Name == fieldName {
+			nextSchema = p.Schema
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		nextSchema = &Schema{Type: []string{"object"}, Properties: []Property{}}
+		schema.Properties = append(schema.Properties, Property{Name: fieldName, Schema: nextSchema})
+	}
+
+	// Recurse into the next level.
+	g.addPropertyByPathRec(ctx, nextSchema, remainingPath, propToAdd, guard, depth+1)
 }
