@@ -331,6 +331,9 @@ func convertLibopenapiSchemaWithVisited(
 	}
 
 	// AllOf handling
+	// At this time we only handle the recursive conversion of allOf schemas.
+	// We do not merge properties or other attributes from allOf into the parent schema.
+	// That will be handled later in the processing pipeline (in helpers.go).
 	if len(s.AllOf) > 0 {
 		domainSchema.AllOf = make([]*Schema, 0, len(s.AllOf))
 		for _, allOfProxy := range s.AllOf {

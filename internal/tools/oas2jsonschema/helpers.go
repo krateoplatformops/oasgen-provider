@@ -97,26 +97,48 @@ func prepareSchemaForCRDWithVisited(
 
 	// Process AllOf schemas and merge properties for object types
 	if len(schema.AllOf) > 0 {
+		// Create temporary slices to hold merged properties and required fields
+		var mergedProperties []Property
+		var mergedRequired []string
+
 		for _, allOfSchema := range schema.AllOf {
+			// Recursively prepare each schema within the allOf list
 			if err := prepareSchemaForCRDWithVisited(ctx, allOfSchema, guard, visited, depth+1); err != nil {
 				return fmt.Errorf("failed to process allOf schema: %w", err)
 			}
-		}
 
-		// Only merge AllOf properties if this is an object type or untyped schema
-		primaryType := getPrimaryType(schema.Type)
-		if primaryType == "object" || primaryType == "" {
-			for _, allOfSchema := range schema.AllOf {
-				if allOfSchema != nil {
-					allOfPrimaryType := getPrimaryType(allOfSchema.Type)
-					// Only merge properties from object-like schemas
-					if allOfPrimaryType == "object" || allOfPrimaryType == "" {
-						schema.Properties = append(schema.Properties, allOfSchema.Properties...) // Merging properties that were in AllOf into Properties
-					}
+			// Merge from the child schema
+			if allOfSchema != nil {
+				mergedProperties = append(mergedProperties, allOfSchema.Properties...)
+				mergedRequired = append(mergedRequired, allOfSchema.Required...)
+
+				// Inherit type only if the main schema doesn't have one
+				if len(schema.Type) == 0 && len(allOfSchema.Type) > 0 {
+					schema.Type = allOfSchema.Type
 				}
 			}
 		}
-		schema.AllOf = nil // Clear AllOf field after merging
+
+		// Append the merged properties to the original schema
+		schema.Properties = append(schema.Properties, mergedProperties...)
+
+		// Handle 'required' fields with deduplication
+		// We need to avoid duplicates in the 'required' list like ["id", "name", "id"]
+		requiredSet := make(map[string]struct{})
+		for _, req := range schema.Required { // Add existing required fields
+			requiredSet[req] = struct{}{}
+		}
+		for _, req := range mergedRequired { // Add merged required fields
+			requiredSet[req] = struct{}{}
+		}
+		newRequired := make([]string, 0, len(requiredSet))
+		for req := range requiredSet {
+			newRequired = append(newRequired, req)
+		}
+		schema.Required = newRequired
+
+		// Clear AllOf field after merging
+		schema.AllOf = nil
 	}
 
 	// Process object properties
