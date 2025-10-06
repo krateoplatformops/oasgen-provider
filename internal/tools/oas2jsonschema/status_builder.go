@@ -156,6 +156,8 @@ func (g *OASSchemaGenerator) addPropertyByPathRec(ctx context.Context, schema *S
 
 	if nextSchema != nil && getPrimaryType(nextSchema.Type) != "object" {
 		// Error: expected an object to traverse further, but found a different type.
+		// Example: if the path is "metadata.nested.leaf_field" but "nested" is a string and not an object.
+		// So we cannot reach "leaf_field".
 		//log.Printf("Warning: expected object type at '%s' but found type '%v'.", fieldName, nextSchema.Type)
 		return
 	}
