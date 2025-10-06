@@ -1,8 +1,12 @@
 package oas2jsonschema
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateSpecSchema(t *testing.T) {
@@ -20,8 +24,7 @@ func TestGenerateSpecSchema(t *testing.T) {
 						"post": &mockOperation{
 							RequestBody: RequestBodyInfo{
 								Content: map[string]*Schema{
-									"application/json": {
-										Type: []string{"object"},
+									"application/json": {Type: []string{"object"},
 										Properties: []Property{
 											{Name: "name", Schema: &Schema{Type: []string{"string"}}},
 											{Name: "size", Schema: &Schema{Type: []string{"number"}}},
@@ -647,7 +650,6 @@ func TestGenerateSpecSchema(t *testing.T) {
 	})
 }
 
-
 func TestGenerateStatusSchema(t *testing.T) {
 
 	t.Run("should generate a status schema from the get action response", func(t *testing.T) {
@@ -821,6 +823,98 @@ func TestGenerateStatusSchema(t *testing.T) {
 		}
 	})
 
+	// TestGenerator_SpecCorruption specifically targets the bug where generating a status schema
+	// with a nested identifier (e.g., "metadata.name") would corrupt the spec schema by removing
+	// sibling fields from the "metadata" object.
+	t.Run("should not corrupt spec schema when using nested identifiers for status", func(t *testing.T) {
+		// This shared schema will be used for both the request body (spec) and the response (status).
+		// This is the key to reproducing the bug, as it creates the possibility of pointer aliasing.
+		sharedSchema := &Schema{
+			Type: []string{"object"},
+			Properties: []Property{
+				{Name: "id", Schema: &Schema{Type: []string{"string"}}},
+				{
+					Name: "metadata",
+					Schema: &Schema{
+						Type: []string{"object"},
+						Properties: []Property{
+							{Name: "name", Schema: &Schema{Type: []string{"string"}}},
+							{Name: "location", Schema: &Schema{Type: []string{"string"}}},
+							{Name: "tags", Schema: &Schema{Type: []string{"array"}, Items: &Schema{Type: []string{"string"}}}},
+						},
+					},
+				},
+			},
+		}
+
+		// 1. Arrange
+		mockDoc := &mockOASDocument{
+			Paths: map[string]*mockPathItem{
+				"/widgets": {
+					Ops: map[string]Operation{
+						"post": &mockOperation{
+							RequestBody: RequestBodyInfo{
+								Content: map[string]*Schema{"application/json": sharedSchema},
+							},
+						},
+					},
+				},
+				"/widgets/{id}": {
+					Ops: map[string]Operation{
+						"get": &mockOperation{
+							Responses: map[int]ResponseInfo{200: {Content: map[string]*Schema{"application/json": sharedSchema}}},
+						},
+					},
+				},
+			},
+		}
+
+		resourceConfig := &ResourceConfig{
+			Verbs: []Verb{
+				{Action: "create", Path: "/widgets", Method: "post"},
+				{Action: "get", Path: "/widgets/{id}", Method: "get"},
+			},
+			// Use a nested identifier
+			Identifiers: []string{"metadata.name"},
+			// Also include a top-level field
+			AdditionalStatusFields: []string{"id"},
+		}
+
+		generator := NewOASSchemaGenerator(mockDoc, DefaultGeneratorConfig(), resourceConfig)
+
+		// 2. Act
+		result, err := generator.Generate()
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// 3. Assert
+		// Unmarshal both schemas for inspection.
+		var specSchema map[string]interface{}
+		err = json.Unmarshal(result.SpecSchema, &specSchema)
+		require.NoError(t, err, "Failed to unmarshal spec schema")
+
+		var statusSchema map[string]interface{}
+		err = json.Unmarshal(result.StatusSchema, &statusSchema)
+		require.NoError(t, err, "Failed to unmarshal status schema")
+
+		// Assert Status Schema
+		statusProps := statusSchema["properties"].(map[string]interface{})
+		assert.Contains(t, statusProps, "id", "Status schema should have 'id'")
+		statusMetadata := statusProps["metadata"].(map[string]interface{})
+		statusMetadataProps := statusMetadata["properties"].(map[string]interface{})
+		assert.Len(t, statusMetadataProps, 1, "Status metadata should only have one property")
+		assert.Contains(t, statusMetadataProps, "name", "Status metadata should only contain 'name'")
+
+		// Assert Spec Schema (it should NOT be corrupted)
+		specProps := specSchema["properties"].(map[string]interface{})
+		assert.Contains(t, specProps, "id", "Spec schema should have 'id'")
+		specMetadata := specProps["metadata"].(map[string]interface{})
+		specMetadataProps := specMetadata["properties"].(map[string]interface{})
+		assert.Len(t, specMetadataProps, 3, "Spec metadata SHOULD have all 3 original properties")
+		assert.Contains(t, specMetadataProps, "name", "Spec metadata should contain 'name'")
+		assert.Contains(t, specMetadataProps, "location", "Spec metadata should still contain 'location'")
+		assert.Contains(t, specMetadataProps, "tags", "Spec metadata should still contain 'tags'")
+	})
 }
 
 func TestPrepareSchemaForCRD(t *testing.T) {

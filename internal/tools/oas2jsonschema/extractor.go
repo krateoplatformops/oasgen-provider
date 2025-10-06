@@ -30,7 +30,7 @@ func (g *OASSchemaGenerator) findParameterInOAS(field ConfigurationField) (*Para
 }
 
 // getBaseSchemaForSpec returns the base schema for the spec, which is the request body of the 'create' action.
-// TODO: what about no create action but only update? TO BE DISCUSSED (maybe this could be configured in the GeneratorConfig)
+// TODO: what about no create action but only update? (maybe this could be configured in the GeneratorConfig)
 func (g *OASSchemaGenerator) getBaseSchemaForSpec() (*Schema, error) {
 	for _, verb := range g.resourceConfig.Verbs {
 		if verb.Action != ActionCreate { // Right now we hardcode the action to 'create'
@@ -50,10 +50,11 @@ func (g *OASSchemaGenerator) getBaseSchemaForSpec() (*Schema, error) {
 		for _, mimeType := range g.generatorConfig.AcceptedMIMETypes {
 			if schema, ok := rb.Content[mimeType]; ok {
 				if getPrimaryType(schema.Type) == "array" {
+					//log.Printf("Warning: 'create' action schema is of type 'array', wrapping it into an object with an 'items' property")
 					schema.Properties = append(schema.Properties, Property{Name: "items", Schema: &Schema{Type: []string{"array"}, Items: schema.Items}})
 					schema.Type = []string{"object"}
 				}
-				return schema, nil
+				return schema.deepCopy(), nil
 			}
 		}
 	}
@@ -61,7 +62,7 @@ func (g *OASSchemaGenerator) getBaseSchemaForSpec() (*Schema, error) {
 }
 
 // getBaseSchemaForStatus returns the base schema for the status, which is the response body of the 'get' or 'findby' action.
-// TODO: what about no get/findby action but only update? TO BE DISCUSSED (maybe this could be configured in the GeneratorConfig)
+// TODO: what about no get/findby action but only update? (maybe this could be configured in the GeneratorConfig)
 func (g *OASSchemaGenerator) getBaseSchemaForStatus() (*Schema, error) {
 	actions := []string{ActionGet, ActionFindBy}
 	for _, action := range actions {
@@ -84,6 +85,8 @@ func ExtractSchemaForAction(doc OASDocument, verbs []Verb, targetAction string, 
 		}
 		verbFound = true
 
+		//log.Printf("Verb matched for action '%s': %s %s", targetAction, verb.Method, verb.Path)
+
 		path, ok := doc.FindPath(verb.Path)
 		if !ok {
 			return nil, fmt.Errorf("path '%s' not found in OAS document", verb.Path)
@@ -97,6 +100,7 @@ func ExtractSchemaForAction(doc OASDocument, verbs []Verb, targetAction string, 
 
 		responses := op.GetResponses()
 		if responses == nil {
+			// log.Printf("No responses defined for action '%s' in verb %s %s", targetAction, verb.Method, verb.Path)
 			continue // Or return an error if responses are expected
 		}
 
@@ -112,11 +116,12 @@ func ExtractSchemaForAction(doc OASDocument, verbs []Verb, targetAction string, 
 					continue
 				}
 
-				// If a schema is found, return it immediately.
+				// For 'findby' action, we expect an array of items, so we return the items schema
 				if strings.EqualFold(targetAction, ActionFindBy) && schema.Items != nil {
-					return schema.Items, nil
+					return schema.Items.deepCopy(), nil
 				}
-				return schema, nil
+				// For other actions, we return the schema as is
+				return schema.deepCopy(), nil
 			}
 		}
 	}

@@ -32,11 +32,6 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	}
 	generationWarnings = append(generationWarnings, warnings...)
 
-	// consider to log the generated spec schema for debugging purposes
-	//log.Print("======= Final Spec Schema =======")
-	//log.Print(string(specSchema))
-	//log.Print("======= End Spec Schema =======")
-
 	// Generate Status Schema
 	statusSchema, warnings, err := g.BuildStatusSchema()
 	if err != nil {
@@ -45,6 +40,11 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	}
 	generationWarnings = append(generationWarnings, warnings...)
 
+	// consider to log the generated spec schema for debugging purposes
+	//log.Print("======= Final Spec Schema (after status management) =======")
+	//log.Print(string(specSchema))
+	//log.Print("======= End Spec Schema =======")
+
 	// consider to log the generated status schema for debugging purposes
 	//log.Print("======= Status Schema =======")
 	//log.Print(string(statusSchema))
@@ -52,6 +52,16 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 
 	// Validate Status Schema
 	validationWarnings := ValidateSchemas(g.doc, g.resourceConfig.Verbs, g.generatorConfig)
+
+	// consider to log the generated spec schema for debugging purposes
+	//log.Print("======= Final Spec Schema (after validation) =======")
+	//log.Print(string(specSchema))
+	//log.Print("======= End Spec Schema =======")
+
+	// consider to log the generated status schema for debugging purposes
+	//log.Print("======= Status Schema =======")
+	//log.Print(string(statusSchema))
+	//log.Print("======= End Status Schema =======")
 
 	// Generate Configuration Schema if needed
 	var configurationSchema []byte
@@ -63,6 +73,16 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 			return nil, fmt.Errorf("failed to generate configuration schema: %w", err)
 		}
 	}
+
+	// consider to log the generated spec schema for debugging purposes
+	//log.Print("======= Final Spec Schema (after configuration management) =======")
+	//log.Print(string(specSchema))
+	//log.Print("======= End Spec Schema =======")
+
+	// consider to log the generated status schema for debugging purposes
+	//log.Print("======= Status Schema =======")
+	//log.Print(string(statusSchema))
+	//log.Print("======= End Status Schema =======")
 
 	return &GenerationResult{
 		SpecSchema:          specSchema,

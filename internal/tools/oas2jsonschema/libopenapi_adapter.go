@@ -55,7 +55,7 @@ func (p *libOASParser) Parse(content []byte) (OASDocument, error) {
 
 	// Resolve model references
 	// Ensures that all $ref pointers are properly resolved before further processing.
-	// This is just a validation step, there is no replacement of references in the model
+	// This is just a validation step by `libopenapi`, there is no replacement of references in the model
 	resolvingErrors := doc.Index.GetResolver().Resolve()
 	if len(resolvingErrors) > 0 {
 		var errs []error
@@ -207,20 +207,35 @@ func convertLibopenapiSchemaWithVisited(
 
 	// Use the reference pointer string as the unique key for cycle detection,
 	// but only if the proxy is actually a reference.
+	// Otherwise, use the pointer address as a unique key.
+	// This ensures that we can handle both referenced and inline schemas correctly.
+	// If the schema is a reference, we use its $ref value as the key.
+	// If it's not a reference, we use its memory address to uniquely identify it.
 	if proxy.IsReference() {
-		ref := proxy.GetReference()
-		if ref != "" {
-			if existingSchema, ok := visited[ref]; ok {
-				log.Printf("Circular reference detected at depth %d for ref '%s'. Returning placeholder schema to break the loop.", depth, ref)
-				return existingSchema
-			}
+		key := proxy.GetReference()
+		if key == "" {
+			key = fmt.Sprintf("%p", proxy)
+		}
+		if existing, ok := visited[key]; ok {
+			//log.Printf("Encountered already visited schema reference: %s", key)
+			//log.Printf("Schema info: Type=%v, Description=%q, Properties=%d", existing.Type, existing.Description, len(existing.Properties))
+			return existing
+		}
+	} else {
+		// For non-references, use the pointer address as a unique key.
+		key := fmt.Sprintf("%p", proxy)
+		if existing, ok := visited[key]; ok {
+			//log.Printf("Encountered already visited inline schema: %s", key)
+			//log.Printf("Schema info: Type=%v, Description=%q, Properties=%d", existing.Type, existing.Description, len(existing.Properties))
+			return existing
 		}
 	}
 
 	// Create a new schema placeholder and add it to the visited map before building or processing the schema.
 	// This is used to break the recursion.
-	// domainSchema is the schema defined in this domain (oas2jsonschema)
+	// domainSchema is the schema defined in this domain (oas2jsonschema package)
 	domainSchema := &Schema{}
+
 	if proxy.IsReference() {
 		ref := proxy.GetReference()
 		if ref != "" {
@@ -231,8 +246,7 @@ func convertLibopenapiSchemaWithVisited(
 	// Gracefully handle panics from the underlying library, which can occur with invalid schemas (e.g., dangling references).
 	defer func() {
 		if r := recover(); r != nil {
-			// Log the panic for debugging
-			log.Printf("Schema conversion panic: %v", r)
+			log.Printf("Schema conversion panic for ref=%s proxy=%p: %v", proxy.GetReference(), proxy, r)
 		}
 	}()
 
@@ -243,6 +257,7 @@ func convertLibopenapiSchemaWithVisited(
 	}
 
 	if s == nil {
+		log.Printf("Schema build returned nil for proxy: %v", proxy)
 		return domainSchema
 	}
 
@@ -331,6 +346,9 @@ func convertLibopenapiSchemaWithVisited(
 	}
 
 	// AllOf handling
+	// At this time we only handle the recursive conversion of allOf schemas.
+	// We do not merge properties or other attributes from allOf into the parent schema.
+	// That will be handled later in the processing pipeline (in helpers.go).
 	if len(s.AllOf) > 0 {
 		domainSchema.AllOf = make([]*Schema, 0, len(s.AllOf))
 		for _, allOfProxy := range s.AllOf {
