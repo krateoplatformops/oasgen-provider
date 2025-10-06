@@ -89,7 +89,7 @@ func (g *OASSchemaGenerator) BuildConfigurationSchema() ([]byte, error) {
 	if len(authMethodsSchemas) > 0 {
 		addAuthMethods(rootSchema, authMethodsSchemas)
 	}
-	log.Printf("Len of auth methods schemas: %d", len(authMethodsSchemas))
+	//log.Printf("Len of auth methods schemas: %d", len(authMethodsSchemas))
 
 	return GenerateJsonSchema(rootSchema, g.generatorConfig)
 }

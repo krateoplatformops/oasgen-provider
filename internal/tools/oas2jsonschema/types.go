@@ -152,7 +152,7 @@ type BearerAuth struct {
 	TokenRef rtv1.SecretKeySelector `json:"tokenRef"`
 }
 
-// deepCopy creates a deep, recursion-safe copy of the Schema.
+// deepCopy creates a deep copy of the Schema.
 func (s *Schema) deepCopy() *Schema {
 	// Initialize a map to track visited schemas to handle circular references.
 	visited := make(map[*Schema]*Schema)
@@ -174,14 +174,21 @@ func (s *Schema) deepCopyRec(visited map[*Schema]*Schema) *Schema {
 	visited[s] = newSchema
 
 	// Copy scalar fields and slices of basic types.
-	newSchema.Type = append([]string{}, s.Type...)
+	if s.Type != nil {
+		newSchema.Type = append([]string{}, s.Type...)
+	}
 	newSchema.Description = s.Description
-	newSchema.Required = append([]string{}, s.Required...)
+	if s.Required != nil {
+		newSchema.Required = append([]string{}, s.Required...)
+	}
+
+	// Note: Default and Enum are shallow-copied. This is an accepted limitation
+	// as they are expected to contain primitive types.
 	newSchema.Default = s.Default
 	newSchema.AdditionalProperties = s.AdditionalProperties
 	newSchema.MaxProperties = s.MaxProperties
 
-	if len(s.Enum) > 0 {
+	if s.Enum != nil {
 		newSchema.Enum = make([]interface{}, len(s.Enum))
 		copy(newSchema.Enum, s.Enum)
 	}
@@ -191,17 +198,21 @@ func (s *Schema) deepCopyRec(visited map[*Schema]*Schema) *Schema {
 		newSchema.Items = s.Items.deepCopyRec(visited)
 	}
 
-	if len(s.Properties) > 0 {
+	if s.Properties != nil {
 		newSchema.Properties = make([]Property, len(s.Properties))
 		for i, p := range s.Properties {
+			var copiedSchema *Schema
+			if p.Schema != nil {
+				copiedSchema = p.Schema.deepCopyRec(visited)
+			}
 			newSchema.Properties[i] = Property{
 				Name:   p.Name,
-				Schema: p.Schema.deepCopyRec(visited),
+				Schema: copiedSchema,
 			}
 		}
 	}
 
-	if len(s.AllOf) > 0 {
+	if s.AllOf != nil {
 		newSchema.AllOf = make([]*Schema, len(s.AllOf))
 		for i, allOfSchema := range s.AllOf {
 			newSchema.AllOf[i] = allOfSchema.deepCopyRec(visited)

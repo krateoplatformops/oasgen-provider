@@ -25,6 +25,12 @@ func (g *OASSchemaGenerator) BuildStatusSchema() ([]byte, []error, error) {
 		warnings = append(warnings, SchemaGenerationError{Code: CodeNoStatusSchema, Message: "could not find a GET or FINDBY response schema for status generation"})
 	}
 
+	// DEBUG: Log the response schema used for status generation
+	//responseSchemaCopy := responseSchema.deepCopy()
+	//resMap, _ := schemaToMap(responseSchemaCopy, g.generatorConfig)
+	//resJSON, _ := json.MarshalIndent(resMap, "", "  ")
+	//log.Printf("[DEBUG] Response Schema in BuildStatusSchema:\n%s", string(resJSON))
+
 	if err := prepareSchemaForCRD(responseSchema, g.generatorConfig); err != nil {
 		return nil, warnings, fmt.Errorf("could not prepare status schema for CRD: %w", err)
 	}
@@ -36,6 +42,8 @@ func (g *OASSchemaGenerator) BuildStatusSchema() ([]byte, []error, error) {
 	if err != nil {
 		return nil, warnings, fmt.Errorf("could not generate final JSON schema for status: %w", err)
 	}
+
+	//log.Printf("Generated status schema: %s", string(byteSchema))
 
 	return byteSchema, warnings, nil
 }
@@ -52,7 +60,7 @@ func (g *OASSchemaGenerator) composeStatusSchema(allStatusFields []string, respo
 		// Find the property in the source response schema.
 		foundProp, found := g.findPropertyByPath(responseSchema, pathParts)
 		if found {
-			// Build the nested structure in the destination status schema.
+			// `findPropertyByPath` returns a deep-copied property, so we can use it directly.
 			g.addPropertyByPath(statusSchema, pathParts, foundProp)
 		} else {
 			// Fallback for fields not found in the response schema.
@@ -87,7 +95,14 @@ func (g *OASSchemaGenerator) findPropertyByPathRec(ctx context.Context, schema *
 	for _, prop := range schema.Properties {
 		if prop.Name == fieldName {
 			if len(remainingPath) == 0 {
-				return prop, true // Found the target property
+				// Return a deep copy to ensure no pointers from the source schema leak out.
+				return Property{
+					Name:   prop.Name,
+					Schema: prop.Schema.deepCopy(),
+				}, true
+			}
+			if prop.Schema == nil || getPrimaryType(prop.Schema.Type) != "object" {
+				continue // Can't traverse further if it's not an object
 			}
 			// Continue traversing into the sub-schema.
 			return g.findPropertyByPathRec(ctx, prop.Schema, remainingPath, guard, depth+1)
@@ -137,6 +152,12 @@ func (g *OASSchemaGenerator) addPropertyByPathRec(ctx context.Context, schema *S
 			found = true
 			break
 		}
+	}
+
+	if nextSchema != nil && getPrimaryType(nextSchema.Type) != "object" {
+		// Error: expected an object to traverse further, but found a different type.
+		//log.Printf("Warning: expected object type at '%s' but found type '%v'.", fieldName, nextSchema.Type)
+		return
 	}
 
 	if !found {

@@ -68,9 +68,12 @@ func prepareSchemaForCRDWithVisited(
 		return fmt.Errorf("recursion limit exceeded: %w", err)
 	}
 
-	// Detect circular references - if we've seen this schema before, skip processing
+	// Detect already processed - if we've seen this schema before, skip processing
 	if _, exists := visited[schema]; exists {
-		return nil // Already processed or being processed
+		//log.Printf("Already processed schema at depth %d: %v", depth, schema)
+		//log.Printf("Schema info: Type=%v, Description=%q, Properties=%d", schema.Type, schema.Description, len(schema.Properties))
+		//log.Printf("Skipping further processing.")
+		return nil // Already processed
 	}
 
 	// Mark this schema as being processed
@@ -115,20 +118,41 @@ func prepareSchemaForCRDWithVisited(
 				// Inherit type only if the main schema doesn't have one
 				if len(schema.Type) == 0 && len(allOfSchema.Type) > 0 {
 					schema.Type = allOfSchema.Type
+				} else {
+					// If both have types, ensure they are compatible
+					// Otherwise, log a warning
+					if !areTypesCompatible(schema.Type, allOfSchema.Type) {
+						log.Printf("Warning: Incompatible types in allOf merge: %v vs %v", schema.Type, allOfSchema.Type)
+						log.Printf("Schema info: Type=%v, Description=%q, Properties=%d", schema.Type, schema.Description, len(schema.Properties))
+					}
 				}
 			}
 		}
 
 		// Append the merged properties to the original schema
-		schema.Properties = append(schema.Properties, mergedProperties...)
+		propIndex := make(map[string]int)
+		// start with existing properties and map their names to indexes
+		for i, p := range schema.Properties {
+			propIndex[p.Name] = i
+		}
+		for _, p := range mergedProperties {
+			if _, exists := propIndex[p.Name]; exists {
+				// If property already exists, we keep the existing one (no overwrite)
+				//log.Printf("Property '%s' already exists in schema; skipping merge from allOf", p.Name)
+			} else {
+				// New property, add it
+				propIndex[p.Name] = len(schema.Properties) // new index
+				schema.Properties = append(schema.Properties, p)
+			}
+		}
 
 		// Handle 'required' fields with deduplication
 		// We need to avoid duplicates in the 'required' list like ["id", "name", "id"]
 		requiredSet := make(map[string]struct{})
-		for _, req := range schema.Required { // Add existing required fields
+		for _, req := range schema.Required { // Add existing required fields from the main schema
 			requiredSet[req] = struct{}{}
 		}
-		for _, req := range mergedRequired { // Add merged required fields
+		for _, req := range mergedRequired { // Add merged required fields from allOf schemas
 			requiredSet[req] = struct{}{}
 		}
 		newRequired := make([]string, 0, len(requiredSet))
@@ -151,7 +175,7 @@ func prepareSchemaForCRDWithVisited(
 	return nil
 }
 
-// convertNumberToInteger converts "number" types to "integer" types for CRD compatibility.
+// convertNumberToInteger converts "number" types to "integer" types for K8s CRD compatibility.
 func convertNumberToInteger(schema *Schema) {
 	if schema == nil {
 		return
@@ -291,7 +315,8 @@ func schemaToMapWithVisited(
 	// Kept here for safety.
 	if len(schema.AllOf) > 0 {
 		// consider adding a log here to indicate unexpected AllOf presence
-		//log.Printf("Processing allOf inside schemaToMapWithVisited at depth %d", depth)
+		//log.Printf("[UNEXPTECTED] Processing allOf inside schemaToMapWithVisited at depth %d", depth)
+		//log.Printf("[UNEXPTECTED] Schema info: Type=%v, Description=%q, Properties=%d", schema.Type, schema.Description, len(schema.Properties))
 		allOfList := make([]interface{}, 0, len(schema.AllOf))
 		for i, s := range schema.AllOf {
 			allOfMap, err := schemaToMapWithVisited(ctx, s, guard, visited, depth+1)

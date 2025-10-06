@@ -19,12 +19,24 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 		return nil, nil, fmt.Errorf("could not determine base schema for spec: %w", err)
 	}
 
+	// DEBUG: Log the initial base schema
+	//baseSchemaCopy := baseSchema.deepCopy()
+	//baseMap, _ := schemaToMap(baseSchemaCopy, g.generatorConfig)
+	//baseJSON, _ := json.MarshalIndent(baseMap, "", "  ")
+	//log.Printf("[DEBUG] Initial Base Schema in BuildSpecSchema:\n%s", string(baseJSON))
+
 	// Add parameters to the spec schema.
 	warnings = append(warnings, g.addParametersToSpec(baseSchema)...)
 
 	// Add identifiers to the spec schema, if configured.
+	// Kept for legacy reasons, disabled by default.
 	if g.generatorConfig.IncludeIdentifiersInSpec {
 		addIdentifiersToSpec(baseSchema, g.resourceConfig.Identifiers)
+	}
+
+	// Schema preparation for CRD compatibility.
+	if err := prepareSchemaForCRD(baseSchema, g.generatorConfig); err != nil {
+		return nil, warnings, fmt.Errorf("could not prepare spec schema for CRD: %w", err)
 	}
 
 	// If the resource has configuration fields, add a reference to the configuration schema.
@@ -39,18 +51,20 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	// Remove excluded fields from the spec schema.
 	warnings = append(warnings, g.removeExcludedSpecFields(baseSchema)...)
 
-	// Schema preparation for CRD compatibility.
-	if err := prepareSchemaForCRD(baseSchema, g.generatorConfig); err != nil {
-		return nil, warnings, fmt.Errorf("could not prepare spec schema for CRD: %w", err)
-	}
-
 	//log.Printf("Spec schema AFTER prepareSchemaForCRD: %+v", baseSchema)
+
+	// DEBUG: Log the final spec schema object before marshalling
+	//finalMap, _ := schemaToMap(baseSchema, g.generatorConfig)
+	//finalJSON, _ := json.MarshalIndent(finalMap, "", "  ")
+	//log.Printf("[DEBUG] Final Spec Schema Object in BuildSpecSchema:\n%s", string(finalJSON))
 
 	// Convert the schema to JSON schema format.
 	byteSchema, err := GenerateJsonSchema(baseSchema, g.generatorConfig)
 	if err != nil {
 		return nil, warnings, fmt.Errorf("could not generate final JSON schema: %w", err)
 	}
+
+	//log.Printf("Generated spec schema: %s", string(byteSchema))
 
 	return byteSchema, warnings, nil
 }
@@ -98,14 +112,16 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 			// Add parameter to spec only if not already present in uniqueParams AND not in existing base schema
 			// Therefore we give precedence to base schema properties over parameters.
 			if _, exists := uniqueParams[param.Name]; !exists && !propertyExists(param.Name) {
+				// Deep copy the schema to avoid modifying the original object, which might be shared.
+				schemaCopy := param.Schema.deepCopy()
+
 				if param.Description == "" {
-					param.Schema.Description = fmt.Sprintf("PARAMETER: %s", param.In)
+					schemaCopy.Description = fmt.Sprintf("PARAMETER: %s", param.In)
 				} else {
-					param.Schema.Description = fmt.Sprintf("PARAMETER: %s - %s", param.In, param.Description)
+					schemaCopy.Description = fmt.Sprintf("PARAMETER: %s - %s", param.In, param.Description)
 				}
-				schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: param.Schema})
+				schema.Properties = append(schema.Properties, Property{Name: param.Name, Schema: schemaCopy})
 				if param.Required {
-					//log.Printf("Adding required path / query parameter: %s\n", param.Name)
 					schema.Required = append(schema.Required, param.Name)
 				}
 
@@ -117,7 +133,7 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 	return warnings
 }
 
-// addConfigurationRefToSpec adds the `configurationRef` property to the schema.
+// addConfigurationRefToSpec adds the `configurationRef` property to the schema (at the root level of spec).
 func addConfigurationRefToSpec(schema *Schema) {
 	configRefSchema := &Schema{
 		Type:        []string{"object"},
