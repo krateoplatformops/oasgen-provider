@@ -5,6 +5,7 @@ package restdefinition
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,19 +56,20 @@ const (
 func TestMain(m *testing.M) {
 	xenv.SetTestMode(true)
 
-	namespace = "gh-system"
+	//namespace = "gh-system"
 	clusterName = "krateo-restdefinition-test"
 	testenv = env.New()
 
 	testenv.Setup(
 		envfuncs.CreateCluster(kind.NewProvider(), clusterName),
 		envfuncs.SetupCRDs(crdPath, "ogen.krateo.io_restdefinitions.yaml"),
-		e2e.CreateNamespace(namespace),
+		//e2e.CreateNamespace(namespace),
 		e2e.CreateNamespace("demo-system"),
 		e2e.CreateNamespace("krateo-system"),
 		e2e.CreateNamespace("gh-system"),
+		e2e.CreateNamespace("arubacloud-system"),
 	).Finish(
-		envfuncs.DeleteNamespace(namespace),
+		//envfuncs.DeleteNamespace(namespace),
 		envfuncs.DestroyCluster(clusterName),
 	)
 
@@ -458,6 +460,230 @@ func TestLifecycle_GitHubWorkflows(t *testing.T) {
 				assert.True(t, ok, "expecting config spec path to have 'owner' property")
 				//_, ok = pathCreateProps["repo"]
 				//assert.True(t, ok, "expecting config spec path to have 'repo' property")
+
+				return ctx
+			}
+
+			return ctx
+		}).
+		Assess("Delete", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			r, err := resources.New(cfg.Client().RESTConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = handler.Delete(ctx, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			gvk := schema.GroupVersionKind{
+				Group:   mg.Spec.ResourceGroup,
+				Version: resourceVersion,
+				Kind:    mg.Spec.Resource.Kind,
+			}
+
+			gvr := plurals.ToGroupVersionResource(gvk)
+
+			depl := appsv1.Deployment{}
+			err = objects.CreateK8sObject(&depl, gvr, types.NamespacedName{
+				Namespace: mg.GetNamespace(),
+				Name:      mg.GetName(),
+			}, filepath.Join(testdataPath, "setup/rdc", "deployment.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = wait.For(
+				conditions.New(r).ResourceDeleted(&depl),
+				wait.WithTimeout(time.Second*30),
+				wait.WithInterval(time.Second*1),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			return ctx
+		}).Feature()
+	testenv.Test(t, f)
+}
+
+func TestLifecycle_ArubaCloudSubnet(t *testing.T) {
+	os.Setenv("DEBUG", "1")
+
+	var handler reconciler.ExternalClient
+	mg := definitionv1alpha1.RestDefinition{}
+	f := features.New("Setup").
+		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			kube, err := client.New(cfg.Client().RESTConfig(), client.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			r, err := resources.New(cfg.Client().RESTConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			os.Setenv("RDC_TEMPLATE_DEPLOYMENT_PATH", filepath.Join(testdataPath, "setup/rdc", "deployment.yaml"))
+			os.Setenv("RDC_TEMPLATE_CONFIGMAP_PATH", filepath.Join(testdataPath, "setup/rdc", "configmap.yaml"))
+			os.Setenv("RDC_RBAC_CONFIG_FOLDER", filepath.Join(testdataPath, "setup/rdc", "rbac"))
+
+			scenarioDir := filepath.Join(testdataPath, "arubacloud-provider-kog", "subnet")
+			err = decoder.DecodeEachFile(ctx, os.DirFS(scenarioDir),
+				"*.yaml",
+				decoder.CreateIgnoreAlreadyExists(r))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = decoder.DecodeFile(os.DirFS(scenarioDir), "restdefinition.yaml", &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			disc := discovery.NewDiscoveryClientForConfigOrDie(cfg.Client().RESTConfig())
+			apis.AddToScheme(r.GetScheme())
+			conn := connector{
+				kube:     kube,
+				log:      &fakelogger{},
+				recorder: record.NewFakeRecorder(100),
+				disc:     disc,
+				parser:   oas2jsonschema.NewLibOASParser(),
+			}
+
+			handler, err = conn.Connect(ctx, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			return ctx
+		}).
+		Assess("Create", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			r, err := resources.New(cfg.Client().RESTConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = handler.Create(ctx, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			time.Sleep(5 * time.Second)
+
+			err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			obs, err := handler.Observe(ctx, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if obs.ResourceExists == false && obs.ResourceUpToDate == true {
+				err = handler.Create(ctx, &mg)
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				t.Fatal("Unexpected state", obs)
+			}
+
+			time.Sleep(50 * time.Second)
+
+			err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			obs, err = handler.Observe(ctx, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ctx, err = handleObservation(t, ctx, handler, obs, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			obs, err = handler.Observe(ctx, &mg)
+
+			if obs.ResourceExists == true && obs.ResourceUpToDate == true {
+				gvr := plurals.ToGroupVersionResource(schema.GroupVersionKind{
+					Group:   mg.Spec.ResourceGroup,
+					Version: resourceVersion,
+					Kind:    mg.Spec.Resource.Kind,
+				})
+
+				// Check if the CRD is generated correctly
+				crd := apiextensionsv1.CustomResourceDefinition{}
+				err := r.Get(ctx, gvr.Resource+"."+gvr.Group, "", &crd)
+				assert.Nil(t, err, "expecting nil error getting generated crd")
+
+				schema := crd.Spec.Versions[0].Schema.OpenAPIV3Schema
+				assert.NotNil(t, schema, "expecting schema to be not nil")
+
+				// print entire schema for debugging
+				schemaBytes, _ := json.MarshalIndent(schema, "", "  ")
+				t.Logf("CRD Schema: %s", string(schemaBytes))
+
+				specProps := schema.Properties["spec"].Properties
+
+				_, ok := specProps["configurationRef"]
+				assert.True(t, ok, "expecting spec to have 'configurationRef' property")
+				_, ok = specProps["properties"]
+				assert.True(t, ok, "expecting spec to have 'properties' property")
+
+				// Check if the Configuration CRD is generated correctly
+				configCrd := apiextensionsv1.CustomResourceDefinition{}
+				err = r.Get(ctx, "subnetconfigurations.arubacloud.ogen.krateo.io", "", &configCrd)
+				assert.Nil(t, err, "expecting nil error getting generated configuration crd")
+
+				configRootSchema := configCrd.Spec.Versions[0].Schema.OpenAPIV3Schema
+				assert.NotNil(t, configRootSchema, "expecting configuration root schema to be not nil")
+
+				// Print entire configuration schema for debugging
+				configSchemaBytes, _ := json.MarshalIndent(configRootSchema, "", "  ")
+				t.Logf("Configuration CRD Schema: %s", string(configSchemaBytes))
+
+				//configRootSchemaProps := configRootSchema.Properties["spec"].Properties
+
+				//_, ok = configRootSchemaProps["authentication"]
+				//assert.True(t, ok, "expecting config spec to have 'authentication' property")
+				//
+				//configurationProps, ok := configRootSchemaProps["configuration"]
+				//assert.True(t, ok, "expecting config spec to have 'configuration' property")
+				//
+				//pathProp, ok := configurationProps.Properties["path"]
+				//assert.True(t, ok, "expecting config spec to have 'path' property")
+				//pathCreate, ok := pathProp.Properties["create"]
+				//assert.True(t, ok, "expecting config spec path to have 'create' property")
+				//
+				//// check inside 'path' property of the configuration spec
+				//pathCreateProps := pathCreate.Properties
+				//_, ok = pathCreateProps["owner"]
+				//assert.True(t, ok, "expecting config spec path to have 'owner' property")
+				////_, ok = pathCreateProps["repo"]
+				////assert.True(t, ok, "expecting config spec path to have 'repo' property")
 
 				return ctx
 			}

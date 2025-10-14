@@ -1,0 +1,848 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: arubacloud-subnet
+  namespace: arubacloud-system
+data:
+  subnet.yaml: |-
+    openapi: 3.0.1
+    info:
+      title: Aruba.Network.Api
+      description: 'Aruba.Network.Api HTTP API
+
+
+        Download the <a href="/openapi/network-provider.json" target="_blank"> OpenAPI file</a>'
+      version: '1.0'
+    servers:
+    - url: https://api.arubacloud.com
+    paths:
+      /projects/{projectId}/providers/Aruba.Network/vpcs/{vpcId}/subnets:
+        post:
+          tags:
+          - Subnet
+          summary: Create Subnet
+          parameters:
+          - name: projectId
+            in: path
+            description: unique identifier of the project CMP
+            required: true
+            schema:
+              type: string
+          - name: vpcId
+            in: path
+            description: unique identifier of the vpc in which the subnet will be created
+            required: true
+            schema:
+              type: string
+          - name: api-version
+            in: query
+            description: The requested API version
+            schema:
+              type: string
+              default: '1.0'
+          requestBody:
+            description: the subnet to create
+            content:
+              application/json:
+                schema:
+                  allOf:
+                  - $ref: '#/components/schemas/SubnetDto'
+              text/json:
+                schema:
+                  allOf:
+                  - $ref: '#/components/schemas/SubnetDto'
+              application/*+json:
+                schema:
+                  allOf:
+                  - $ref: '#/components/schemas/SubnetDto'
+          responses:
+            '201':
+              description: Created
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+            '400':
+              description: Bad Request
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+            '500':
+              description: Server Error
+          APIDOC: true
+        get:
+          tags:
+          - Subnet
+          summary: List Subnets
+          parameters:
+          - name: projectId
+            in: path
+            description: unique identifier of the project CMP
+            required: true
+            schema:
+              type: string
+          - name: vpcId
+            in: path
+            description: unique identifier of the vpc in which the subnets have been created
+            required: true
+            schema:
+              type: string
+          - name: filter
+            in: query
+            schema:
+              type: string
+          - name: sort
+            in: query
+            schema:
+              type: string
+          - name: projection
+            in: query
+            schema:
+              type: string
+          - name: offset
+            in: query
+            schema:
+              type: integer
+              format: int32
+          - name: limit
+            in: query
+            schema:
+              type: integer
+              format: int32
+          - name: api-version
+            in: query
+            description: The requested API version
+            schema:
+              type: string
+              default: '1.0'
+          responses:
+            '200':
+              description: Success
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/SubnetListResponseDto'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetListResponseDto'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetListResponseDto'
+            '400':
+              description: Bad Request
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+            '500':
+              description: Server Error
+          APIDOC: true
+      /projects/{projectId}/providers/Aruba.Network/vpcs/{vpcId}/subnets/{id}:
+        put:
+          tags:
+          - Subnet
+          summary: Update Subnet
+          parameters:
+          - name: projectId
+            in: path
+            description: unique identifier of the project CMP
+            required: true
+            schema:
+              type: string
+          - name: vpcId
+            in: path
+            description: unique identifier of the vpc in which the subnet has been created
+            required: true
+            schema:
+              type: string
+          - name: id
+            in: path
+            description: unique identifier of the subnet to update
+            required: true
+            schema:
+              type: string
+          - name: api-version
+            in: query
+            description: The requested API version
+            schema:
+              type: string
+              default: '1.0'
+          requestBody:
+            description: the subnet to update
+            content:
+              application/json:
+                schema:
+                  allOf:
+                  - $ref: '#/components/schemas/SubnetUpdateDto'
+              text/json:
+                schema:
+                  allOf:
+                  - $ref: '#/components/schemas/SubnetUpdateDto'
+              application/*+json:
+                schema:
+                  allOf:
+                  - $ref: '#/components/schemas/SubnetUpdateDto'
+          responses:
+            '200':
+              description: Success
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+            '400':
+              description: Bad Request
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+            '404':
+              description: Not Found
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+            '500':
+              description: Server Error
+          APIDOC: true
+        get:
+          tags:
+          - Subnet
+          summary: Get Subnet
+          parameters:
+          - name: projectId
+            in: path
+            description: unique identifier of the project CMP
+            required: true
+            schema:
+              type: string
+          - name: vpcId
+            in: path
+            description: unique identifier of the vpc in which the subnet has been created
+            required: true
+            schema:
+              type: string
+          - name: id
+            in: path
+            description: unique identifier of the subnet to retrieve
+            required: true
+            schema:
+              type: string
+          - name: ignoreDeletedStatus
+            in: query
+            description: if the resource exists in status "Deleted", returns NotFound according to the value of this flag
+            schema:
+              type: boolean
+              default: false
+          - name: api-version
+            in: query
+            description: The requested API version
+            schema:
+              type: string
+              default: '1.0'
+          responses:
+            '200':
+              description: Success
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetResponseDto'
+            '404':
+              description: Not Found
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+            '500':
+              description: Server Error
+          APIDOC: true
+        delete:
+          tags:
+          - Subnet
+          summary: Delete Subnet
+          parameters:
+          - name: projectId
+            in: path
+            description: unique identifier of the project CMP
+            required: true
+            schema:
+              type: string
+          - name: vpcId
+            in: path
+            description: unique identifier of the vpc in which the subnet has been created
+            required: true
+            schema:
+              type: string
+          - name: id
+            in: path
+            description: unique identifier of the subnet to delete
+            required: true
+            schema:
+              type: string
+          - name: newDefaultSubnet
+            in: query
+            description: if a default subnet is going to be deleted, it's the uri of the subnet to set as default for the vpc
+              to replace the deleting one
+            schema:
+              type: string
+          - name: api-version
+            in: query
+            description: The requested API version
+            schema:
+              type: string
+              default: '1.0'
+          responses:
+            '202':
+              description: Accepted
+            '400':
+              description: Bad Request
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+            '403':
+              description: Forbidden
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+            '404':
+              description: Not Found
+              content:
+                text/plain:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+                text/json:
+                  schema:
+                    $ref: '#/components/schemas/ProblemDetails'
+            '500':
+              description: Server Error
+          APIDOC: true
+    components:
+      schemas:
+        CategoryResponseDto:
+          type: object
+          properties:
+            name:
+              type: string
+              nullable: true
+            provider:
+              type: string
+              nullable: true
+            typology:
+              allOf:
+              - $ref: '#/components/schemas/TypologyResponseDto'
+              nullable: true
+          additionalProperties: false
+        DhcpDto:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              description: True if you want to enalbe the DHCP
+            range:
+              allOf:
+              - $ref: '#/components/schemas/RangeDto'
+              description: Range values for ip addresses
+            routes:
+              type: array
+              items:
+                $ref: '#/components/schemas/RouteDto'
+              description: List of routes
+              nullable: true
+            dns:
+              type: array
+              items:
+                type: string
+              description: List of dns (ip addresses)
+              nullable: true
+          additionalProperties: false
+        DhcpResponseDto:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              description: True if dhcp is enables
+            range:
+              allOf:
+              - $ref: '#/components/schemas/RangeResponseDto'
+              description: Range values for ip addresses
+              nullable: true
+            routes:
+              type: array
+              items:
+                $ref: '#/components/schemas/RouteResponseDto'
+              description: List of routes
+              nullable: true
+            dns:
+              type: array
+              items:
+                type: string
+              description: List of dns
+              nullable: true
+          additionalProperties: false
+        DisableStatusInfoResponseDto:
+          type: object
+          properties:
+            isDisabled:
+              type: boolean
+            reasons:
+              type: array
+              items:
+                type: string
+              nullable: true
+            previousStatus:
+              allOf:
+              - $ref: '#/components/schemas/PreviousStatusResponseDto'
+              nullable: true
+          additionalProperties: false
+        GenericResourceResponseDto:
+          type: object
+          properties:
+            uri:
+              type: string
+              nullable: true
+          additionalProperties: false
+        LinkedResourceResponseDto:
+          type: object
+          properties:
+            uri:
+              type: string
+              nullable: true
+            strictCorrelation:
+              type: boolean
+          additionalProperties: false
+        LocationDto:
+          type: object
+          properties:
+            value:
+              type: string
+              description: "Value of the region in which the resource will be located.\r\nAvailable regions at present:\r\n- ITBG-Bergamo\n\
+                \nFor more information, check the <a href=\"/docs/metadata/#location-and-data-center\" target=\"_blank\">documentation</a>."
+          additionalProperties: false
+          description: Contains information about the Region of a resource
+        LocationResponseDto:
+          type: object
+          properties:
+            code:
+              type: string
+              nullable: true
+            country:
+              type: string
+              nullable: true
+            city:
+              type: string
+              nullable: true
+            name:
+              type: string
+              nullable: true
+            value:
+              type: string
+              nullable: true
+          additionalProperties: false
+        MetadataResponseDto:
+          type: object
+          properties:
+            id:
+              type: string
+              nullable: true
+            uri:
+              type: string
+              nullable: true
+            name:
+              type: string
+              nullable: true
+            location:
+              allOf:
+              - $ref: '#/components/schemas/LocationResponseDto'
+              nullable: true
+            project:
+              allOf:
+              - $ref: '#/components/schemas/ProjectResponseDto'
+              nullable: true
+            tags:
+              type: array
+              items:
+                type: string
+              nullable: true
+            category:
+              allOf:
+              - $ref: '#/components/schemas/CategoryResponseDto'
+              nullable: true
+            creationDate:
+              type: string
+              format: date-time
+              nullable: true
+            createdBy:
+              type: string
+              nullable: true
+            updateDate:
+              type: string
+              format: date-time
+              nullable: true
+            updatedBy:
+              type: string
+              nullable: true
+            version:
+              type: string
+              nullable: true
+            createdUser:
+              type: string
+              nullable: true
+            updatedUser:
+              type: string
+              nullable: true
+          additionalProperties: false
+        NetworkDto:
+          type: object
+          properties:
+            address:
+              type: string
+              description: "Address of the network in CIDR Notation.\r\nThe IP range must be between 10.0.0.0/8, 172.16.0.0/12,\
+                \ 192.168.0.0/16"
+          additionalProperties: false
+        NetworkResponseDto:
+          type: object
+          properties:
+            address:
+              type: string
+              description: Address of the network in CIDR Notation
+              nullable: true
+            gateway:
+              type: string
+              description: IP address of the gateway
+              nullable: true
+          additionalProperties: false
+        PreviousStatusResponseDto:
+          type: object
+          properties:
+            state:
+              type: string
+              nullable: true
+            creationDate:
+              type: string
+              format: date-time
+              nullable: true
+          additionalProperties: false
+        ProblemDetails:
+          type: object
+          properties:
+            type:
+              type: string
+              nullable: true
+            title:
+              type: string
+              nullable: true
+            status:
+              type: integer
+              format: int32
+              nullable: true
+            detail:
+              type: string
+              nullable: true
+            instance:
+              type: string
+              nullable: true
+          additionalProperties: {}
+        ProjectResponseDto:
+          type: object
+          properties:
+            id:
+              type: string
+              nullable: true
+          additionalProperties: false
+        RangeDto:
+          type: object
+          properties:
+            start:
+              type: string
+              description: Starting ip address
+            count:
+              type: integer
+              description: Number of available ip addresses
+              format: int32
+          additionalProperties: false
+        RangeResponseDto:
+          type: object
+          properties:
+            start:
+              type: string
+              description: First ip address
+              nullable: true
+            count:
+              type: integer
+              description: Number of available ip addresses
+              format: int32
+            last:
+              type: string
+              description: Last ip address
+              nullable: true
+          additionalProperties: false
+        RouteDto:
+          type: object
+          properties:
+            address:
+              type: string
+              description: Ip address of the route
+            gateway:
+              type: string
+              description: Gateway
+          additionalProperties: false
+        RouteResponseDto:
+          type: object
+          properties:
+            address:
+              type: string
+              description: Ip address of the route
+              nullable: true
+            gateway:
+              type: string
+              description: Gateway
+              nullable: true
+          additionalProperties: false
+        StatusResponseDto:
+          type: object
+          properties:
+            state:
+              type: string
+              nullable: true
+            creationDate:
+              type: string
+              format: date-time
+              nullable: true
+            disableStatusInfo:
+              allOf:
+              - $ref: '#/components/schemas/DisableStatusInfoResponseDto'
+              nullable: true
+            failureReason:
+              type: string
+              nullable: true
+          additionalProperties: false
+        SubnetDto:
+          type: object
+          properties:
+            metadata:
+              $ref: '#/components/schemas/MetadataDto'
+            properties:
+              allOf:
+              - $ref: '#/components/schemas/SubnetPropertiesDto'
+              description: Properties of a subnet to create
+              nullable: true
+          additionalProperties: false
+        SubnetListResponseDto:
+          type: object
+          properties:
+            total:
+              type: integer
+              format: int64
+            self:
+              type: string
+              nullable: true
+            prev:
+              type: string
+              nullable: true
+            next:
+              type: string
+              nullable: true
+            first:
+              type: string
+              nullable: true
+            last:
+              type: string
+              nullable: true
+            values:
+              type: array
+              items:
+                $ref: '#/components/schemas/SubnetResponseDto'
+              nullable: true
+          additionalProperties: false
+        SubnetPropertiesDto:
+          type: object
+          properties:
+            type:
+              allOf:
+              - $ref: '#/components/schemas/SubnetType'
+              description: "Type of the subnet.\r\nAvailable values:\r\n- Basic\r\n- Advanced\r\n\r\nWith Basic type, every configuration\
+                \ settings of the subnet will be automatically handled by the CMP.\r\nWith Advanced type, configuration settings\
+                \ must be evaluated by the user."
+            default:
+              type: boolean
+              description: "Indicates if the subnet must be a default subnet.\r\nOnly one default subnet for vpc is admissible."
+            network:
+              allOf:
+              - $ref: '#/components/schemas/NetworkDto'
+              description: Details of the network
+              nullable: true
+            dhcp:
+              allOf:
+              - $ref: '#/components/schemas/DhcpDto'
+              description: Details of the dhcp
+              nullable: true
+          additionalProperties: false
+          description: Properties of a subnet to create
+        SubnetPropertiesResponseDto:
+          type: object
+          properties:
+            linkedResources:
+              type: array
+              items:
+                $ref: '#/components/schemas/LinkedResourceResponseDto'
+              nullable: true
+            vpc:
+              allOf:
+              - $ref: '#/components/schemas/GenericResourceResponseDto'
+              description: the vpc where the subnet belongs
+              nullable: true
+            type:
+              allOf:
+              - $ref: '#/components/schemas/SubnetType'
+              description: type of the subnet
+            default:
+              type: boolean
+              description: Indicates if the security group is the default one within the vpc
+            network:
+              allOf:
+              - $ref: '#/components/schemas/NetworkResponseDto'
+              description: Details of the network
+              nullable: true
+            dhcp:
+              allOf:
+              - $ref: '#/components/schemas/DhcpResponseDto'
+              description: Details of the dhcp
+              nullable: true
+          additionalProperties: false
+        SubnetResponseDto:
+          type: object
+          properties:
+            metadata:
+              allOf:
+              - $ref: '#/components/schemas/MetadataResponseDto'
+              nullable: true
+            status:
+              allOf:
+              - $ref: '#/components/schemas/StatusResponseDto'
+              nullable: true
+            properties:
+              allOf:
+              - $ref: '#/components/schemas/SubnetPropertiesResponseDto'
+              nullable: true
+          additionalProperties: false
+        SubnetType:
+          enum:
+          - Basic
+          - Advanced
+          type: string
+        SubnetUpdateDto:
+          type: object
+          properties:
+            metadata:
+              $ref: '#/components/schemas/MetadataDto'
+            properties:
+              allOf:
+              - $ref: '#/components/schemas/SubnetUpdatePropertiesDto'
+              description: Properties of a subnet to update
+              nullable: true
+          additionalProperties: false
+        SubnetUpdatePropertiesDto:
+          type: object
+          properties:
+            default:
+              type: boolean
+              description: "Indicates if the subnet must be a default subnet.\r\nOnly one default subnet for vpc is admissible."
+          additionalProperties: false
+          description: Properties of a subnet to update
+        TypologyResponseDto:
+          type: object
+          properties:
+            id:
+              type: string
+              nullable: true
+            name:
+              type: string
+              nullable: true
+          additionalProperties: false
+        MetadataDto:
+          type: object
+          properties:
+            name:
+              type: string
+              description: Name of the resource
+            location:
+              $ref: '#/components/schemas/LocationDto'
+            tags:
+              type: array
+              items:
+                type: string
+              description: List of tags for the resource
+              nullable: true
+          additionalProperties: false
+          description: Metadata of the resource
+      securitySchemes:
+        accessToken:
+          type: http
+          scheme: bearer
+    security:
+    - accessToken: []

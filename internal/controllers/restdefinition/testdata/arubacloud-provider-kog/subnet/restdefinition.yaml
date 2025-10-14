@@ -1,0 +1,76 @@
+kind: RestDefinition
+apiVersion: ogen.krateo.io/v1alpha1
+metadata:
+  name: arubacloud-subnet
+  namespace: arubacloud-system
+spec:
+  oasPath: configmap://arubacloud-system/arubacloud-subnet/subnet.yaml
+  resourceGroup: arubacloud.ogen.krateo.io
+  resource: 
+    kind: Subnet
+    identifiers:
+      - metadata.name
+    #additionalStatusFields:
+    #  - id
+    #excludedSpecFields:
+    #  - id
+    verbsDescription:
+    - action: findby
+      method: GET
+      path: /projects/{projectId}/providers/Aruba.Network/vpcs/{vpcId}/subnets
+    - action: get
+      method: GET
+      path: /projects/{projectId}/providers/Aruba.Network/vpcs/{vpcId}/subnets/{id}
+    - action: create
+      method: POST
+      path: /projects/{projectId}/providers/Aruba.Network/vpcs/{vpcId}/subnets
+    - action: update
+      method: PUT
+      path: /projects/{projectId}/providers/Aruba.Network/vpcs/{vpcId}/subnets/{id}
+    - action: delete
+      method: DELETE
+      path: /projects/{projectId}/providers/Aruba.Network/vpcs/{vpcId}/subnets/{id}
+    configurationFields:
+    - fromOpenAPI:
+        name: api-version
+        in: query
+      fromRestDefinition:
+        actions: ["*"] # star means all actions set in the verbsDescription above
+    - fromOpenAPI:
+        name: filter
+        in: query
+      fromRestDefinition:
+        actions:
+          - findby
+    - fromOpenAPI:
+        name: sort
+        in: query
+      fromRestDefinition:
+        actions:
+          - findby
+    - fromOpenAPI:
+        name: projection
+        in: query
+      fromRestDefinition:
+        actions:
+          - findby
+    - fromOpenAPI:
+        name: offset
+        in: query
+      fromRestDefinition:
+        actions:
+          - findby
+    - fromOpenAPI:
+        name: limit
+        in: query
+      fromRestDefinition:
+        actions:
+          - findby
+    - fromOpenAPI:
+        name: ignoreDeletedStatus
+        in: query
+      fromRestDefinition:
+        actions:
+          - get
+
+

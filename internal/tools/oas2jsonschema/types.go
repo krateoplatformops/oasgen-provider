@@ -78,7 +78,8 @@ type Schema struct {
 	Enum                 []interface{}
 	AdditionalProperties bool
 	MaxProperties        int
-	Format               string // not validated but added value to description if present
+	Format               string                 // Not validated but added value to description if present
+	Extensions           map[string]interface{} // For custom extensions like `x-crdgen-identifier-name`
 }
 
 // Property represents a single key-value pair in a schema's properties.

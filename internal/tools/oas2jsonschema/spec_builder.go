@@ -9,6 +9,8 @@ import (
 )
 
 // BuildSpecSchema generates the complete spec schema for a given resource.
+// It returns the schema as a byte slice with a list of warnings (non-fatal errors as a slice of errors).
+// It returns a fatal error if the schema generation fails.
 func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	var warnings []error
 
@@ -18,12 +20,6 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not determine base schema for spec: %w", err)
 	}
-
-	// DEBUG: Log the initial base schema
-	//baseSchemaCopy := baseSchema.deepCopy()
-	//baseMap, _ := schemaToMap(baseSchemaCopy, g.generatorConfig)
-	//baseJSON, _ := json.MarshalIndent(baseMap, "", "  ")
-	//log.Printf("[DEBUG] Initial Base Schema in BuildSpecSchema:\n%s", string(baseJSON))
 
 	// Add parameters to the spec schema.
 	warnings = append(warnings, g.addParametersToSpec(baseSchema)...)
@@ -50,13 +46,6 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 
 	// Remove excluded fields from the spec schema.
 	warnings = append(warnings, g.removeExcludedSpecFields(baseSchema)...)
-
-	//log.Printf("Spec schema AFTER prepareSchemaForCRD: %+v", baseSchema)
-
-	// DEBUG: Log the final spec schema object before marshalling
-	//finalMap, _ := schemaToMap(baseSchema, g.generatorConfig)
-	//finalJSON, _ := json.MarshalIndent(finalMap, "", "  ")
-	//log.Printf("[DEBUG] Final Spec Schema Object in BuildSpecSchema:\n%s", string(finalJSON))
 
 	// Convert the schema to JSON schema format.
 	byteSchema, err := GenerateJsonSchema(baseSchema, g.generatorConfig)

@@ -2,6 +2,7 @@ package oas2jsonschema
 
 import (
 	"fmt"
+	"log"
 )
 
 // OASSchemaGenerator orchestrates the generation of CRD schemas from an OpenAPI document.
@@ -40,28 +41,8 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	}
 	generationWarnings = append(generationWarnings, warnings...)
 
-	// consider to log the generated spec schema for debugging purposes
-	//log.Print("======= Final Spec Schema (after status management) =======")
-	//log.Print(string(specSchema))
-	//log.Print("======= End Spec Schema =======")
-
-	// consider to log the generated status schema for debugging purposes
-	//log.Print("======= Status Schema =======")
-	//log.Print(string(statusSchema))
-	//log.Print("======= End Status Schema =======")
-
 	// Validate Status Schema
 	validationWarnings := ValidateSchemas(g.doc, g.resourceConfig.Verbs, g.generatorConfig)
-
-	// consider to log the generated spec schema for debugging purposes
-	//log.Print("======= Final Spec Schema (after validation) =======")
-	//log.Print(string(specSchema))
-	//log.Print("======= End Spec Schema =======")
-
-	// consider to log the generated status schema for debugging purposes
-	//log.Print("======= Status Schema =======")
-	//log.Print(string(statusSchema))
-	//log.Print("======= End Status Schema =======")
 
 	// Generate Configuration Schema if needed
 	var configurationSchema []byte
@@ -75,14 +56,20 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	}
 
 	// consider to log the generated spec schema for debugging purposes
-	//log.Print("======= Final Spec Schema (after configuration management) =======")
-	//log.Print(string(specSchema))
-	//log.Print("======= End Spec Schema =======")
+	log.Print("======= Final Spec Schema =======")
+	log.Print(string(specSchema))
+	log.Print("======= End Spec Schema =======")
 
 	// consider to log the generated status schema for debugging purposes
-	//log.Print("======= Status Schema =======")
-	//log.Print(string(statusSchema))
-	//log.Print("======= End Status Schema =======")
+	log.Print("======= Final Status Schema  =======")
+	log.Print(string(statusSchema))
+	log.Print("======= End Status Schema =======")
+
+	log.Printf("Final configuration schema")
+	if configurationSchema != nil {
+		log.Print(string(configurationSchema))
+	}
+	log.Print("======= End Configuration Schema =======")
 
 	return &GenerationResult{
 		SpecSchema:          specSchema,

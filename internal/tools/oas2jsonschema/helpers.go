@@ -36,6 +36,9 @@ func areTypesCompatible(types1, types2 []string) bool {
 }
 
 // prepareSchemaForCRD prepares a schema for Kubernetes CRD generation by applying transformations.
+// Namely:
+// - it converts "number" types to "integer"
+// - it merges "allOf" schemas for object types.
 // It handles circular references by tracking visited schemas to prevent infinite recursion.
 func prepareSchemaForCRD(schema *Schema, config *GeneratorConfig) error {
 	if schema == nil {
@@ -335,6 +338,13 @@ func schemaToMapWithVisited(
 	// Process enum values
 	if len(schema.Enum) > 0 {
 		m["enum"] = schema.Enum
+	}
+
+	// Process extensions
+	if len(schema.Extensions) > 0 {
+		for k, v := range schema.Extensions {
+			m[k] = v
+		}
 	}
 
 	return m, nil

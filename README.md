@@ -521,9 +521,14 @@ The typical status code for a successful delete operation is `204 No Content`, b
 
 Some consistency requirements includes but may not be limited to:
 
-1. Field names must be consistent across all actions (`create`, `update`, `findby`, `get`, `delete`)
+1. Field names must be consistent across all actions (`create`, `update`, `findby`, `get`, `delete`). E.g., if the `create` action uses `id`, the `get` action should also use `id` and not `uuid` or `resourceId`.
 2. API responses must be consistent with the fields of the resource schema defined in the OAS document and so the CRD schema.
-3. Path parameters and request / response body fields should use consistent naming (e.g., `userId` vs `user_id` is not consistent, also having `repositoryId` as path paramter and `id` in the response body is not consistent).
+3. Path parameters and request / response body fields should use consistent naming (e.g., `userId` vs `user_id` is not consistent, also having `repositoryId` as path parameter and `id` in the response body is not consistent). 
+Note that the last example is a common case in many APIs, take for instance the following endpoints:
+   - `GET /repositories/{repositoryId}` (path parameter is `repositoryId`)
+   - Response body is like `{ "id": 123, "name": "my-repo" }` (field is `id` and not `repositoryId`)
+This case can be simply solved by carefully modifying the OAS document to use consistent naming, for example changing the path parameter to `id` instead of `repositoryId`. Therefore, simply changing the endpoint to `GET /repositories/{id}` would solve the inconsistency without the need to write a Plugin (Wrapper Web Service).
+
 
 Any API behavior that does not match these requirements will require a web service wrapper to normalize / fix the API interface. 
 This is common with APIs that do not follow consistent naming conventions or have different response structures.
