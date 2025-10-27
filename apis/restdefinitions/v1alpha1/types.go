@@ -5,10 +5,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// FieldMappingItem defines a single mapping from a path/query parameter
+// RequestFieldMappingItem defines a single mapping from a path parameter, query parameter or body field
 // to a field in the Custom Resource.
 // +kubebuilder:validation:XValidation:rule="(has(self.inPath) ? 1 : 0) + (has(self.inQuery) ? 1 : 0) + (has(self.inBody) ? 1 : 0) == 1",message="Either inPath, inQuery or inBody must be set, but not more than one"
-type FieldMappingItem struct {
+type RequestFieldMappingItem struct {
 	// InPath defines the name of the path parameter to be mapped.
 	// Only one of 'inPath', 'inQuery' or 'inBody' can be set.
 	// +optional
@@ -44,10 +44,10 @@ type VerbsDescription struct {
 	// Path: the path to the api - has to be the same path as the one in the OAS file you are referencing
 	// +required
 	Path string `json:"path"`
-	// FieldMapping provides explicit mapping from API parameters (path or query)
+	// RequestFieldMapping provides explicit mapping from API parameters (path, query, or body)
 	// to fields in the Custom Resource.
 	// +optional
-	FieldMapping []FieldMappingItem `json:"fieldMapping,omitempty"`
+	RequestFieldMapping []RequestFieldMappingItem `json:"requestFieldMapping,omitempty"`
 }
 
 type Resource struct {

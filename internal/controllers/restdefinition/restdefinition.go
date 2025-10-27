@@ -386,6 +386,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Categories:   []string{strings.ToLower(cr.Spec.Resource.Kind), "restresources", "rr"},
 			SpecSchema:   result.SpecSchema,
 			StatusSchema: result.StatusSchema,
+			Managed:      true,
 		}
 
 		res, err := crdgen.Generate(opts)
@@ -422,6 +423,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Kind:       cfgGVK.Kind,
 			Categories: []string{strings.ToLower(cr.Spec.Resource.Kind), "restconfigs", "rc"},
 			SpecSchema: result.ConfigurationSchema,
+			Managed:    false,
 		}
 
 		cfgResource, err := crdgen.Generate(cfgOpts)
