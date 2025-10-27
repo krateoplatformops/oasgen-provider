@@ -268,7 +268,7 @@ spec:
           - get
           - findby
 
-    # REQUIRED: map CRUD/find operations to HTTP endpoints
+    # required: map CRUD/find operations to HTTP endpoints
     verbsDescription:
       - action: findby
         method: GET
@@ -276,15 +276,24 @@ spec:
       - action: get
         method: GET
         path: /widgets/{id}
+        requestFieldMapping: # optional, map path/query/body field to another field
+        - inPath: id
+          inCustomResource: status.metadata.id
       - action: create
         method: POST
         path: /widgets
       - action: update
         method: PATCH
         path: /widgets/{id}
+        requestFieldMapping: # optional, map path/query/body field to another field
+        - inPath: id
+          inCustomResource: status.metadata.id
       - action: delete
         method: DELETE
         path: /widgets/{id}
+        requestFieldMapping: # optional, map path/query/body field to another field
+        - inPath: id
+          inCustomResource: status.metadata.id
 ```
 
 Apply and verify:
@@ -310,6 +319,7 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 | `resource.verbsDescription[].action` | string (enum) | ✔︎ | — | Action name. | One of: `create`, `update`, `get`, `delete`, `findby`. |
 | `resource.verbsDescription[].method` | string (enum) | ✔︎ | — | HTTP method to call. | One of: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`. |
 | `resource.verbsDescription[].path` | string | ✔︎ | — | HTTP path for the endpoint; must exist in the referenced OAS. | Should exactly match the OAS path you mapped. |
+| `resource.verbsDescription[].requestFieldMapping[]` | array<object> | ✖︎ | — | Optional field mappings to map request fields (path/query/body) to different fields in the Custom Resource. | Useful when the API request uses different field names than those in the resource spec/status. |
 | `resource.identifiers[]` | array<string> | ✖︎ | ✔︎ | Fields used to uniquely identify a resource for `findby` and are written in status. | Immutable once generated. It is important to choose identifiers that are unique per resource. If `findby` is not present use just `additionalStatusFields` and not `identifiers`. |
 | `resource.additionalStatusFields[]` | array<string> | ✖︎ | ✔︎ | Extra fields to expose in status (e.g., technical IDs like `id`, `uuid` but also others returned by the API you want to see in status). Usually some of these are used in the `get` action. | Immutable once generated. |
 | `resource.excludedSpecFields[]` | array<string> | ✖︎ | ✔︎ | Fields to exclude from spec (e.g., server-generated technical IDs you don't want users to set). | Immutable once generated. |
