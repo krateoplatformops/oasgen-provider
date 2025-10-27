@@ -71,7 +71,7 @@ func prepareSchemaForCRDWithVisited(
 		return fmt.Errorf("recursion limit exceeded: %w", err)
 	}
 
-	// Detect already processed - if we've seen this schema before, skip processing
+	// Detect already processed: if we've seen this schema before, skip processing
 	if _, exists := visited[schema]; exists {
 		//log.Printf("Already processed schema at depth %d: %v", depth, schema)
 		//log.Printf("Schema info: Type=%v, Description=%q, Properties=%d", schema.Type, schema.Description, len(schema.Properties))
@@ -103,9 +103,10 @@ func prepareSchemaForCRDWithVisited(
 
 	// Process AllOf schemas and merge properties for object types
 	if len(schema.AllOf) > 0 {
-		// Create temporary slices to hold merged properties and required fields
+		// Create temporary slices to hold merged properties, required fields and enum values
 		var mergedProperties []Property
 		var mergedRequired []string
+		var mergedEnum []interface{} // This is the case where there are only enum values and no properties
 
 		for _, allOfSchema := range schema.AllOf {
 			// Recursively prepare each schema within the allOf list
@@ -117,6 +118,11 @@ func prepareSchemaForCRDWithVisited(
 			if allOfSchema != nil {
 				mergedProperties = append(mergedProperties, allOfSchema.Properties...)
 				mergedRequired = append(mergedRequired, allOfSchema.Required...)
+				if len(allOfSchema.Enum) > 0 && len(allOfSchema.Properties) == 0 {
+					// If the allOf schema has enum values but no properties, we consider its enum values
+					// Example reference: SubnetType in ArubaCloud Subnet schema
+					mergedEnum = append(mergedEnum, allOfSchema.Enum...)
+				}
 
 				// Inherit type only if the main schema doesn't have one
 				if len(schema.Type) == 0 && len(allOfSchema.Type) > 0 {
@@ -140,11 +146,11 @@ func prepareSchemaForCRDWithVisited(
 		}
 		for _, p := range mergedProperties {
 			if _, exists := propIndex[p.Name]; exists {
-				// If property already exists, we keep the existing one (no overwrite)
+				// If property already exists, we keep the existing one (no overwrite policy)
 				//log.Printf("Property '%s' already exists in schema; skipping merge from allOf", p.Name)
 			} else {
 				// New property, add it
-				propIndex[p.Name] = len(schema.Properties) // new index
+				propIndex[p.Name] = len(schema.Properties) // new index (last position)
 				schema.Properties = append(schema.Properties, p)
 			}
 		}
@@ -164,11 +170,26 @@ func prepareSchemaForCRDWithVisited(
 		}
 		schema.Required = newRequired
 
+		// Handle 'enum' values with deduplication
+		// We need to avoid duplicates in the 'enum' list like ["Basic", "Advanced", "Basic"]
+		enumSet := make(map[interface{}]struct{})
+		for _, enumVal := range schema.Enum { // Existing enum values
+			enumSet[enumVal] = struct{}{}
+		}
+		for _, enumVal := range mergedEnum { // Merged enum values from allOf
+			enumSet[enumVal] = struct{}{}
+		}
+		newEnum := make([]interface{}, 0, len(enumSet))
+		for enumVal := range enumSet {
+			newEnum = append(newEnum, enumVal)
+		}
+		schema.Enum = newEnum
+
 		// Clear AllOf field after merging
 		schema.AllOf = nil
 	}
 
-	// Process object properties
+	// Process object properties recursively
 	for _, prop := range schema.Properties {
 		if err := prepareSchemaForCRDWithVisited(ctx, prop.Schema, guard, visited, depth+1); err != nil {
 			return fmt.Errorf("failed to process property '%s': %w", prop.Name, err)
@@ -314,8 +335,8 @@ func schemaToMapWithVisited(
 	// Process AllOf
 	// In theory, AllOf should have been merged already during CRD preparation (`prepareSchemaForCRD` function).
 	// And the `AllOf` field should be empty after that.
-	// Therefore no `AllOf` should remain at this point.
-	// Kept here for safety.
+	// Therefore no `AllOf` field should remain at this point.
+	// Kept here for safety. TODO: consider removing this block.
 	if len(schema.AllOf) > 0 {
 		// consider adding a log here to indicate unexpected AllOf presence
 		//log.Printf("[UNEXPTECTED] Processing allOf inside schemaToMapWithVisited at depth %d", depth)

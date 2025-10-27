@@ -149,3 +149,81 @@ func TestPrepareSchemaForCRD_WithRecursionGuard(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareSchemaForCRDWithVisited_MergeAllOfProperties(t *testing.T) {
+	schema := &Schema{
+		Type: []string{"object"},
+		AllOf: []*Schema{
+			{
+				Properties: []Property{
+					{Name: "prop1", Schema: &Schema{Type: []string{"string"}}},
+					{Name: "prop2", Schema: &Schema{Type: []string{"integer"}}},
+				},
+				Required: []string{"prop1"},
+			},
+			{
+				Properties: []Property{
+					{Name: "prop2", Schema: &Schema{Type: []string{"number"}}}, // Duplicate property
+					{Name: "prop3", Schema: &Schema{Type: []string{"boolean"}}},
+				},
+				Required: []string{"prop3"},
+			},
+		},
+	}
+
+	err := prepareSchemaForCRD(schema, DefaultGeneratorConfig())
+	require.NoError(t, err, "prepareSchemaForCRD should not return an error")
+
+	// Verify that properties are merged correctly
+	expectedProperties := map[string]string{
+		"prop1": "string",
+		"prop2": "integer", // First occurrence should be kept
+		"prop3": "boolean",
+	}
+
+	require.Equal(t, len(expectedProperties), len(schema.Properties), "Number of properties should match")
+
+	for _, prop := range schema.Properties {
+		expectedType, exists := expectedProperties[prop.Name]
+		require.True(t, exists, "Unexpected property: %s", prop.Name)
+		require.Equal(t, expectedType, prop.Schema.Type[0], "Property %s should have type %s", prop.Name, expectedType)
+	}
+
+	// Verify that required fields are merged correctly
+	expectedRequired := []string{"prop1", "prop3"}
+	require.Equal(t, len(expectedRequired), len(schema.Required), "Number of required fields should match")
+	for _, req := range expectedRequired {
+		require.Contains(t, schema.Required, req, "Required fields should contain %s", req)
+	}
+}
+
+// Example reference: SubnetType in ArubaCloud Subnet schema
+func TestPrepareSchemaForCRDWithVisited_MergeAllOfEnumOnlySchemas(t *testing.T) {
+	schema := &Schema{
+		Type: []string{"string"},
+		AllOf: []*Schema{
+			{
+				Enum: []interface{}{"value1", "value2"},
+			},
+			{
+				Enum: []interface{}{"value2", "value3"},
+			},
+		},
+	}
+
+	err := prepareSchemaForCRD(schema, DefaultGeneratorConfig())
+	require.NoError(t, err, "prepareSchemaForCRD should not return an error")
+
+	// Verify that enum values are merged correctly
+	expectedEnum := []interface{}{"value1", "value2", "value3"}
+	require.Equal(t, len(expectedEnum), len(schema.Enum), "Number of enum values should match")
+
+	enumMap := make(map[interface{}]bool)
+	for _, val := range schema.Enum {
+		enumMap[val] = true
+	}
+
+	for _, expectedVal := range expectedEnum {
+		require.True(t, enumMap[expectedVal], "Enum values should contain %v", expectedVal)
+	}
+}
