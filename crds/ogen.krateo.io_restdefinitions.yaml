@@ -176,6 +176,46 @@ spec:
                           description: 'Path: the path to the api - has to be the
                             same path as the one in the OAS file you are referencing'
                           type: string
+                        requestFieldMapping:
+                          description: |-
+                            RequestFieldMapping provides explicit mapping from API parameters (path, query, or body)
+                            to fields in the Custom Resource.
+                          items:
+                            description: |-
+                              RequestFieldMappingItem defines a single mapping from a path parameter, query parameter or body field
+                              to a field in the Custom Resource.
+                            properties:
+                              inBody:
+                                description: |-
+                                  InBody defines the name of the body parameter to be mapped.
+                                  Only one of 'inPath', 'inQuery' or 'inBody' can be set.
+                                type: string
+                              inCustomResource:
+                                description: |-
+                                  InCustomResource defines the JSONPath to the field within the Custom Resource that holds the value.
+                                  For example: 'spec.name' or 'status.metadata.id'.
+                                  Note: potentially we could add validation to ensure this is a valid path (e.g., starts with 'spec.' or 'status.').
+                                  Currently, no validation is enforced on the content of this field.
+                                type: string
+                              inPath:
+                                description: |-
+                                  InPath defines the name of the path parameter to be mapped.
+                                  Only one of 'inPath', 'inQuery' or 'inBody' can be set.
+                                type: string
+                              inQuery:
+                                description: |-
+                                  InQuery defines the name of the query parameter to be mapped.
+                                  Only one of 'inPath', 'inQuery' or 'inBody' can be set.
+                                type: string
+                            required:
+                            - inCustomResource
+                            type: object
+                            x-kubernetes-validations:
+                            - message: Either inPath, inQuery or inBody must be set,
+                                but not more than one
+                              rule: '(has(self.inPath) ? 1 : 0) + (has(self.inQuery)
+                                ? 1 : 0) + (has(self.inBody) ? 1 : 0) == 1'
+                          type: array
                       required:
                       - action
                       - method

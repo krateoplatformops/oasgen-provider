@@ -42,7 +42,7 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/provider-runtime/pkg/resource"
 
-	"github.com/krateoplatformops/crdgen"
+	"github.com/krateoplatformops/crdgen/v2"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
 )
 
@@ -378,19 +378,23 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 
 		e.log.Debug("Generating CRD for", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
-		resource := crdgen.Generate(ctx, crdgen.Options{
-			Managed:                true,
-			WorkDir:                fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
-			GVK:                    gvk,
-			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind), "restresources", "rr"},
-			SpecJsonSchemaGetter:   result.OASSpecJsonSchemaGetter(),
-			StatusJsonSchemaGetter: result.OASStatusJsonSchemaGetter(),
-		})
-		if resource.Err != nil {
-			return fmt.Errorf("generating CRD: %w", resource.Err)
+
+		opts := crdgen.Options{
+			Group:        gvk.Group,
+			Version:      gvk.Version,
+			Kind:         gvk.Kind,
+			Categories:   []string{strings.ToLower(cr.Spec.Resource.Kind), "restresources", "rr"},
+			SpecSchema:   result.SpecSchema,
+			StatusSchema: result.StatusSchema,
+			Managed:      true,
 		}
 
-		crdu, err := crd.Unmarshal(resource.Manifest)
+		res, err := crdgen.Generate(opts)
+		if err != nil {
+			return fmt.Errorf("generating CRD: %w", err)
+		}
+
+		crdu, err := crd.Unmarshal(res)
 		if err != nil {
 			return fmt.Errorf("unmarshalling CRD: %w", err)
 		}
@@ -410,18 +414,24 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 
 		e.log.Debug("Generating Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
-		cfgResource := crdgen.Generate(ctx, crdgen.Options{
-			Managed:              false, // Configuration is not a managed resource
-			WorkDir:              fmt.Sprintf("gen-crds/%s", cfgGVK.Kind),
-			GVK:                  cfgGVK,
-			Categories:           []string{strings.ToLower(cr.Spec.Resource.Kind), "restconfigs", "rc"},
-			SpecJsonSchemaGetter: result.OASConfigurationSchemaGetter(),
-		})
-		if cfgResource.Err != nil {
-			return fmt.Errorf("generating configuration CRD: %w", cfgResource.Err)
+
+		e.log.Debug("Configuration Schema", "Schema", string(result.ConfigurationSchema))
+
+		cfgOpts := crdgen.Options{
+			Group:      cfgGVK.Group,
+			Version:    cfgGVK.Version,
+			Kind:       cfgGVK.Kind,
+			Categories: []string{strings.ToLower(cr.Spec.Resource.Kind), "restconfigs", "rc"},
+			SpecSchema: result.ConfigurationSchema,
+			Managed:    false,
 		}
 
-		cfgCRDU, err := crd.Unmarshal(cfgResource.Manifest)
+		cfgResource, err := crdgen.Generate(cfgOpts)
+		if err != nil {
+			return fmt.Errorf("generating configuration CRD: %w", err)
+		}
+
+		cfgCRDU, err := crd.Unmarshal(cfgResource)
 		if err != nil {
 			return fmt.Errorf("unmarshalling configuration CRD: %w", err)
 		}

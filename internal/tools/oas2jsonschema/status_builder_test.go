@@ -68,7 +68,8 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 						"properties": {
 							"creationTimestamp": { "type": "string"}
 						},
-						"type": "object"
+						"type": "object",
+						"x-crdgen-identifier-name": "StatusMetadata"
 					}
 				},
 				"type": "object"
@@ -94,7 +95,8 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object"
+						"type": "object",
+						"x-crdgen-identifier-name": "StatusMetadata"
 					}
 				},
 				"type": "object"
@@ -117,7 +119,8 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 							},
 							"creationTimestamp": { "type": "string"}
 						},
-						"type": "object"
+						"type": "object",
+						"x-crdgen-identifier-name": "StatusMetadata"
 					}
 				},
 				"type": "object"
@@ -138,7 +141,8 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object"
+						"type": "object",
+						"x-crdgen-identifier-name": "StatusMetadata"
 					}
 				},
 				"type": "object"
@@ -176,7 +180,8 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object"
+						"type": "object",
+						"x-crdgen-identifier-name": "StatusMetadata"
 					}
 				},
 				"type": "object"
@@ -203,7 +208,8 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object"
+						"type": "object",
+						"x-crdgen-identifier-name": "StatusMetadata"
 					}
 				},
 				"type": "object"

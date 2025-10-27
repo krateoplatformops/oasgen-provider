@@ -1,8 +1,15 @@
+# Testing
+
+## Unit tests
+
+You can run unit tests with the following command on the root of the project:
+```sh
+go test -cover -v ./...
+```
 
 ## Integration tests
 
-Testing the REST Definition Controller:
-
+You can run integration tests with the following command on the root of the project:
 ```sh
-go test -tags=integration -cover -v ./internal/controllers/restdefinition
+go test -tags=integration -cover -v ./...
 ```

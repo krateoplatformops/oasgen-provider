@@ -5,6 +5,33 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RequestFieldMappingItem defines a single mapping from a path parameter, query parameter or body field
+// to a field in the Custom Resource.
+// +kubebuilder:validation:XValidation:rule="(has(self.inPath) ? 1 : 0) + (has(self.inQuery) ? 1 : 0) + (has(self.inBody) ? 1 : 0) == 1",message="Either inPath, inQuery or inBody must be set, but not more than one"
+type RequestFieldMappingItem struct {
+	// InPath defines the name of the path parameter to be mapped.
+	// Only one of 'inPath', 'inQuery' or 'inBody' can be set.
+	// +optional
+	InPath string `json:"inPath,omitempty"`
+
+	// InQuery defines the name of the query parameter to be mapped.
+	// Only one of 'inPath', 'inQuery' or 'inBody' can be set.
+	// +optional
+	InQuery string `json:"inQuery,omitempty"`
+
+	// InBody defines the name of the body parameter to be mapped.
+	// Only one of 'inPath', 'inQuery' or 'inBody' can be set.
+	// +optional
+	InBody string `json:"inBody,omitempty"`
+
+	// InCustomResource defines the JSONPath to the field within the Custom Resource that holds the value.
+	// For example: 'spec.name' or 'status.metadata.id'.
+	// Note: potentially we could add validation to ensure this is a valid path (e.g., starts with 'spec.' or 'status.').
+	// Currently, no validation is enforced on the content of this field.
+	// +kubebuilder:validation:Required
+	InCustomResource string `json:"inCustomResource"`
+}
+
 type VerbsDescription struct {
 	// Name of the action to perform when this api is called [create, update, get, delete, findby]
 	// +kubebuilder:validation:Enum=create;update;get;delete;findby
@@ -17,6 +44,10 @@ type VerbsDescription struct {
 	// Path: the path to the api - has to be the same path as the one in the OAS file you are referencing
 	// +required
 	Path string `json:"path"`
+	// RequestFieldMapping provides explicit mapping from API parameters (path, query, or body)
+	// to fields in the Custom Resource.
+	// +optional
+	RequestFieldMapping []RequestFieldMappingItem `json:"requestFieldMapping,omitempty"`
 }
 
 type Resource struct {

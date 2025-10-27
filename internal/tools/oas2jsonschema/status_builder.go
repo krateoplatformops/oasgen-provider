@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // BuildStatusSchema generates the complete status schema for a given resource.
@@ -25,12 +27,6 @@ func (g *OASSchemaGenerator) BuildStatusSchema() ([]byte, []error, error) {
 		warnings = append(warnings, SchemaGenerationError{Code: CodeNoStatusSchema, Message: "could not find a GET or FINDBY response schema for status generation"})
 	}
 
-	// DEBUG: Log the response schema used for status generation
-	//responseSchemaCopy := responseSchema.deepCopy()
-	//resMap, _ := schemaToMap(responseSchemaCopy, g.generatorConfig)
-	//resJSON, _ := json.MarshalIndent(resMap, "", "  ")
-	//log.Printf("[DEBUG] Response Schema in BuildStatusSchema:\n%s", string(resJSON))
-
 	if err := prepareSchemaForCRD(responseSchema, g.generatorConfig); err != nil {
 		return nil, warnings, fmt.Errorf("could not prepare status schema for CRD: %w", err)
 	}
@@ -42,8 +38,6 @@ func (g *OASSchemaGenerator) BuildStatusSchema() ([]byte, []error, error) {
 	if err != nil {
 		return nil, warnings, fmt.Errorf("could not generate final JSON schema for status: %w", err)
 	}
-
-	//log.Printf("Generated status schema: %s", string(byteSchema))
 
 	return byteSchema, warnings, nil
 }
@@ -69,6 +63,18 @@ func (g *OASSchemaGenerator) composeStatusSchema(allStatusFields []string, respo
 			g.addPropertyByPath(statusSchema, pathParts, fallbackProp)
 		}
 	}
+
+	// Iterate over the top-level properties of the status schema and add the `x-crdgen-identifier-name` annotation.
+	for i, prop := range statusSchema.Properties {
+		if prop.Schema != nil && getPrimaryType(prop.Schema.Type) == "object" {
+			if prop.Schema.Extensions == nil {
+				prop.Schema.Extensions = make(map[string]interface{})
+			}
+			prop.Schema.Extensions["x-crdgen-identifier-name"] = "Status" + cases.Title(language.English).String(prop.Name)
+			statusSchema.Properties[i] = prop
+		}
+	}
+
 	return statusSchema, warnings
 }
 
@@ -82,6 +88,7 @@ func (g *OASSchemaGenerator) findPropertyByPath(schema *Schema, path []string) (
 }
 
 // findPropertyByPathRec recursively traverses a schema to find a nested property.
+// Returns a deep copy of the found property and true, or an empty property and false if not found.
 func (g *OASSchemaGenerator) findPropertyByPathRec(ctx context.Context, schema *Schema, path []string, guard *safety.RecursionGuard, depth int) (Property, bool) {
 	if schema == nil || len(path) == 0 || guard.Check(ctx, depth) != nil {
 		return Property{}, false
@@ -95,14 +102,16 @@ func (g *OASSchemaGenerator) findPropertyByPathRec(ctx context.Context, schema *
 	for _, prop := range schema.Properties {
 		if prop.Name == fieldName {
 			if len(remainingPath) == 0 {
-				// Return a deep copy to ensure no pointers from the source schema leak out.
+				// Return a deep copy
 				return Property{
 					Name:   prop.Name,
 					Schema: prop.Schema.deepCopy(),
 				}, true
 			}
 			if prop.Schema == nil || getPrimaryType(prop.Schema.Type) != "object" {
-				continue // Can't traverse further if it's not an object
+				// Can't traverse further if it's not an object.
+				// E.g., the case of "metadata.nested.leaf" where "nested" is a string.
+				continue
 			}
 			// Continue traversing into the sub-schema.
 			return g.findPropertyByPathRec(ctx, prop.Schema, remainingPath, guard, depth+1)
@@ -156,8 +165,8 @@ func (g *OASSchemaGenerator) addPropertyByPathRec(ctx context.Context, schema *S
 
 	if nextSchema != nil && getPrimaryType(nextSchema.Type) != "object" {
 		// Error: expected an object to traverse further, but found a different type.
-		// Example: if the path is "metadata.nested.leaf_field" but "nested" is a string and not an object.
-		// So we cannot reach "leaf_field".
+		// Example: if the path is "metadata.nested.leaf" but "nested" is a string and not an object.
+		// So we cannot reach "leaf".
 		//log.Printf("Warning: expected object type at '%s' but found type '%v'.", fieldName, nextSchema.Type)
 		return
 	}
