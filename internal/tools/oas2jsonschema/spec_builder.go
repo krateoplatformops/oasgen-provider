@@ -3,6 +3,7 @@ package oas2jsonschema
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
@@ -59,6 +60,8 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 }
 
 // addParametersToSpec adds the parameters from all verbs to the schema.
+// Assumption: it adds parameters at the root level of the spec schema and does not support nested parameters.
+// Nested parameters do not make sense in the context of path/query/header/cookie parameters.
 func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 	var warnings []error
 
@@ -139,11 +142,17 @@ func addConfigurationRefToSpec(schema *Schema) {
 
 // addIdentifiersToSpec adds the identifiers to the schema.
 // Kept for legacy reasons, disabled by default.
+// TODO: this will be removed in future versions.
 func addIdentifiersToSpec(schema *Schema, identifiers []string) {
 	for _, identifier := range identifiers {
 		found := false
-		for _, p := range schema.Properties {
+		for i, p := range schema.Properties {
 			if p.Name == identifier {
+				// Field already exists, append to its description
+				if p.Schema.Description != "" {
+					schema.Properties[i].Schema.Description += " "
+				}
+				schema.Properties[i].Schema.Description += fmt.Sprintf("(IDENTIFIER: %s)", identifier)
 				found = true
 				break
 			}
@@ -169,58 +178,58 @@ func isAuthorizationHeader(param ParameterInfo) bool {
 // removeConfiguredFields removes the fields from the schema that are defined in the configurationFields list.
 func (g *OASSchemaGenerator) removeConfiguredFields(schema *Schema) []error {
 	if len(g.resourceConfig.ConfigurationFields) == 0 {
-		//log.Printf("No configurationFields to remove.")
 		return nil
 	}
 
-	//log.Printf("Removing configurationFields: ")
-	//for _, field := range g.resourceConfig.ConfigurationFields {
-	//	log.Printf("- %s", field.FromOpenAPI.Name)
-	//}
-
 	var warnings []error
 	for _, field := range g.resourceConfig.ConfigurationFields {
-		if !g.removeFieldAtPath(schema, strings.Split(field.FromOpenAPI.Name, ".")) {
+		pathSegments, err := parsePath(field.FromOpenAPI.Name)
+		log.Printf("Removing configured field '%s' with path segments: %v", field.FromOpenAPI.Name, pathSegments)
+		if err != nil {
+			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for configured field '%s': %v", field.FromOpenAPI.Name, err)})
+			continue
+		}
+
+		if !g.removeFieldAtPath(schema, pathSegments) {
 			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("field '%s' set in configurationFields not found in schema", field.FromOpenAPI.Name)})
 		}
 	}
 	return warnings
 }
 
-// removeExcludedSpecFields removes the fields from the schema that are defined in the excludedSpecFields list.
+// removeExcludedSpecFields removes the fields from the schema that are defined in the `excludedSpecFields` list.
 func (g *OASSchemaGenerator) removeExcludedSpecFields(schema *Schema) []error {
 	if len(g.resourceConfig.ExcludedSpecFields) == 0 {
-		//log.Printf("No excludedSpecFields to remove.")
 		return nil
 	}
 
-	//log.Printf("Removing excludedSpecFields: %v", g.resourceConfig.ExcludedSpecFields)
-
 	var warnings []error
 	for _, excludedField := range g.resourceConfig.ExcludedSpecFields {
-		if !g.removeFieldAtPath(schema, strings.Split(excludedField, ".")) {
+		pathSegments, err := parsePath(excludedField)
+		log.Printf("Removing excluded field '%s' with path segments: %v", excludedField, pathSegments)
+		if err != nil {
+			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for excluded field '%s': %v", excludedField, err)})
+			continue
+		}
+
+		if !g.removeFieldAtPath(schema, pathSegments) {
 			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("field '%s' set in excludedSpecFields not found in schema", excludedField)})
 		}
 	}
 	return warnings
 }
 
-// removeFieldAtPath is the public entry point for removing a nested field from a schema.
+// removeFieldAtPath is the entry point for removing a nested field from a schema.
 // It sets up a recursion guard and calls the recursive implementation.
 func (g *OASSchemaGenerator) removeFieldAtPath(schema *Schema, fields []string) bool {
-
-	//log.Printf("Removing field at path: %v", fields)
-
 	guard := safety.NewRecursionGuard(g.generatorConfig.MaxRecursionDepth, g.generatorConfig.MaxRecursionNodes, g.generatorConfig.RecursionTimeout)
 	ctx, cancel := guard.WithContext()
 	defer cancel()
 
-	//log.Printf("Initial schema properties: %v", schema.Properties)
-
 	return g.removeFieldAtPathRec(ctx, schema, fields, guard, 0)
 }
 
-// removeFieldAtPathRec recursively traverses the schema and removes the specified nested field.
+// removeFieldAtPathRec recursively traverses the schema and removes the specified nested field represented by the fields slice.
 func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *Schema, fields []string, guard *safety.RecursionGuard, depth int) bool {
 	if schema == nil || len(fields) == 0 {
 		return false
@@ -231,44 +240,53 @@ func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *S
 	}
 
 	fieldName := fields[0]
-	//log.Printf("Processing field: %s", fieldName)
+	//log.Printf("At depth %d, looking for field '%s' in schema", depth, fieldName)
 	remainingFields := fields[1:]
 	//log.Printf("Remaining fields to process: %v", remainingFields)
 
-	var newProperties []Property
-	found := false
-	for _, prop := range schema.Properties {
+	propIndex := -1
+	for i, prop := range schema.Properties {
 		if prop.Name == fieldName {
-			if len(remainingFields) > 0 {
-				// We are in a nested path, so we recurse.
-				// We keep the parent property, but with a potentially modified schema.
-				if g.removeFieldAtPathRec(ctx, prop.Schema, remainingFields, guard, depth+1) {
-					found = true
-				}
-				newProperties = append(newProperties, prop)
-			} else {
-				// This is the field to remove since there are no more remaining fields (last element in the "dot" path).
-				// We just don't add it to the new list.
-				found = true
-			}
-		} else {
-			newProperties = append(newProperties, prop)
+			propIndex = i
+			break
 		}
 	}
-	schema.Properties = newProperties
-	//log.Printf("After processing, schema properties are now: %v", schema.Properties)
 
-	// If the field was found and removed, also remove it from the required list
-	if found && len(remainingFields) == 0 {
-		// Remove from required list
-		var newRequired []string
-		for _, req := range schema.Required {
-			if req != fieldName {
-				newRequired = append(newRequired, req)
-			}
-		}
-		schema.Required = newRequired
+	if propIndex == -1 {
+		return false // Property not found at this level
 	}
 
-	return found
+	// If there are more segments, recurse into the child schema.
+	if len(remainingFields) > 0 {
+		return g.removeFieldAtPathRec(ctx, schema.Properties[propIndex].Schema, remainingFields, guard, depth+1)
+	}
+
+	// --- Field found at the current level, and it's the target to remove ---
+
+	// Remove the property from the Properties slice.
+	//log.Printf("Removing field '%s' from schema at depth %d", fieldName, depth)
+	schema.Properties = append(schema.Properties[:propIndex], schema.Properties[propIndex+1:]...)
+	if len(schema.Properties) == 0 {
+		schema.Properties = []Property{} // Ensure it's an empty slice, not nil
+	}
+
+	// Remove the field name from the Required slice, if it exists.
+	reqIndex := -1
+	for i, req := range schema.Required {
+		if req == fieldName {
+			reqIndex = i
+			break
+		}
+	}
+	if reqIndex != -1 {
+		//log.Printf("Removing field '%s' from required fields at depth %d", fieldName, depth)
+		schema.Required = append(schema.Required[:reqIndex], schema.Required[reqIndex+1:]...)
+		if len(schema.Required) == 0 {
+			schema.Required = []string{} // Ensure it's an empty slice, not nil
+		}
+	}
+
+	log.Printf("Field '%s' successfully removed", fieldName)
+
+	return true // Field was found and removed.
 }

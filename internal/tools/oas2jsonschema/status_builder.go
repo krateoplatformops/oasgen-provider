@@ -3,7 +3,6 @@ package oas2jsonschema
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
 	"golang.org/x/text/cases"
@@ -49,18 +48,22 @@ func (g *OASSchemaGenerator) composeStatusSchema(allStatusFields []string, respo
 	statusSchema := &Schema{Type: []string{"object"}, Properties: []Property{}}
 
 	for _, fieldName := range allStatusFields {
-		pathParts := strings.Split(fieldName, ".")
+		pathSegments, err := parsePath(fieldName)
+		if err != nil {
+			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for status field '%s': %v", fieldName, err)})
+			continue
+		}
 
 		// Find the property in the source response schema.
-		foundProp, found := g.findPropertyByPath(responseSchema, pathParts)
+		foundProp, found := g.findPropertyByPath(responseSchema, pathSegments)
 		if found {
 			// `findPropertyByPath` returns a deep-copied property, so we can use it directly.
-			g.addPropertyByPath(statusSchema, pathParts, foundProp)
+			g.addPropertyByPath(statusSchema, pathSegments, foundProp)
 		} else {
 			// Fallback for fields not found in the response schema.
 			warnings = append(warnings, SchemaGenerationError{Code: CodeStatusFieldNotFound, Message: fmt.Sprintf("status field '%s' not found in response, defaulting to string", fieldName)})
-			fallbackProp := Property{Name: pathParts[len(pathParts)-1], Schema: &Schema{Type: []string{"string"}}} // Fallback to string type
-			g.addPropertyByPath(statusSchema, pathParts, fallbackProp)
+			fallbackProp := Property{Name: pathSegments[len(pathSegments)-1], Schema: &Schema{Type: []string{"string"}}} // Fallback to string type
+			g.addPropertyByPath(statusSchema, pathSegments, fallbackProp)
 		}
 	}
 
