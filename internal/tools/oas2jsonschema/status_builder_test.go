@@ -128,6 +128,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				},
 				"type": "object"
 			}`,
+			expectedWarnings: 0,
 		},
 		{
 			name:         "should warn and default to string for a non-existent nested field",
