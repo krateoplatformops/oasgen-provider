@@ -63,6 +63,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				},
 				"type": "object"
 			}`,
+			expectedWarnings: 0,
 		},
 		{
 			name:         "should handle a single nested field",
@@ -79,6 +80,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				},
 				"type": "object"
 			}`,
+			expectedWarnings: 0,
 		},
 		{
 			name:         "should handle a deeply nested field",
@@ -105,6 +107,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				},
 				"type": "object"
 			}`,
+			expectedWarnings: 0,
 		},
 		{
 			name:         "should combine multiple nested and top-level fields correctly",
@@ -242,6 +245,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				},
 				"type": "object"
 			}`,
+			expectedWarnings: 0,
 		},
 		{
 			name:         "should handle a nested field under a parent with a literal dot",
@@ -258,6 +262,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				},
 				"type": "object"
 			}`,
+			expectedWarnings: 0,
 		},
 		{
 			name:         "should generate a warning for invalid path syntax",
