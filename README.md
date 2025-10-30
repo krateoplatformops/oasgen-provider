@@ -724,6 +724,7 @@ Currently, the following OAS features are not supported by OASGen Provider:
 - `minItems`, `maxItems`, `minLength`, `maxLength`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, and `pattern` are not supported.
 - `readOnly` and `writeOnly` are not supported.
 - arrays and objects in operation parameters (path, query, header, and cookie) are not supported (more information [here](https://swagger.io/docs/specification/v3_0/serialization/)).
+
 Note that this list **may not be exhaustive** and other features may also be unsupported. 
 
 ### OAS 3.0 vs OAS 3.1
