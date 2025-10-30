@@ -152,6 +152,87 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 			expectedWarnings: 1,
 		},
 		{
+			name:         "should warn and default to string for a non-existent top-level field",
+			statusFields: []string{"nonexistent"},
+			expectedSchemaJSON: `{
+				"properties": {
+					"nonexistent": { "type": "string" }
+				},
+				"type": "object"
+			}`,
+			expectedWarnings: 1,
+		},
+		{
+			name:         "should handle a mix of existing and non-existent fields",
+			statusFields: []string{"id", "metadata.user.profile.nonexistent"},
+			expectedSchemaJSON: `{
+				"properties": {
+					"id": { "type": "string" },
+					"metadata": {
+						"properties": {
+							"user": {
+								"properties": {
+									"profile": {
+										"properties": {
+											"nonexistent": { "type": "string" }
+										},
+										"type": "object"
+									}
+								},
+								"type": "object"
+							}
+						},
+						"type": "object",
+						"x-crdgen-identifier-name": "StatusMetadata"
+					}
+				},
+				"type": "object"
+			}`,
+			expectedWarnings: 1,
+		},
+		{
+			name:         "should handle the case of an object field (non-primitive)",
+			statusFields: []string{"metadata.user"},
+			expectedSchemaJSON: `{
+				"properties": {
+					"metadata": {
+						"properties": {
+							"user": {
+								"properties": {
+									"name": { "type": "string" },
+									"profile": {
+										"properties": {
+											"email": { "type": "string" }
+										},
+										"type": "object"
+									}
+								},
+								"type": "object"
+							}
+						},
+						"type": "object",
+						"x-crdgen-identifier-name": "StatusMetadata"
+					}
+				},
+				"type": "object"
+			}`,
+			expectedWarnings: 0,
+		},
+		{
+			name:         "should handle arrays fields correctly",
+			statusFields: []string{"tags"},
+			expectedSchemaJSON: `{
+				"properties": {
+					"tags": {
+						"type": "array",
+						"items": { "type": "string" }
+					}
+				},
+				"type": "object"
+			}`,
+			expectedWarnings: 0,
+		},
+		{
 			name:         "should handle a field with a literal dot using bracket notation",
 			statusFields: []string{"['field.with.dot']"},
 			expectedSchemaJSON: `{
