@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	pathparsing "github.com/krateoplatformops/oasgen-provider/internal/tools/pathparsing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -552,4 +553,150 @@ func TestBuildSpecSchema(t *testing.T) {
 
 	// 8. Check that Authorization header was skipped
 	assert.NotContains(t, properties, "Authorization", "Should NOT contain 'Authorization' header")
+}
+
+func TestRemoveFieldAtPath(t *testing.T) {
+	gen := &OASSchemaGenerator{
+		generatorConfig: DefaultGeneratorConfig(),
+	}
+
+	testCases := []struct {
+		name             string
+		initialSchema    *Schema
+		pathToRemove     string
+		expectedSchema   *Schema
+		expectedFound    bool
+		expectParseError bool
+	}{
+		{
+			name: "Remove simple nested field",
+			initialSchema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "a", Schema: &Schema{
+						Type: []string{"object"},
+						Properties: []Property{
+							{Name: "b", Schema: &Schema{Type: []string{"string"}}},
+							{Name: "c", Schema: &Schema{Type: []string{"string"}}},
+						},
+						Required: []string{"b"},
+					}},
+				},
+			},
+			pathToRemove: "a.b",
+			expectedSchema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "a", Schema: &Schema{
+						Type: []string{"object"},
+						Properties: []Property{
+							{Name: "c", Schema: &Schema{Type: []string{"string"}}},
+						},
+						Required: []string{},
+					}},
+				},
+			},
+			expectedFound: true,
+		},
+		{
+			name: "Remove field with literal dot in name",
+			initialSchema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "searchCriteria.creatorId", Schema: &Schema{Type: []string{"string"}}},
+					{Name: "otherField", Schema: &Schema{Type: []string{"string"}}},
+				},
+				Required: []string{"searchCriteria.creatorId"},
+			},
+			pathToRemove: "['searchCriteria.creatorId']",
+			expectedSchema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "otherField", Schema: &Schema{Type: []string{"string"}}},
+				},
+				Required: []string{},
+			},
+			expectedFound: true,
+		},
+		{
+			name: "Remove nested field under a field with a literal dot",
+			initialSchema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "a.b", Schema: &Schema{
+						Type: []string{"object"},
+						Properties: []Property{
+							{Name: "leaf", Schema: &Schema{Type: []string{"string"}}},
+						},
+					}},
+					{Name: "other", Schema: &Schema{Type: []string{"string"}}},
+				},
+			},
+			pathToRemove: "['a.b'].leaf",
+			expectedSchema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "a.b", Schema: &Schema{
+						Type:       []string{"object"},
+						Properties: []Property{},
+					}},
+					{Name: "other", Schema: &Schema{Type: []string{"string"}}},
+				},
+			},
+			expectedFound: true,
+		},
+		{
+			name: "Path not found - simple",
+			initialSchema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "a", Schema: &Schema{Type: []string{"string"}}},
+				},
+			},
+			pathToRemove: "a.b",
+			expectedSchema: &Schema{ // Unchanged
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "a", Schema: &Schema{Type: []string{"string"}}},
+				},
+			},
+			expectedFound: false,
+		},
+		{
+			name: "Path not found - literal dot name does not exist",
+			initialSchema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "a.b", Schema: &Schema{Type: []string{"string"}}},
+				},
+			},
+			pathToRemove: "['c.d']",
+			expectedSchema: &Schema{ // Unchanged
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "a.b", Schema: &Schema{Type: []string{"string"}}},
+				},
+			},
+			expectedFound: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pathSegments, err := pathparsing.ParsePath(tc.pathToRemove)
+			if tc.expectParseError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			// Use a deep copy to avoid modifying the original test case data
+			schemaToModify := tc.initialSchema.deepCopy()
+
+			found := gen.removeFieldAtPath(schemaToModify, pathSegments)
+
+			assert.Equal(t, tc.expectedFound, found)
+			assert.Equal(t, tc.expectedSchema, schemaToModify)
+		})
+	}
 }

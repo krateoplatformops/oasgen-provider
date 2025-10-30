@@ -1,4 +1,4 @@
-package oas2jsonschema
+package pathparsing
 
 import (
 	"fmt"
@@ -8,14 +8,14 @@ import (
 	"log"
 )
 
-// parsePath parses a path string into a slice of segments.
+// ParsePath parses a path string into a slice of segments.
 // It supports:
 // - standard dot notation for nested fields in a path (e.g., "a.b.c")
 // - bracket notation for field names that contain literal dots (e.g., "['a.b']")
 // - mixed notation (e.g., "a.b['c.d'].e")
 // It returns an error if the path is malformed, such as having mismatched brackets
 // or invalid characters outside of valid segments (e.g., "a..b").
-func parsePath(path string) ([]string, error) {
+func ParsePath(path string) ([]string, error) {
 
 	// pathSegmentRegex is used to parse a path string into segments.
 	// It matches either a bracketed segment `['...']` or `["..."]` or a standard dot-separated path for dot notation.

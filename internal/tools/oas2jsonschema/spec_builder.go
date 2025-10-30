@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	pathparsing "github.com/krateoplatformops/oasgen-provider/internal/tools/pathparsing"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
 )
 
@@ -183,7 +184,7 @@ func (g *OASSchemaGenerator) removeConfiguredFields(schema *Schema) []error {
 
 	var warnings []error
 	for _, field := range g.resourceConfig.ConfigurationFields {
-		pathSegments, err := parsePath(field.FromOpenAPI.Name)
+		pathSegments, err := pathparsing.ParsePath(field.FromOpenAPI.Name)
 		log.Printf("Removing configured field '%s' with path segments: %v", field.FromOpenAPI.Name, pathSegments)
 		if err != nil {
 			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for configured field '%s': %v", field.FromOpenAPI.Name, err)})
@@ -205,7 +206,7 @@ func (g *OASSchemaGenerator) removeExcludedSpecFields(schema *Schema) []error {
 
 	var warnings []error
 	for _, excludedField := range g.resourceConfig.ExcludedSpecFields {
-		pathSegments, err := parsePath(excludedField)
+		pathSegments, err := pathparsing.ParsePath(excludedField)
 		log.Printf("Removing excluded field '%s' with path segments: %v", excludedField, pathSegments)
 		if err != nil {
 			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for excluded field '%s': %v", excludedField, err)})

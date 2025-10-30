@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	pathparsing "github.com/krateoplatformops/oasgen-provider/internal/tools/pathparsing"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -48,7 +49,7 @@ func (g *OASSchemaGenerator) composeStatusSchema(allStatusFields []string, respo
 	statusSchema := &Schema{Type: []string{"object"}, Properties: []Property{}}
 
 	for _, fieldName := range allStatusFields {
-		pathSegments, err := parsePath(fieldName)
+		pathSegments, err := pathparsing.ParsePath(fieldName)
 		if err != nil {
 			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for status field '%s': %v", fieldName, err)})
 			continue
