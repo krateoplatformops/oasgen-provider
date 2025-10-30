@@ -37,7 +37,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				Type:  []string{"array"},
 				Items: &Schema{Type: []string{"string"}},
 			}},
-			// Fields for testing literal dot notation
+			// Fields for testing field names with literal dots
 			{Name: "field.with.dot", Schema: &Schema{Type: []string{"boolean"}}},
 			{Name: "parent.with.dot", Schema: &Schema{
 				Type: []string{"object"},
