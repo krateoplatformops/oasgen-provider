@@ -76,6 +76,12 @@ func TestParsePath(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name:        "Path with triple dots, escaped",
+			path:        "['a...b']",
+			expectError: false,
+			expected:    []string{"a...b"},
+		},
+		{
 			name:        "Empty path",
 			path:        "",
 			expected:    []string{""},
@@ -100,6 +106,18 @@ func TestParsePath(t *testing.T) {
 			name:        "End with dot as last character",
 			path:        "trailing.dot.",
 			expectError: true,
+		},
+		{
+			name:        "Start with dot as first character, escaped",
+			path:        "['.leading'].dot",
+			expectError: false,
+			expected:    []string{".leading", "dot"},
+		},
+		{
+			name:        "End with dot as last character, escaped",
+			path:        "trailing.['dot.']",
+			expectError: false,
+			expected:    []string{"trailing", "dot."},
 		},
 		{
 			name:        "Path with spaces around brackets",

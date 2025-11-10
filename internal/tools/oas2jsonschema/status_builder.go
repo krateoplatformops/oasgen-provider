@@ -6,8 +6,6 @@ import (
 
 	pathparsing "github.com/krateoplatformops/oasgen-provider/internal/tools/pathparsing"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 // BuildStatusSchema generates the complete status schema for a given resource.
@@ -65,17 +63,6 @@ func (g *OASSchemaGenerator) composeStatusSchema(allStatusFields []string, respo
 			warnings = append(warnings, SchemaGenerationError{Code: CodeStatusFieldNotFound, Message: fmt.Sprintf("status field '%s' not found in response, defaulting to string", fieldName)})
 			fallbackProp := Property{Name: pathSegments[len(pathSegments)-1], Schema: &Schema{Type: []string{"string"}}} // Fallback to string type
 			g.addPropertyByPath(statusSchema, pathSegments, fallbackProp)
-		}
-	}
-
-	// Iterate over the top-level properties of the status schema and add the `x-crdgen-identifier-name` annotation.
-	for i, prop := range statusSchema.Properties {
-		if prop.Schema != nil && getPrimaryType(prop.Schema.Type) == "object" {
-			if prop.Schema.Extensions == nil {
-				prop.Schema.Extensions = make(map[string]interface{})
-			}
-			prop.Schema.Extensions["x-crdgen-identifier-name"] = "Status" + cases.Title(language.English).String(prop.Name)
-			statusSchema.Properties[i] = prop
 		}
 	}
 

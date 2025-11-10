@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
+func TestComposeStatusSchema(t *testing.T) {
 	// Arrange: Define a complex, nested response schema to test against.
 	responseSchema := &Schema{
 		Type: []string{"object"},
@@ -74,8 +74,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 						"properties": {
 							"creationTimestamp": { "type": "string" }
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -101,8 +100,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -125,8 +123,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 							},
 							"creationTimestamp": { "type": "string" }
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -147,8 +144,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -186,8 +182,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -214,8 +209,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -256,8 +250,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 						"properties": {
 							"child": { "type": "integer" }
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusParent.with.dot"
+						"type": "object"
 					}
 				},
 				"type": "object"

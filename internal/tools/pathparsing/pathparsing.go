@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"log"
 )
 
 // ParsePath parses a path string into a slice of segments.
@@ -18,7 +16,7 @@ import (
 func ParsePath(path string) ([]string, error) {
 
 	// pathSegmentRegex is used to parse a path string into segments.
-	// It matches either a bracketed segment `['...']` or `["..."]` or a standard dot-separated path for dot notation.
+	// It matches either a bracketed segment `['...']` or `["..."]` or a standard dot-separated path for dot notation (e.g., "a.b.c").
 	var pathSegmentRegex = regexp.MustCompile(`(?:\[\s*['"]([^'"]+)['"]\s*\]|([^.\[\]]+))`)
 
 	if path == "" {
@@ -101,6 +99,6 @@ func ParsePath(path string) ([]string, error) {
 			segments = append(segments, match[2])
 		}
 	}
-	log.Printf("[parsePath] Parsed segments: %v", segments)
+	//log.Printf("[parsePath] Parsed segments: %v", segments)
 	return segments, nil
 }

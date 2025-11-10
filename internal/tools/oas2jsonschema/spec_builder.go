@@ -3,7 +3,6 @@ package oas2jsonschema
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	pathparsing "github.com/krateoplatformops/oasgen-provider/internal/tools/pathparsing"
@@ -135,7 +134,7 @@ func addConfigurationRefToSpec(schema *Schema) {
 			{Name: "name", Schema: &Schema{Type: []string{"string"}}},
 			{Name: "namespace", Schema: &Schema{Type: []string{"string"}, Description: "Namespace of the referenced Configuration CR. If not provided, the same namespace will be used."}},
 		},
-		Required: []string{"name"}, // If namespace is not provided, it is Rest Dynamic Controller's duty to use the same namespace as the resource.
+		Required: []string{"name"}, // Namespace not required, if namespace is not provided, it is Rest Dynamic Controller's duty to use the same namespace as the resource.
 	}
 	schema.Properties = append(schema.Properties, Property{Name: "configurationRef", Schema: configRefSchema})
 	schema.Required = append(schema.Required, "configurationRef")
@@ -185,7 +184,7 @@ func (g *OASSchemaGenerator) removeConfiguredFields(schema *Schema) []error {
 	var warnings []error
 	for _, field := range g.resourceConfig.ConfigurationFields {
 		pathSegments, err := pathparsing.ParsePath(field.FromOpenAPI.Name)
-		log.Printf("Removing configured field '%s' with path segments: %v", field.FromOpenAPI.Name, pathSegments)
+		//log.Printf("Removing configured field '%s' with path segments: %v", field.FromOpenAPI.Name, pathSegments)
 		if err != nil {
 			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for configured field '%s': %v", field.FromOpenAPI.Name, err)})
 			continue
@@ -207,7 +206,7 @@ func (g *OASSchemaGenerator) removeExcludedSpecFields(schema *Schema) []error {
 	var warnings []error
 	for _, excludedField := range g.resourceConfig.ExcludedSpecFields {
 		pathSegments, err := pathparsing.ParsePath(excludedField)
-		log.Printf("Removing excluded field '%s' with path segments: %v", excludedField, pathSegments)
+		//log.Printf("Removing excluded field '%s' with path segments: %v", excludedField, pathSegments)
 		if err != nil {
 			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for excluded field '%s': %v", excludedField, err)})
 			continue
@@ -287,7 +286,7 @@ func (g *OASSchemaGenerator) removeFieldAtPathRec(ctx context.Context, schema *S
 		}
 	}
 
-	log.Printf("Field '%s' successfully removed", fieldName)
+	//log.Printf("Field '%s' successfully removed", fieldName)
 
 	return true // Field was found and removed.
 }

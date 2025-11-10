@@ -8,13 +8,12 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/gobuffalo/flect v1.0.3
 	github.com/google/go-cmp v0.7.0
-	github.com/krateoplatformops/crdgen/v2 v2.0.0-20251024075949-f55e029ac74b
+	github.com/krateoplatformops/crdgen/v2 v2.0.0-20251110102044-fe8bd767550d
 	github.com/krateoplatformops/plumbing v0.7.2
 	github.com/krateoplatformops/provider-runtime v0.10.0
 	github.com/pb33f/libopenapi v0.16.8
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/text v0.23.0
 	k8s.io/api v0.33.0
 	k8s.io/apiextensions-apiserver v0.33.0
 	k8s.io/apimachinery v0.33.1
@@ -86,6 +85,7 @@ require (
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/term v0.30.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
 	golang.org/x/tools v0.26.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
