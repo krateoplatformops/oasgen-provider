@@ -232,6 +232,62 @@ func TestAnnotateSchemas(t *testing.T) {
 			},
 			wantStatus: nil,
 		},
+		{
+			name: "handles longer snake_case",
+			specInput: []byte(`{
+				"properties": {
+					"firstName": { "type": "string" },
+					"last_name": { "type": "string" },
+					"Address": { "type": "object" },
+					"address": { "type": "object" },
+					"phoneNumber": { "type": "string" },
+					"phone_number_long_form": { 
+						"type": "object",
+						"properties": {
+							"phone_number_long_form": { 
+								"type": "object" 
+							}
+						}
+					}
+				},
+				"type": "object"
+			}`),
+			statusInput:   nil,
+			annotationKey: "x-crdgen-identifier-name",
+			wantSpec: map[string]interface{}{
+				"properties": map[string]interface{}{
+					"firstName": map[string]interface{}{
+						"type": "string",
+					},
+					"last_name": map[string]interface{}{
+						"type": "string",
+					},
+					"Address": map[string]interface{}{
+						"type":                     "object",
+						"x-crdgen-identifier-name": "Address1",
+					},
+					"address": map[string]interface{}{
+						"type":                     "object",
+						"x-crdgen-identifier-name": "Address2",
+					},
+					"phoneNumber": map[string]interface{}{
+						"type": "string",
+					},
+					"phone_number_long_form": map[string]interface{}{
+						"type":                     "object",
+						"x-crdgen-identifier-name": "PhoneNumberLongForm1",
+						"properties": map[string]interface{}{
+							"phone_number_long_form": map[string]interface{}{
+								"type":                     "object",
+								"x-crdgen-identifier-name": "PhoneNumberLongForm2",
+							},
+						},
+					},
+				},
+				"type": "object",
+			},
+			wantStatus: nil,
+		},
 	}
 
 	for _, tt := range tests {
