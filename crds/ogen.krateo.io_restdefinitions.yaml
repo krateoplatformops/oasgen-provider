@@ -162,6 +162,17 @@ spec:
                           - delete
                           - findby
                           type: string
+                        identifiersMatchPolicy:
+                          description: |-
+                            IdentifiersMatchPolicy defines how to match identifiers for the 'findby' action. To be set only for 'findby' actions.
+                            If not set, defaults to 'OR'.
+                            Possible values are 'AND' or 'OR'.
+                            - 'AND': all identifiers must match.
+                            - 'OR': at least one identifier must match (the default behavior).
+                          enum:
+                          - AND
+                          - OR
+                          type: string
                         method:
                           description: 'Method: the http method to use [GET, POST,
                             PUT, DELETE, PATCH]'
@@ -221,6 +232,10 @@ spec:
                       - method
                       - path
                       type: object
+                      x-kubernetes-validations:
+                      - message: identifiersMatchPolicy can only be set for 'findby'
+                          actions
+                        rule: self.action == 'findby' || !has(self.identifiersMatchPolicy)
                     type: array
                 required:
                 - kind

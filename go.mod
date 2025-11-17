@@ -8,7 +8,7 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/gobuffalo/flect v1.0.3
 	github.com/google/go-cmp v0.7.0
-	github.com/krateoplatformops/crdgen/v2 v2.0.0-20251110102044-fe8bd767550d
+	github.com/krateoplatformops/crdgen/v2 v2.0.0-20251112124830-a483adc7c75e
 	github.com/krateoplatformops/plumbing v0.7.2
 	github.com/krateoplatformops/provider-runtime v0.10.0
 	github.com/pb33f/libopenapi v0.16.8

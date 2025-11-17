@@ -57,42 +57,42 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 
 	// Annotate schemas to disambiguate duplicate field names.
 	// This is necessary due to the underlying tool for generating CRDs.
-	finalSpec, finalStatus, err := annotateSchemas(specSchema, statusSchema, "x-crdgen-identifier-name")
-	if err != nil {
-		return nil, fmt.Errorf("failed to annotate schemas with 'x-crdgen-identifier-name': %w", err)
-	}
-
-	// Annotate configuration schema if exists, to disambiguate duplicate field names.
-	// This is necessary due to the underlying tool for generating CRDs.
-	var finalConfig []byte
-	if len(configurationSchema) > 0 {
-		var err error
-		finalConfig, _, err = annotateSchemas(configurationSchema, nil, "x-crdgen-identifier-name")
-		if err != nil {
-			return nil, fmt.Errorf("failed to annotate configuration schema with 'x-crdgen-identifier-name': %w", err)
-		}
-	}
+	//finalSpec, finalStatus, err := annotateSchemas(specSchema, statusSchema, "x-crdgen-identifier-name")
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to annotate schemas with 'x-crdgen-identifier-name': %w", err)
+	//}
+	//
+	//// Annotate configuration schema if exists, to disambiguate duplicate field names.
+	//// This is necessary due to the underlying tool for generating CRDs.
+	//var finalConfig []byte
+	//if len(configurationSchema) > 0 {
+	//	var err error
+	//	finalConfig, _, err = annotateSchemas(configurationSchema, nil, "x-crdgen-identifier-name")
+	//	if err != nil {
+	//		return nil, fmt.Errorf("failed to annotate configuration schema with 'x-crdgen-identifier-name': %w", err)
+	//	}
+	//}
 
 	// TODO: consider to log the generated spec schema for debugging purposes (we need the logger setup)
 	log.Print("======= Final Spec Schema =======")
-	log.Print(string(finalSpec))
+	log.Print(string(specSchema))
 	log.Print("======= End Spec Schema =======")
 
 	////// TODO: consider to log the generated status schema for debugging purposes (we need the logger setup)
 	log.Print("======= Final Status Schema  =======")
-	log.Print(string(finalStatus))
+	log.Print(string(statusSchema))
 	log.Print("======= End Status Schema =======")
 
 	////// TODO: consider to log the generated configuration schema for debugging purposes (we need the logger setup)
 	log.Print("Final configuration schema")
-	if finalConfig != nil {
-		log.Print(string(finalConfig))
+	if configurationSchema != nil {
+		log.Print(string(configurationSchema))
 	}
 	log.Print("======= End Configuration Schema =======")
 
 	return &GenerationResult{
-		SpecSchema:          finalSpec,
-		StatusSchema:        finalStatus,
+		SpecSchema:          specSchema,
+		StatusSchema:        statusSchema,
 		ConfigurationSchema: configurationSchema,
 		GenerationWarnings:  generationWarnings,
 		ValidationWarnings:  validationWarnings,
