@@ -699,6 +699,7 @@ It is duty of the user to decide whether a parameter should be considered a conf
 ## CRD Schema generation
 
 The OASGen Provider automatically generates the Custom Resource Definition (CRD) schema for the resources based on the OpenAPI Specification (OAS) document provided in the RestDefinition manifest and based on the RestDefinition fields setup.
+The steps involved in the CRD schema generation are as follows:
 
 TODO
 

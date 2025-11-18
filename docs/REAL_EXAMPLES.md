@@ -67,8 +67,8 @@ spec:
 ```
 
 **Description**:
-In this example, the `requestFieldMapping` is used in the `get`, `update`, and `delete` actions to map the `id` path parameter from the Custom Resource's `status.metadata.id` field. This allows the controller to correctly populate the path parameter when making requests to the ArubaCloud API, even though the field is nested. 
-Indeed, the OASGen Provider at CRD generation time would add all, among others, all the path parameters defined in the endpoints listed in the RestDefinition to the spec of the CRD. In this case, the `id` path parameter would be added to the spec.
+In this example, the `requestFieldMapping` is used in the `get`, `update`, and `delete` actions to map the `id` path parameter from the Custom Resource's `status.metadata.id` field. This allows the controller to correctly populate the path parameter when making requests to the ArubaCloud API, even though the field is nested.
+Indeed, the OASGen Provider at CRD generation time would add, among others, all the path parameters defined in the endpoints listed in the RestDefinition to the spec of the CRD. In this case, the `id` path parameter would be added to the spec.
 Without `requestFieldMapping` setup, Rest Dynamic Controller would look for an `id` (since the path parameter is `id`) field directly in the spec or status, which does not exist. 
 The field we are looking for is actually `metadata.id` inside the `status` section of the Custom Resource. The field is there because it is listed under `additionalStatusFields` in the RestDefinition.
 Therefore, we need to use `requestFieldMapping` to tell the controller where to find the value for the `id` path parameter in the Custom Resource since it is not directly available as `id` in the spec or status due to the nested structure.
