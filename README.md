@@ -347,10 +347,14 @@ The content of this table is derived from the CRD’s OpenAPI schema.
 
 #### Tips and best practices for RestDefinition authoring
 
-- Start with both `findby` and `get` actions where applicable: `findby` to locate a resource using human-friendly identifiers, `get` for subsequent (after reconciliation loop number 1), efficient lookups using technical IDs. (See the dedicated action sections below: [action `findby`](#action-findby) and [action `get`](#action-get).)
-- Identify the right `identifiers` for the `findby` action (e.g., name, email), and place technical IDs (e.g., id, uuid) under `additionalStatusFields`. It is important to choose identifiers that are unique per resource. Note that filling `identifiers` make sense only if you define the `findby` action.
-- Use `excludedSpecFields` to avoid server-generated fields (e.g., `id`) to be put in spec during CRD generation by OASGen Provider. Usually we want to avoid users setting these fields but rather have them in status and set by the controller. Additionally, since usually these fields are path parameter marked as `required` in the OAS schema, excluding them from spec avoids validation errors from Kubernetes API server when applying the resource manifest to the cluster. Indeed, in these cases, creation of resources would fail because these required fields would be missing from spec.
-- Use `configurationFields` to move path parameters, query parameters, headers, cookies (e.g., `api-version`) to a dedicated Configuration CRD. This allows reusing configurations among many resources and following a separation of concerns pattern. Configuration fields can be set across specific actions with a specific array or all actions with ["*"]. It is duty of the user to decide whether a parameter should be considered a configuration parameter rather than an application parameter.
+Start with both `findby` and `get` actions where applicable: `findby` to locate a resource using human-friendly identifiers, `get` for subsequent (after reconciliation loop number 1), efficient lookups using technical IDs. (See the dedicated action sections below: [action findby](#action-findby) and [action get](#action-get).)
+
+
+Identify the right `identifiers` for the `findby` action (e.g., name, email), and place technical IDs (e.g., id, uuid) under `additionalStatusFields`. It is important to choose identifiers that are unique per resource. Note that filling `identifiers` make sense only if you define the `findby` action.
+
+Use `excludedSpecFields` to avoid server-generated fields (e.g., `id`) to be put in spec during CRD generation by OASGen Provider. Usually we want to avoid users setting these fields but rather have them in status and set by the controller. Additionally, since usually these fields are path parameter marked as `required` in the OAS schema, excluding them from spec avoids validation errors from Kubernetes API server when applying the resource manifest to the cluster. Indeed, in these cases, creation of resources would fail because these required fields would be missing from spec.
+
+Use `configurationFields` to move path parameters, query parameters, headers, cookies (e.g., `api-version`) to a dedicated Configuration CRD. This allows reusing configurations among many resources and following a separation of concerns pattern. Configuration fields can be set across specific actions with a specific array or all actions with ["*"]. It is duty of the user to decide whether a parameter should be considered a configuration parameter rather than an application parameter.
 
 ### About Resource reconciliation and RestDefinition Actions
 
@@ -691,6 +695,54 @@ An example of this field in a RestDefinition manifest is as follows:
 ```
 
 It is duty of the user to decide whether a parameter should be considered a configuration parameter rather than an application parameter based on the specific use case and context.
+
+## CRD Schema generation
+
+The OASGen Provider automatically generates the Custom Resource Definition (CRD) schema for the resources based on the OpenAPI Specification (OAS) document provided in the RestDefinition manifest and based on the RestDefinition fields setup.
+
+TODO
+
+## Real examples of RestDefinition manifests for edge cases
+
+You can find real-world examples of RestDefinition manifests dealing with various edge cases here: [RestDefinition Examples](docs/REAL_EXAMPLES.md).
+These examples cover various edge cases and demonstrate how to use the OASGen Provider effectively and leverage all the features provided by the OASGen Provider and the Rest Dynamic Controller.
+
+## Cases where a Plugin / Middleware (Wrapper Web Service) is needed
+
+In some cases, the external API may have inconsistencies or behaviors that are not directly supported by the OASGen Provider or by Kubernetes controllers in general.
+In these cases, a web service wrapper (plugin/middleware) can be used to normalize the API interface.
+Some common cases where a web service wrapper is needed are reported below with real-world examples:
+
+### When multiple calls are needed to fullfill an action
+
+Example: Azure DevOps GitRepository - creation with `defaultBranch` field
+Description:
+- The standard Azure DevOps REST API has two different request body schemas for creating (`POST`) and updating (`PATCH`) Git repositories. In particular, the field `defaultBranch` is only available in the `PATCH` request body.
+- This endpoint allows you to create a Git repository with the `defaultBranch` field, which is not supported in the standard Azure DevOps REST API for the `POST` request body. Practically performing a `PATCH` operation on the repository immediately after creation.
+
+### When manipulation or transformation of values from the response is needed
+
+Example: Azure DevOps Pipelines - `folder` field
+Description:
+- The standard Azure DevOps REST API return the `folder` field with an "escaped backslash" as prefix like `"folder":"\\test-folder"`.
+- This endpoint returns the `folder` field without the "escaped backslash" prefix, allowing a correct comparison with the `folder` field set in the `spec` of the `Pipeline` resource. Otherwise, the reconciliation loop in KOG would always detect a difference, for example, between `"\\test-folder"` (from Azure DevOps REST API) and `"test-folder"` (from `spec`), leading to infinite drift detections and useless updates.
+
+Example: Azure DevOps PipelinePermission - `allPipelines` field
+Description:
+- The standard Azure DevOps REST API **does not return** the `allPipelines` property when said property is set to `authorized: false` on Azure DevOps (default behavior).
+- This endpoint checks if the response from the Azure DevOps REST API contains the `allPipelines` property and, if not, it adds it with a value of `authorized: false`. This is necessary to have a correct reconciliation loop in KOG, as the absence of the `allPipelines` property in the response would determine an incomplete comparison with the `spec` of the `PipelinePermission` resource.
+
+Example: GitHub Collaborators - `permission` field
+Description:
+- The GitHub REST API uses different values for the `permission` field between the request and the response bodies (e.g., `push` in the request body becomes `write` in the response body).
+- The plugin normalizes permission values from the response body to match those used in the request body: `write` → `push`, `read` → `pull`.
+
+### Different level of nesting between request and response bodies 
+
+Example: GitHub Collaborators - fields brought to root level of the response body
+Description:
+- The standard GitHub REST API nests some fields in the response body under a `user` object.
+- The plugin flattens these fields to the root level of the response body, allowing a correct comparison with the fields set in the `spec` of the `Collaborator` resource. 
 
 ## Usage guide
 
