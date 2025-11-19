@@ -411,10 +411,11 @@ As an example, in the context of a hypothetical Email service, `email` is a good
 
 #### `identifiersMatchPolicy` field
 
-This optional field in the RestDefinition manifest, at `verbsDescription[].identifiersMatchPolicy`, defines how strictly the `rest-dynamic-controller` should match the identifiers when using the `findby` action. 
+This optional field in the RestDefinition manifest, at `verbsDescription[].identifiersMatchPolicy`, defines how strictly the `rest-dynamic-controller` should match the identifiers when using the `findby` action.
 It can take the following values: `OR` (default) or `AND`:
 - `OR`: The controller considers a resource a match if **at least one** of the identifiers matches.
 - `AND`: The controller considers a resource a match only if **all** of the identifiers match.
+This field can be set only for the `findby` action.
 
 #### Why Use `findby`?
 
@@ -553,7 +554,7 @@ Note that the last example is a common case in many APIs, take for instance the 
    - `GET /repositories/{repositoryId}` (path parameter is `repositoryId`)
    - Response body is like `{ "id": 123, "name": "my-repo" }` (field is `id` and not `repositoryId`)
 This case can be simply solved by carefully modifying the OAS document to use consistent naming, for example changing the path parameter to `id` instead of `repositoryId`. Therefore, simply changing the endpoint to `GET /repositories/{id}` would solve the inconsistency without the need to write a Plugin (Wrapper Web Service).
-
+In simple cases, this can be solved by using the `requestFieldMapping` field in the RestDefinition manifest to map fields between the Custom Resource and the API request (not response).
 
 Any API behavior that does not match these requirements will require a web service wrapper to normalize / fix the API interface. 
 This is common with APIs that do not follow consistent naming conventions or have different response structures.
@@ -565,13 +566,13 @@ The OASGen Provider automatically generates a `status` subresource for the gener
 The fields within the status are derived from two sources in your `RestDefinition`:
 
 - `identifiers`: Fields used to uniquely identify the resource with a `findby` action.
-- `additionalStatusFields`: Any other fields you wish to expose in the status. So also technical identifiers like `id`, `uuid`, etc. can be added here and can be used in the `get` action.
+- `additionalStatusFields`: Any other fields you wish to expose in the status. Therefore, also technical identifiers like `id`, `uuid`, etc. can be added here and can be used in the `get` action by the controller.
 
 To ensure type safety, the `oasgen-provider` inspects the response schema of the `get` (or `findby` as a fallback) action in your OpenAPI specification. It uses the types defined in the OAS to generate the corresponding fields in the CRD's status schema.
 
-#### String Fallback Mechanism in Status Fields
+#### String Fallback in Status Fields
 
-When the provider cannot find a specified `identifier` or `additionalStatusField` in the OAS response schema, it employs a **string fallback** mechanism for that status fields:
+When the provider cannot find a specified `identifier` or `additionalStatusField` in the OAS response schema, it employs a **string fallback** for that status fields:
 1.  The OASGen Provider logs a warning indicating that the field was not found in the OAS response.
 2.  It generates that specific status field with `type: string` as a safe default.
 
