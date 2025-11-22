@@ -2,7 +2,6 @@ package oas2jsonschema
 
 import (
 	"fmt"
-	"log"
 )
 
 // OASSchemaGenerator orchestrates the generation of CRD schemas from an OpenAPI document.
@@ -74,21 +73,21 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	//}
 
 	// TODO: consider to log the generated spec schema for debugging purposes (we need the logger setup)
-	log.Print("======= Final Spec Schema =======")
-	log.Print(string(specSchema))
-	log.Print("======= End Spec Schema =======")
+	//log.Print("======= Final Spec Schema =======")
+	//log.Print(string(specSchema))
+	//log.Print("======= End Spec Schema =======")
 
 	////// TODO: consider to log the generated status schema for debugging purposes (we need the logger setup)
-	log.Print("======= Final Status Schema  =======")
-	log.Print(string(statusSchema))
-	log.Print("======= End Status Schema =======")
+	//log.Print("======= Final Status Schema  =======")
+	//log.Print(string(statusSchema))
+	//log.Print("======= End Status Schema =======")
 
 	////// TODO: consider to log the generated configuration schema for debugging purposes (we need the logger setup)
-	log.Print("Final configuration schema")
-	if configurationSchema != nil {
-		log.Print(string(configurationSchema))
-	}
-	log.Print("======= End Configuration Schema =======")
+	//log.Print("Final configuration schema")
+	//if configurationSchema != nil {
+	//	log.Print(string(configurationSchema))
+	//}
+	//log.Print("======= End Configuration Schema =======")
 
 	return &GenerationResult{
 		SpecSchema:          specSchema,

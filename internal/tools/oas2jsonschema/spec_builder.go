@@ -65,6 +65,8 @@ func (g *OASSchemaGenerator) BuildSpecSchema() ([]byte, []error, error) {
 func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 	var warnings []error
 
+	// Track unique parameter names to avoid duplicates (E.g. path parameters may be repeated across verbs).
+	// Here we track path, query, header, and cookie parameters.
 	uniqueParams := make(map[string]struct{})
 
 	// Internal helper function to check if property already exists in schema
@@ -77,8 +79,17 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 		return false
 	}
 
-	for _, verb := range g.resourceConfig.Verbs {
+	// Internal helper function to check if property is already required in schema
+	propertyAlreadyRequired := func(name string) bool {
+		for _, req := range schema.Required {
+			if req == name {
+				return true
+			}
+		}
+		return false
+	}
 
+	for _, verb := range g.resourceConfig.Verbs {
 		// 1. Path lookup
 		path, ok := g.doc.FindPath(verb.Path)
 		if !ok {
@@ -97,7 +108,6 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 		for _, param := range op.GetParameters() {
 			// if is authorization header, skip it as it is managed by the Configuration CR within the authentication section.
 			if isAuthorizationHeader(param) {
-				//fmt.Printf("Skipping authorization header: %s\n", param.Name)
 				continue
 			}
 
@@ -118,6 +128,13 @@ func (g *OASSchemaGenerator) addParametersToSpec(schema *Schema) []error {
 				}
 
 				uniqueParams[param.Name] = struct{}{}
+			}
+
+			// If the parameter is already present but optional in the base schema (e.g., in the request body schema) and it is required in a parameter definition (e.g., path parameter),
+			// ensure it is marked as required in the final schema.
+			if propertyExists(param.Name) && param.Required && !propertyAlreadyRequired(param.Name) {
+				//log.Printf("Marking existing property '%s' as required based on parameter definition", param.Name)
+				schema.Required = append(schema.Required, param.Name)
 			}
 		}
 	}

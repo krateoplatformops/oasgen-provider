@@ -12,6 +12,8 @@ var (
 	camelCaseRE = regexp.MustCompile(`([a-z0-9])([A-Z])`)
 )
 
+//TODO: to be dismssed
+
 // exportedName converts a field name into an exported Go struct field name with PascalCase.
 func exportedName(name string) string {
 	name = strings.TrimLeft(name, "_")

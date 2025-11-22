@@ -67,6 +67,7 @@ func prepareSchemaForCRDWithVisited(
 
 	// Check recursion limits
 	if err := guard.Check(ctx, depth); err != nil {
+		//TODO: consider logging at debug level
 		log.Printf("CRD preparation recursion aborted at depth %d: %v", depth, err)
 		return fmt.Errorf("recursion limit exceeded: %w", err)
 	}
@@ -85,6 +86,7 @@ func prepareSchemaForCRDWithVisited(
 	// Gracefully handle any panics during processing
 	defer func() {
 		if r := recover(); r != nil {
+			//TODO: consider logging at debug level
 			log.Printf("CRD preparation panic at depth %d: %v", depth, r)
 		}
 	}()
@@ -132,7 +134,7 @@ func prepareSchemaForCRDWithVisited(
 					// Otherwise, log a warning
 					if !areTypesCompatible(schema.Type, allOfSchema.Type) {
 						log.Printf("Warning: Incompatible types in allOf merge: %v vs %v", schema.Type, allOfSchema.Type)
-						log.Printf("Schema info: Type=%v, Description=%q, Properties=%d", schema.Type, schema.Description, len(schema.Properties))
+						//log.Printf("Schema info: Type=%v, Description=%q, Properties=%d", schema.Type, schema.Description, len(schema.Properties))
 					}
 				}
 			}

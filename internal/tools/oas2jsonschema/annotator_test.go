@@ -7,6 +7,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TODO: to be dismissed
+
 func TestAnnotateSchemas(t *testing.T) {
 	tests := []struct {
 		name          string
