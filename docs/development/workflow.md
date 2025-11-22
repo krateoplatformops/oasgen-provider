@@ -1,5 +1,5 @@
 TODO
-describe the workflow
+describe the workflow from OAS to CRD generation
 
 1. OAS file
 

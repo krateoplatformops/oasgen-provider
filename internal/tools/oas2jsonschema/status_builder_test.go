@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
+func TestComposeStatusSchema(t *testing.T) {
 	// Arrange: Define a complex, nested response schema to test against.
 	responseSchema := &Schema{
 		Type: []string{"object"},
@@ -34,9 +34,15 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				},
 			}},
 			{Name: "tags", Schema: &Schema{
-				Type: []string{"array"},
-				Items: &Schema{
-					Type: []string{"string"},
+				Type:  []string{"array"},
+				Items: &Schema{Type: []string{"string"}},
+			}},
+			// Fields for testing field names with literal dots
+			{Name: "field.with.dot", Schema: &Schema{Type: []string{"boolean"}}},
+			{Name: "parent.with.dot", Schema: &Schema{
+				Type: []string{"object"},
+				Properties: []Property{
+					{Name: "child", Schema: &Schema{Type: []string{"integer"}}},
 				},
 			}},
 		},
@@ -66,10 +72,9 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 				"properties": {
 					"metadata": {
 						"properties": {
-							"creationTimestamp": { "type": "string"}
+							"creationTimestamp": { "type": "string" }
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -95,8 +100,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -117,10 +121,9 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								},
 								"type": "object"
 							},
-							"creationTimestamp": { "type": "string"}
+							"creationTimestamp": { "type": "string" }
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -141,8 +144,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -180,8 +182,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -208,8 +209,7 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 								"type": "object"
 							}
 						},
-						"type": "object",
-						"x-crdgen-identifier-name": "StatusMetadata"
+						"type": "object"
 					}
 				},
 				"type": "object"
@@ -230,24 +230,55 @@ func TestComposeStatusSchema_WithDotNotation(t *testing.T) {
 			}`,
 			expectedWarnings: 0,
 		},
+		{
+			name:         "should handle a field with a literal dot using bracket notation",
+			statusFields: []string{"['field.with.dot']"},
+			expectedSchemaJSON: `{
+				"properties": {
+					"field.with.dot": { "type": "boolean" }
+				},
+				"type": "object"
+			}`,
+			expectedWarnings: 0,
+		},
+		{
+			name:         "should handle a nested field under a parent with a literal dot",
+			statusFields: []string{"['parent.with.dot'].child"},
+			expectedSchemaJSON: `{
+				"properties": {
+					"parent.with.dot": {
+						"properties": {
+							"child": { "type": "integer" }
+						},
+						"type": "object"
+					}
+				},
+				"type": "object"
+			}`,
+			expectedWarnings: 0,
+		},
+		{
+			name:         "should generate a warning for invalid path syntax",
+			statusFields: []string{"['unclosed.bracket"},
+			expectedSchemaJSON: `{
+				"type": "object"
+			}`,
+			expectedWarnings: 1,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Act
-			// We pass a mock generator config because the functions under test need it for the recursion guard.
 			mockGenerator := &OASSchemaGenerator{generatorConfig: DefaultGeneratorConfig()}
 			statusSchema, warnings := mockGenerator.composeStatusSchema(tc.statusFields, responseSchema)
 
 			// Assert
-			// 1. Check warnings
 			assert.Len(t, warnings, tc.expectedWarnings, "Unexpected number of warnings")
 
-			// 2. Check the generated schema structure
 			generatedBytes, err := GenerateJsonSchema(statusSchema, DefaultGeneratorConfig())
 			require.NoError(t, err, "Failed to marshal the generated schema")
 
-			// Unmarshal both expected and actual JSON to maps for a robust comparison
 			var expectedMap, actualMap map[string]interface{}
 			err = json.Unmarshal([]byte(tc.expectedSchemaJSON), &expectedMap)
 			require.NoError(t, err, "Failed to unmarshal expected JSON")

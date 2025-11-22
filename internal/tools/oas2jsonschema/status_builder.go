@@ -3,11 +3,9 @@ package oas2jsonschema
 import (
 	"context"
 	"fmt"
-	"strings"
 
+	pathparsing "github.com/krateoplatformops/oasgen-provider/internal/tools/pathparsing"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/safety"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 // BuildStatusSchema generates the complete status schema for a given resource.
@@ -49,29 +47,22 @@ func (g *OASSchemaGenerator) composeStatusSchema(allStatusFields []string, respo
 	statusSchema := &Schema{Type: []string{"object"}, Properties: []Property{}}
 
 	for _, fieldName := range allStatusFields {
-		pathParts := strings.Split(fieldName, ".")
+		pathSegments, err := pathparsing.ParsePath(fieldName)
+		if err != nil {
+			warnings = append(warnings, SchemaGenerationError{Code: CodeFieldNotFound, Message: fmt.Sprintf("invalid path format for status field '%s': %v", fieldName, err)})
+			continue
+		}
 
 		// Find the property in the source response schema.
-		foundProp, found := g.findPropertyByPath(responseSchema, pathParts)
+		foundProp, found := g.findPropertyByPath(responseSchema, pathSegments)
 		if found {
 			// `findPropertyByPath` returns a deep-copied property, so we can use it directly.
-			g.addPropertyByPath(statusSchema, pathParts, foundProp)
+			g.addPropertyByPath(statusSchema, pathSegments, foundProp)
 		} else {
 			// Fallback for fields not found in the response schema.
 			warnings = append(warnings, SchemaGenerationError{Code: CodeStatusFieldNotFound, Message: fmt.Sprintf("status field '%s' not found in response, defaulting to string", fieldName)})
-			fallbackProp := Property{Name: pathParts[len(pathParts)-1], Schema: &Schema{Type: []string{"string"}}} // Fallback to string type
-			g.addPropertyByPath(statusSchema, pathParts, fallbackProp)
-		}
-	}
-
-	// Iterate over the top-level properties of the status schema and add the `x-crdgen-identifier-name` annotation.
-	for i, prop := range statusSchema.Properties {
-		if prop.Schema != nil && getPrimaryType(prop.Schema.Type) == "object" {
-			if prop.Schema.Extensions == nil {
-				prop.Schema.Extensions = make(map[string]interface{})
-			}
-			prop.Schema.Extensions["x-crdgen-identifier-name"] = "Status" + cases.Title(language.English).String(prop.Name)
-			statusSchema.Properties[i] = prop
+			fallbackProp := Property{Name: pathSegments[len(pathSegments)-1], Schema: &Schema{Type: []string{"string"}}} // Fallback to string type
+			g.addPropertyByPath(statusSchema, pathSegments, fallbackProp)
 		}
 	}
 

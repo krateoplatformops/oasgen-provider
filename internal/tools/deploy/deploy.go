@@ -71,32 +71,35 @@ func createRBACResources(gvr schema.GroupVersionResource, rbacNSName types.Names
 	configuration := ""
 	if ConfigurationGVR.Resource != "" {
 		configuration = ConfigurationGVR.Resource
-		// fmt.Printf("Configuration GVR found: %s\n", configuration)
+		//fmt.Printf("Configuration GVR found: %s\n", configuration)
 	}
 	clusterrole := rbacv1.ClusterRole{}
 	err = templates.CreateK8sObject(&clusterrole, gvr, rbacNSName, path.Join(rbacFolderPath, "clusterrole.yaml"), "configuration", configuration)
 	if err != nil {
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
 	}
-	// fmt.Printf("ClusterRole created with name: %s, namespace: %s, rules: %+v\n", clusterrole.Name, clusterrole.Namespace, clusterrole.Rules)
+	//fmt.Printf("ClusterRole created with name: %s, namespace: %s, rules: %+v\n", clusterrole.Name, clusterrole.Namespace, clusterrole.Rules)
 
 	clusterrolebinding := rbacv1.ClusterRoleBinding{}
 	err = templates.CreateK8sObject(&clusterrolebinding, gvr, rbacNSName, path.Join(rbacFolderPath, "clusterrolebinding.yaml"), "serviceAccount", sa.Name, "saNamespace", sa.Namespace)
 	if err != nil {
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
 	}
+	//fmt.Printf("ClusterRoleBinding created with name: %s, namespace: %s, subjects: %+v, roleRef: %+v\n", clusterrolebinding.Name, clusterrolebinding.Namespace, clusterrolebinding.Subjects, clusterrolebinding.RoleRef)
 
 	role := rbacv1.Role{}
 	err = templates.CreateK8sObject(&role, gvr, rbacNSName, path.Join(rbacFolderPath, "role.yaml"))
 	if err != nil {
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
 	}
+	//fmt.Printf("Role created with name: %s, namespace: %s, rules: %+v\n", role.Name, role.Namespace, role.Rules)
 
 	rolebinding := rbacv1.RoleBinding{}
 	err = templates.CreateK8sObject(&rolebinding, gvr, rbacNSName, path.Join(rbacFolderPath, "rolebinding.yaml"), "serviceAccount", sa.Name, "saNamespace", sa.Namespace)
 	if err != nil {
 		return corev1.ServiceAccount{}, rbacv1.ClusterRole{}, rbacv1.ClusterRoleBinding{}, rbacv1.Role{}, rbacv1.RoleBinding{}, err
 	}
+	//fmt.Printf("RoleBinding created with name: %s, namespace: %s, subjects: %+v, roleRef: %+v\n", rolebinding.Name, rolebinding.Namespace, rolebinding.Subjects, rolebinding.RoleRef)
 
 	return sa, clusterrole, clusterrolebinding, role, rolebinding, nil
 }
@@ -114,7 +117,7 @@ func installRBACResources(ctx context.Context, kubeClient client.Client, cluster
 	if err != nil {
 		return fmt.Errorf("error hashing clusterrole: %v", err)
 	}
-	log("ClusterRole successfully hashed", "name", clusterrole.Name, "namespace", clusterrole.Namespace, "digest", hsh.GetHash())
+	log("ClusterRole successfully installed", "name", clusterrole.Name, "namespace", clusterrole.Namespace, "digest", hsh.GetHash())
 
 	err = kubecli.Apply(ctx, kubeClient, &clusterrolebinding, applyOpts)
 	if err != nil {

@@ -2,7 +2,6 @@ package oas2jsonschema
 
 import (
 	"fmt"
-	"log"
 	"reflect"
 
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
@@ -102,7 +101,7 @@ func (g *OASSchemaGenerator) buildAuthMethodsSchemaMap() (map[string]*Schema, er
 		if err != nil {
 			// Skip unsupported security schemes
 			// TODO: Consider logging a warning here.
-			log.Printf("warning: skipping unsupported security scheme %s: %v", secScheme.Name, err)
+			//log.Printf("warning: skipping unsupported security scheme %s: %v", secScheme.Name, err)
 			continue
 		}
 		schemaMap[secScheme.Scheme] = authSchema

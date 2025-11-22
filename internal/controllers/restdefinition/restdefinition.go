@@ -42,8 +42,9 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/provider-runtime/pkg/resource"
 
-	"github.com/krateoplatformops/crdgen/v2"
+	//"github.com/krateoplatformops/crdgen/v2"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
+	"github.com/krateoplatformops/plumbing/crdgen"
 )
 
 const (
@@ -368,13 +369,17 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			// Fatal error, we cannot continue
 			return fmt.Errorf("generating schemas: %w", err)
 		}
-		for _, er := range result.GenerationWarnings {
+		if len(result.GenerationWarnings) > 0 {
 			e.log.Debug("Some schema generation warnings were found, below the list")
-			e.log.Debug("Schema generation warning", "Warning", er)
+			for _, er := range result.GenerationWarnings {
+				e.log.Debug("Schema generation warning", "Warning", er)
+			}
 		}
-		for _, er := range result.ValidationWarnings {
+		if len(result.ValidationWarnings) > 0 {
 			e.log.Debug("Some schema validation warnings were found, below the list")
-			e.log.Debug("Schema validation warning", "Warning", er)
+			for _, er := range result.ValidationWarnings {
+				e.log.Debug("Schema validation warning", "Warning", er)
+			}
 		}
 
 		e.log.Debug("Generating CRD for", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)

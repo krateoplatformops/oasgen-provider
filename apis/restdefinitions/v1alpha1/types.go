@@ -32,6 +32,7 @@ type RequestFieldMappingItem struct {
 	InCustomResource string `json:"inCustomResource"`
 }
 
+// +kubebuilder:validation:XValidation:rule="self.action == 'findby' || !has(self.identifiersMatchPolicy)",message="identifiersMatchPolicy can only be set for 'findby' actions"
 type VerbsDescription struct {
 	// Name of the action to perform when this api is called [create, update, get, delete, findby]
 	// +kubebuilder:validation:Enum=create;update;get;delete;findby
@@ -48,6 +49,14 @@ type VerbsDescription struct {
 	// to fields in the Custom Resource.
 	// +optional
 	RequestFieldMapping []RequestFieldMappingItem `json:"requestFieldMapping,omitempty"`
+	// IdentifiersMatchPolicy defines how to match identifiers for the 'findby' action. To be set only for 'findby' actions.
+	// If not set, defaults to 'OR'.
+	// Possible values are 'AND' or 'OR'.
+	// - 'AND': all identifiers must match.
+	// - 'OR': at least one identifier must match (the default behavior).
+	// +kubebuilder:validation:Enum=AND;OR
+	// +optional
+	IdentifiersMatchPolicy string `json:"identifiersMatchPolicy,omitempty"`
 }
 
 type Resource struct {

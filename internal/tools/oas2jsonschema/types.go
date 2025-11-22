@@ -79,7 +79,7 @@ type Schema struct {
 	AdditionalProperties bool
 	MaxProperties        int
 	Format               string                 // Not validated but added value to description if present
-	Extensions           map[string]interface{} // For custom extensions like `x-crdgen-identifier-name`
+	Extensions           map[string]interface{} // Currently not used but can hold custom extensions
 }
 
 // Property represents a single key-value pair in a schema's properties.
