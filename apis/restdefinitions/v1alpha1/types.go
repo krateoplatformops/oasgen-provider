@@ -5,6 +5,69 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Pagination defines the pagination strategy for a "findby" action.
+// Currently, only 'continuationToken' is supported.
+// +kubebuilder:validation:XValidation:rule="self.type == 'continuationToken' ? has(self.continuationToken) : true",message="continuationToken configuration must be provided when type is 'continuationToken'"
+type Pagination struct {
+	// Type specifies the pagination strategy. Currently, only 'continuationToken' is supported.
+	// +kubebuilder:validation:Enum=continuationToken
+	// +required
+	Type string `json:"type"`
+	// Configuration for 'continuationToken' pagination. Required if type is 'continuationToken'.
+	// +optional
+	ContinuationToken *ContinuationTokenConfig `json:"continuationToken,omitempty"`
+
+	// (Future) Configuration for 'pageNumber' pagination.
+	// +optional
+	//PageNumber *PageNumberConfig `json:"pageNumber,omitempty"`
+
+	// (Future) Configuration for 'offset' pagination.
+	// +optional
+	//Offset *OffsetConfig `json:"offset,omitempty"`
+}
+
+// ContinuationTokenConfig holds the specific settings for token-based pagination.
+type ContinuationTokenConfig struct {
+	// Request: defines how to include the pagination token in the API request.
+	// +required
+	Request ContinuationTokenRequest `json:"request"`
+	// Response: defines how to extract the pagination token from the API response.
+	// +required
+	Response ContinuationTokenResponse `json:"response"`
+}
+
+// ContinuationTokenRequest defines how to include the pagination token in the API request.
+type ContinuationTokenRequest struct {
+	// Where the token is located: "query", "header" or "body". Currently, only "query" is supported.
+	// +kubebuilder:validation:Enum=query
+	// +required
+	TokenIn string `json:"tokenIn"`
+	// The path or name of the query parameter, header, or body field.
+	// For query parameters and headers, this is simply the name.
+	// For body fields, this should be a JSON path.
+	// +required
+	TokenPath string `json:"tokenPath"`
+}
+
+// ContinuationTokenResponse defines how to extract the pagination token from the API response.
+type ContinuationTokenResponse struct {
+	// Where the token is located: "header" or "body". Currently, only "header" is supported.
+	// +kubebuilder:validation:Enum=header
+	// +required
+	TokenIn string `json:"tokenIn"`
+	// The path or name of the header or body field.
+	// For headers, this is simply the name.
+	// For body fields, this should be a JSON path.
+	// +required
+	TokenPath string `json:"tokenPath"`
+}
+
+// PageNumberConfig is a placeholder for future page number pagination settings.
+//type PageNumberConfig struct{}
+
+// OffsetConfig is a placeholder for future offset pagination settings.
+//type OffsetConfig struct{}
+
 // RequestFieldMappingItem defines a single mapping from a path parameter, query parameter or body field
 // to a field in the Custom Resource.
 // +kubebuilder:validation:XValidation:rule="(has(self.inPath) ? 1 : 0) + (has(self.inQuery) ? 1 : 0) + (has(self.inBody) ? 1 : 0) == 1",message="Either inPath, inQuery or inBody must be set, but not more than one"
@@ -13,17 +76,14 @@ type RequestFieldMappingItem struct {
 	// Only one of 'inPath', 'inQuery' or 'inBody' can be set.
 	// +optional
 	InPath string `json:"inPath,omitempty"`
-
 	// InQuery defines the name of the query parameter to be mapped.
 	// Only one of 'inPath', 'inQuery' or 'inBody' can be set.
 	// +optional
 	InQuery string `json:"inQuery,omitempty"`
-
 	// InBody defines the name of the body parameter to be mapped.
 	// Only one of 'inPath', 'inQuery' or 'inBody' can be set.
 	// +optional
 	InBody string `json:"inBody,omitempty"`
-
 	// InCustomResource defines the JSONPath to the field within the Custom Resource that holds the value.
 	// For example: 'spec.name' or 'status.metadata.id'.
 	// Note: potentially we could add validation to ensure this is a valid path (e.g., starts with 'spec.' or 'status.').
@@ -33,6 +93,7 @@ type RequestFieldMappingItem struct {
 }
 
 // +kubebuilder:validation:XValidation:rule="self.action == 'findby' || !has(self.identifiersMatchPolicy)",message="identifiersMatchPolicy can only be set for 'findby' actions"
+// +kubebuilder:validation:XValidation:rule="self.action == 'findby' || !has(self.pagination)",message="pagination can only be set for 'findby' actions"
 type VerbsDescription struct {
 	// Name of the action to perform when this api is called [create, update, get, delete, findby]
 	// +kubebuilder:validation:Enum=create;update;get;delete;findby
@@ -57,6 +118,10 @@ type VerbsDescription struct {
 	// +kubebuilder:validation:Enum=AND;OR
 	// +optional
 	IdentifiersMatchPolicy string `json:"identifiersMatchPolicy,omitempty"`
+	// Pagination defines the pagination strategy for 'findby' actions. To be set only for 'findby' actions.
+	// If not set, no pagination will be used.
+	// +optional
+	Pagination *Pagination `json:"pagination,omitempty"`
 }
 
 type Resource struct {
