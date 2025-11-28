@@ -278,6 +278,15 @@ spec:
         method: GET
         path: /widgets
         identifiersMatchPolicy: OR # optional, default is OR (if not set).
+        pagination: # optional
+          type: continuationToken
+          continuationToken:
+            request:
+              tokenIn: query
+              tokenPath: "continuationToken"
+            response:
+              tokenIn: header
+              tokenPath: "X-Ms-Continuationtoken"
       - action: get
         method: GET
         path: /widgets/{id}

@@ -239,6 +239,16 @@ Possible values are 'AND' or 'OR'.
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b><a href="#restdefinitionspecresourceverbsdescriptionindexpagination">pagination</a></b></td>
+        <td>object</td>
+        <td>
+          Pagination defines the pagination strategy for 'findby' actions. To be set only for 'findby' actions.
+If not set, no pagination will be used.<br/>
+          <br/>
+            <i>Validations</i>:<li>self.type == 'continuationToken' ? has(self.continuationToken) : true: continuationToken configuration must be provided when type is 'continuationToken'</li>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#restdefinitionspecresourceverbsdescriptionindexrequestfieldmappingindex">requestFieldMapping</a></b></td>
         <td>[]object</td>
         <td>
@@ -246,6 +256,153 @@ Possible values are 'AND' or 'OR'.
 to fields in the Custom Resource.<br/>
         </td>
         <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### RestDefinition.spec.resource.verbsDescription[index].pagination
+<sup><sup>[↩ Parent](#restdefinitionspecresourceverbsdescriptionindex)</sup></sup>
+
+
+
+Pagination defines the pagination strategy for 'findby' actions. To be set only for 'findby' actions.
+If not set, no pagination will be used.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>type</b></td>
+        <td>enum</td>
+        <td>
+          Type specifies the pagination strategy. Currently, only 'continuationToken' is supported.<br/>
+          <br/>
+            <i>Enum</i>: continuationToken<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#restdefinitionspecresourceverbsdescriptionindexpaginationcontinuationtoken">continuationToken</a></b></td>
+        <td>object</td>
+        <td>
+          Configuration for 'continuationToken' pagination. Required if type is 'continuationToken'.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### RestDefinition.spec.resource.verbsDescription[index].pagination.continuationToken
+<sup><sup>[↩ Parent](#restdefinitionspecresourceverbsdescriptionindexpagination)</sup></sup>
+
+
+
+Configuration for 'continuationToken' pagination. Required if type is 'continuationToken'.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b><a href="#restdefinitionspecresourceverbsdescriptionindexpaginationcontinuationtokenrequest">request</a></b></td>
+        <td>object</td>
+        <td>
+          Request: defines how to include the pagination token in the API request.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#restdefinitionspecresourceverbsdescriptionindexpaginationcontinuationtokenresponse">response</a></b></td>
+        <td>object</td>
+        <td>
+          Response: defines how to extract the pagination token from the API response.<br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### RestDefinition.spec.resource.verbsDescription[index].pagination.continuationToken.request
+<sup><sup>[↩ Parent](#restdefinitionspecresourceverbsdescriptionindexpaginationcontinuationtoken)</sup></sup>
+
+
+
+Request: defines how to include the pagination token in the API request.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>tokenIn</b></td>
+        <td>enum</td>
+        <td>
+          Where the token is located: "query", "header" or "body". Currently, only "query" is supported.<br/>
+          <br/>
+            <i>Enum</i>: query<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>tokenPath</b></td>
+        <td>string</td>
+        <td>
+          The path or name of the query parameter, header, or body field.
+For query parameters and headers, this is simply the name.
+For body fields, this should be a JSON path.<br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### RestDefinition.spec.resource.verbsDescription[index].pagination.continuationToken.response
+<sup><sup>[↩ Parent](#restdefinitionspecresourceverbsdescriptionindexpaginationcontinuationtoken)</sup></sup>
+
+
+
+Response: defines how to extract the pagination token from the API response.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>tokenIn</b></td>
+        <td>enum</td>
+        <td>
+          Where the token is located: "header" or "body". Currently, only "header" is supported.<br/>
+          <br/>
+            <i>Enum</i>: header<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>tokenPath</b></td>
+        <td>string</td>
+        <td>
+          The path or name of the header or body field.
+For headers, this is simply the name.
+For body fields, this should be a JSON path.<br/>
+        </td>
+        <td>true</td>
       </tr></tbody>
 </table>
 
