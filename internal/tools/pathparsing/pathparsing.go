@@ -2,103 +2,159 @@ package pathparsing
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/go-andiamo/splitter"
 )
 
-// ParsePath parses a path string into a slice of segments.
-// It supports:
-// - standard dot notation for nested fields in a path (e.g., "a.b.c")
-// - bracket notation for field names that contain literal dots (e.g., "['a.b']")
-// - mixed notation (e.g., "a.b['c.d'].e")
-// It returns an error if the path is malformed, such as having mismatched brackets
-// or invalid characters outside of valid segments (e.g., "a..b").
+var dotSplitter = splitter.MustCreateSplitter('.', splitter.SquareBrackets, splitter.DoubleQuotes, splitter.SingleQuotes)
+
+// ParsePath parses a path string into segments.
+// Supports: dot notation (a.b.c) and bracket notation with both single and double quotes (a['b.c'], a["b.c"]).
 func ParsePath(path string) ([]string, error) {
-
-	// pathSegmentRegex is used to parse a path string into segments.
-	// It matches either a bracketed segment `['...']` or `["..."]` or a standard dot-separated path for dot notation (e.g., "a.b.c").
-	var pathSegmentRegex = regexp.MustCompile(`(?:\[\s*['"]([^'"]+)['"]\s*\]|([^.\[\]]+))`)
-
 	if path == "" {
 		return []string{""}, nil
 	}
 
-	// Verify that brackets are properly matched
-	if strings.Count(path, "[") != strings.Count(path, "]") {
-		return nil, fmt.Errorf("mismatched brackets in path")
-	}
-
-	// Verify no spaces are present in the string
 	if strings.Contains(path, " ") {
 		return nil, fmt.Errorf("malformed path: contains spaces")
 	}
 
-	matches := pathSegmentRegex.FindAllStringSubmatch(path, -1)
-	if matches == nil {
-		return nil, fmt.Errorf("path could not be parsed")
-	}
-	// Array of matches, each match is an array of strings:
-	// match[0] = full match text
-	// match[1] = first capture group (if any) which is the bracketed value
-	// match[2] = second capture group (if any) which is the plain dot-segment
-
-	// The structure of the results from FindAllStringSubmatch is as follows:
-	// - The full match (e.g., "a", "b", "c")
-	// - The bracketed value (if any) (e.g., "['a.b']", "['option.name']")
-	// - The standard dot-segment (if any) (e.g., "a", "b", "c")
-
-	// Examples of the regex matches:
-	// For path "a.b.c", matches will be:
-	//   [ ["a", "", "a"], ["b", "", "b"], ["c", "", "c"] ]
-	//
-	// For path "['a.b'].c", matches will be:
-	//   [ ["['a.b']", "a.b", ""], [".c", "", "c"] ]
-	//
-	// For path "completionOptions.['option.name'].value", matches will be:
-	//   [ ["completionOptions", "", "completionOptions"], [".['option.name']", "option.name", ""], [".value", "", "value"] ]
-
-	// Additional validation to ensure the entire path is valid.
-	// We create a "skeleton" of the path by replacing valid segments with a placeholder.
-	const placeholder = "§"
-	skeleton := pathSegmentRegex.ReplaceAllString(path, placeholder)
-
-	// Then, we check the skeleton for invalid dot sequences.
-	if strings.Contains(skeleton, "..") {
-		return nil, fmt.Errorf("malformed path: contains consecutive dots")
-	}
-	if strings.HasPrefix(skeleton, ".") {
-		return nil, fmt.Errorf("malformed path: contains leading dot")
-	}
-	if strings.HasSuffix(skeleton, ".") {
-		return nil, fmt.Errorf("malformed path: contains trailing dot")
-	}
-
-	// Finally, we check for any characters that are not part of a valid segment or a dot,
-	// which would indicate a syntax error.
-	remainingChars := strings.ReplaceAll(skeleton, placeholder, "")
-	remainingChars = strings.ReplaceAll(remainingChars, ".", "")
-	if len(remainingChars) > 0 {
-		// check if remainingChars contains the square brackets
-		if strings.Contains(remainingChars, "[") || strings.Contains(remainingChars, "]") {
-			return nil, fmt.Errorf("malformed path: mismatched or invalid brackets")
+	// Check for consecutive dots outside brackets (error).
+	// E.g., a..b is invalid but ['a..b'] is valid.
+	inBracket := false
+	leadingDotsEnded := false
+	for i := 0; i < len(path); i++ {
+		switch path[i] {
+		case '[':
+			inBracket = true
+			leadingDotsEnded = true
+		case ']':
+			inBracket = false
+		case '.':
+			if !inBracket && leadingDotsEnded && i+1 < len(path) && path[i+1] == '.' {
+				return nil, fmt.Errorf("malformed path: consecutive dots")
+			}
+		default:
+			leadingDotsEnded = true
 		}
-		return nil, fmt.Errorf("malformed path contains invalid characters: %s", remainingChars)
 	}
 
-	segments := make([]string, 0, len(matches))
-	for _, match := range matches {
-		// We are not interested in match[0] (the full match), only in match[1] and match[2].
-		// At this point, either match[1] or match[2] will be non-empty so either:
-		// - match[1] contains the bracketed segment (literal dot field)
-		// - match[2] contains the standard dot-segment
-		if match[1] != "" {
-			// This is a bracketed segment and so a literal dot field like "['a.b']" in "['a.b'].c"
-			segments = append(segments, match[1])
+	// Check for trailing dot (end of path)
+	if len(path) > 0 && path[len(path)-1] == '.' {
+		// Make sure it's not inside a bracket
+		inBracket := false
+		for i := 0; i < len(path)-1; i++ {
+			switch path[i] {
+			case '[':
+				inBracket = true
+			case ']':
+				inBracket = false
+			}
+		}
+		if !inBracket {
+			return nil, fmt.Errorf("malformed path: trailing dot")
+		}
+	}
+
+	// Split by dots outside brackets
+	// Example: "a.b['c.d'].e" -> ["a", "b", "['c.d']", "e"]
+	parts, err := dotSplitter.Split(path)
+	if err != nil {
+		return nil, fmt.Errorf("malformed path: %w", err)
+	}
+
+	// Handle leading dots - attach to first segment
+	merged := make([]string, 0, len(parts))
+	leadingDots := 0
+
+	for _, p := range parts {
+		if p == "" {
+			leadingDots++
 		} else {
-			// This is a standard segment, like the 'c' in "['a.b'].c" or the 'c' in "a.b.c"
-			segments = append(segments, match[2])
+			prefix := strings.Repeat(".", leadingDots)
+			merged = append(merged, prefix+p)
+			leadingDots = 0
 		}
 	}
-	//log.Printf("[parsePath] Parsed segments: %v", segments)
+
+	segments := make([]string, 0, len(merged))
+	for _, p := range merged {
+		seg, err := parseSegment(p)
+		if err != nil {
+			return nil, err
+		}
+		segments = append(segments, seg)
+	}
+
 	return segments, nil
+}
+
+// parseSegment parses a single segment, handling bracket notation and validation.
+func parseSegment(s string) (string, error) {
+	if s == "" {
+		return "", fmt.Errorf("malformed path: empty segment")
+	}
+
+	// Strip leading dots for validation, but keep them in result
+	leadingDots := 0
+	for leadingDots < len(s) && s[leadingDots] == '.' {
+		leadingDots++
+	}
+
+	if leadingDots == len(s) {
+		// All dots, no content
+		return "", fmt.Errorf("malformed path: segment has only dots")
+	}
+
+	rest := s[leadingDots:]
+
+	// Plain segment (no brackets)
+	if !strings.HasPrefix(rest, "[") {
+		if strings.ContainsAny(rest, "[]'\"") { // If there is no opening bracket, these chars are invalid
+			return "", fmt.Errorf("malformed path: invalid characters in segment")
+		}
+		return s, nil // return with leading dots
+	}
+
+	// Bracketed segment with leading dots is invalid, e.g., just .['field'] is not allowed
+	if leadingDots > 0 {
+		return "", fmt.Errorf("malformed path: dot before bracket")
+	}
+
+	// Bracketed segment: must be ['...'] or ["..."]
+	if len(rest) < 4 {
+		return "", fmt.Errorf("malformed path: bracket must contain quoted string")
+	}
+	if !strings.HasSuffix(rest, "]") {
+		return "", fmt.Errorf("malformed path: unclosed bracket")
+	}
+
+	// Check for adjacent brackets like ['a']['b'] (without dot in between, invalid)
+	closeIdx := strings.Index(rest, "]")
+	if closeIdx != len(rest)-1 {
+		return "", fmt.Errorf("malformed path: adjacent brackets must be separated by dot")
+	}
+
+	inner := rest[1 : len(rest)-1] // remove [ and ] at the ends
+	if len(inner) < 2 {
+		return "", fmt.Errorf("malformed path: empty bracket content")
+	}
+
+	// At this point, inner should be a quoted string like 'a.b' or "a.b"
+
+	quote := inner[0]
+	if quote != '\'' && quote != '"' {
+		return "", fmt.Errorf("malformed path: bracket must contain quoted string")
+	}
+	if inner[len(inner)-1] != quote {
+		return "", fmt.Errorf("malformed path: mismatched quotes")
+	}
+
+	content := inner[1 : len(inner)-1]
+	if content == "" {
+		return "", fmt.Errorf("malformed path: empty bracket content")
+	}
+
+	return content, nil
 }

@@ -183,6 +183,74 @@ spec:
                           - DELETE
                           - PATCH
                           type: string
+                        pagination:
+                          description: |-
+                            Pagination defines the pagination strategy for 'findby' actions. To be set only for 'findby' actions.
+                            If not set, no pagination will be used.
+                          properties:
+                            continuationToken:
+                              description: Configuration for 'continuationToken' pagination.
+                                Required if type is 'continuationToken'.
+                              properties:
+                                request:
+                                  description: 'Request: defines how to include the
+                                    pagination token in the API request.'
+                                  properties:
+                                    tokenIn:
+                                      description: 'Where the token is located: "query",
+                                        "header" or "body". Currently, only "query"
+                                        is supported.'
+                                      enum:
+                                      - query
+                                      type: string
+                                    tokenPath:
+                                      description: |-
+                                        The path or name of the query parameter, header, or body field.
+                                        For query parameters and headers, this is simply the name.
+                                        For body fields, this should be a JSON path.
+                                      type: string
+                                  required:
+                                  - tokenIn
+                                  - tokenPath
+                                  type: object
+                                response:
+                                  description: 'Response: defines how to extract the
+                                    pagination token from the API response.'
+                                  properties:
+                                    tokenIn:
+                                      description: 'Where the token is located: "header"
+                                        or "body". Currently, only "header" is supported.'
+                                      enum:
+                                      - header
+                                      type: string
+                                    tokenPath:
+                                      description: |-
+                                        The path or name of the header or body field.
+                                        For headers, this is simply the name.
+                                        For body fields, this should be a JSON path.
+                                      type: string
+                                  required:
+                                  - tokenIn
+                                  - tokenPath
+                                  type: object
+                              required:
+                              - request
+                              - response
+                              type: object
+                            type:
+                              description: Type specifies the pagination strategy.
+                                Currently, only 'continuationToken' is supported.
+                              enum:
+                              - continuationToken
+                              type: string
+                          required:
+                          - type
+                          type: object
+                          x-kubernetes-validations:
+                          - message: continuationToken configuration must be provided
+                              when type is 'continuationToken'
+                            rule: 'self.type == ''continuationToken'' ? has(self.continuationToken)
+                              : true'
                         path:
                           description: 'Path: the path to the api - has to be the
                             same path as the one in the OAS file you are referencing'
@@ -236,6 +304,8 @@ spec:
                       - message: identifiersMatchPolicy can only be set for 'findby'
                           actions
                         rule: self.action == 'findby' || !has(self.identifiersMatchPolicy)
+                      - message: pagination can only be set for 'findby' actions
+                        rule: self.action == 'findby' || !has(self.pagination)
                     type: array
                 required:
                 - kind

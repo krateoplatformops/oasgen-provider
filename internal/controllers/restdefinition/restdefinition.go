@@ -42,7 +42,6 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/provider-runtime/pkg/resource"
 
-	//"github.com/krateoplatformops/crdgen/v2"
 	"github.com/krateoplatformops/oasgen-provider/internal/tools/text"
 	"github.com/krateoplatformops/plumbing/crdgen"
 )
