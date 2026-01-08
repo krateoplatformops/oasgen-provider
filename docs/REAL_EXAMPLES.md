@@ -172,7 +172,6 @@ The first line does not need escaping since `completionOptions` is an object and
 The second line with `searchCriteria.creatorId` needs escaping since `searchCriteria` is not an object with field `creatorId`, but rather a single field name including a dot (unusual but possible).
 Note that in `excludedSpecFields`, we list some fields that are actually mapped via `requestFieldMapping`. This is because we want to avoid having these fields in the spec which would clutter it with duplicated information. Instead we want to use the already existing fields in the spec and map them to the appropriate locations in the request.
 Therefore `requestFieldMapping` and `excludedSpecFields` can be used together to achieve the desired mapping while keeping the spec clean from redundant fields.
-Additionaly, `requestFieldMapping` can be leveraged to "create"
 
 ## `identifiersMatchPolicy` with AND
 

@@ -321,7 +321,7 @@ The CRD exposes columns like `READY`, `AGE`, `API VERSION`, `KIND`, and `OAS PAT
 #### Field reference
 
 You can find the complete field reference for the `RestDefinition` CRD here: [RestDefinition CRD Reference](docs/restdefinition-crd-reference.md).
-The table below summarizes the key fields of the `RestDefinition` CRD.
+The table below summarizes the key fields of the `RestDefinition` CRD (not exhaustive).
 
 All paths are relative to `spec.*` unless stated otherwise. The “Immutable” column reflects Kubernetes validation rules; immutable fields require deleting/recreating the RestDefinition CR if you need to change them. 
 The content of this table is derived from the CRD’s OpenAPI schema.
@@ -425,6 +425,11 @@ It can take the following values: `OR` (default) or `AND`:
 - `OR`: The controller considers a resource a match if **at least one** of the identifiers matches.
 - `AND`: The controller considers a resource a match only if **all** of the identifiers match.
 This field can be set only for the `findby` action.
+
+#### `pagination` field
+
+The optional `pagination` field in the RestDefinition manifest, at `verbsDescription[].pagination`, allows configuring how the `rest-dynamic-controller` should handle paginated responses when using the `findby` action.
+Currently, only `continuationToken` pagination type is supported. Please refer to the [RestDefinition CRD Reference](docs/restdefinition-crd-reference.md) for more details on how to configure this field.
 
 #### Why Use `findby`?
 
