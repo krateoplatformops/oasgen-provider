@@ -1,0 +1,118 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: storage-cm
+  namespace: demo-system
+data:
+  openapi.yaml: |
+    openapi: 3.0.1
+    info:
+      title: Storage API
+      description: API for managing storage resources with array defaults
+      version: "1.0"
+    servers:
+      - url: http://storage-service.demo-system.svc.cluster.local:8080/
+    paths:
+      /storage:
+        get:
+          summary: Get storage resource
+          operationId: get-storage
+          parameters:
+            - name: name
+              in: query
+              description: Name of the storage resource
+              required: true
+              schema:
+                type: string
+          responses:
+            "200":
+              description: OK
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Storage'
+        post:
+          summary: Create storage resource
+          operationId: create-storage
+          requestBody:
+            description: Storage resource to create
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/Storage'
+            required: true
+          responses:
+            "201":
+              description: Created
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Storage'
+        delete:
+          summary: Delete storage resource
+          operationId: delete-storage
+          parameters:
+            - name: name
+              in: query
+              description: Name of the storage resource
+              required: true
+              schema:
+                type: string
+          responses:
+            "204":
+              description: No Content
+        patch:
+          summary: Update storage resource
+          operationId: patch-storage
+          requestBody:
+            description: Storage resource to update
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/Storage'
+            required: true
+          responses:
+            "200":
+              description: OK
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Storage'
+      /storages:
+        get:
+          summary: List storage resources
+          operationId: list-storage
+          responses:
+            "200":
+              description: OK
+              content:
+                application/json:
+                  schema:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Storage'
+    components:
+      schemas:
+        Storage:
+          type: object
+          properties:
+            name:
+              type: string
+              description: Name of the storage resource
+            capacity:
+              type: string
+              description: Storage capacity (e.g., 10Gi, 100Gi)
+            accessModes:
+              type: array
+              description: Access modes for the storage
+              default:
+                - ReadWriteOnce
+              items:
+                type: string
+                enum:
+                  - ReadWriteOnce
+                  - ReadOnlyMany
+                  - ReadWriteMany
+            storageClassName:
+              type: string
+              description: Storage class name

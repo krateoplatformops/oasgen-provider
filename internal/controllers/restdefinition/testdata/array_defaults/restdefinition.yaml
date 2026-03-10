@@ -1,0 +1,30 @@
+apiVersion: ogen.krateo.io/v1alpha1
+kind: RestDefinition
+metadata:
+  name: storage
+  namespace: demo-system
+  annotations:
+    krateo.io/connector-verbose: "true"
+spec:
+  oasPath: configmap://demo-system/storage-cm/openapi.yaml
+  resourceGroup: storage.krateo.io
+  resource:
+    identifiers:
+    - name
+    kind: Storage
+    verbsDescription:
+    - action: create
+      method: POST
+      path: /storage
+    - action: delete
+      method: DELETE
+      path: /storage
+    - action: get
+      method: GET
+      path: /storage
+    - action: findby
+      method: GET
+      path: /storages
+    - action: update
+      method: PATCH
+      path: /storage

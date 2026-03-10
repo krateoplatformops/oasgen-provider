@@ -1003,3 +1003,104 @@ func TestPrepareSchemaForCRD(t *testing.T) {
 		}
 	})
 }
+
+func TestArrayDefaultSupport(t *testing.T) {
+	t.Run("should preserve array default values in schema conversion", func(t *testing.T) {
+		// Arrange
+		schema := &Schema{
+			Type:    []string{"array"},
+			Default: []interface{}{"ReadWriteOnce"},
+			Items: &Schema{
+				Type: []string{"string"},
+				Enum: []interface{}{"ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany"},
+			},
+		}
+
+		// Act
+		jsonBytes, err := GenerateJsonSchema(schema, DefaultGeneratorConfig())
+
+		// Assert
+		require.NoError(t, err, "Expected no error generating JSON schema")
+		require.NotNil(t, jsonBytes)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(jsonBytes, &result)
+		require.NoError(t, err, "Expected no error unmarshaling JSON")
+
+		// Check if default exists
+		defaultVal, ok := result["default"]
+		assert.True(t, ok, "Expected 'default' field to be present in the schema")
+
+		// Check if default is an array
+		defaultArray, ok := defaultVal.([]interface{})
+		assert.True(t, ok, "Expected default to be an array, got %T", defaultVal)
+
+		// Check if default array has the expected value
+		require.Len(t, defaultArray, 1, "Expected default array to have exactly 1 element")
+		assert.Equal(t, "ReadWriteOnce", defaultArray[0], "Expected default to be ['ReadWriteOnce']")
+
+		// Print the generated JSON schema
+		t.Logf("Generated JSON Schema:\n%s", string(jsonBytes))
+	})
+
+	t.Run("should preserve empty array default values", func(t *testing.T) {
+		// Arrange
+		schema := &Schema{
+			Type:    []string{"array"},
+			Default: []interface{}{},
+			Items: &Schema{
+				Type: []string{"string"},
+			},
+		}
+
+		// Act
+		jsonBytes, err := GenerateJsonSchema(schema, DefaultGeneratorConfig())
+
+		// Assert
+		require.NoError(t, err)
+		require.NotNil(t, jsonBytes)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(jsonBytes, &result)
+		require.NoError(t, err)
+
+		defaultVal, ok := result["default"]
+		assert.True(t, ok, "Expected 'default' field to be present")
+
+		defaultArray, ok := defaultVal.([]interface{})
+		assert.True(t, ok, "Expected default to be an array")
+		assert.Len(t, defaultArray, 0, "Expected default array to be empty")
+	})
+
+	t.Run("should preserve array default with multiple values", func(t *testing.T) {
+		// Arrange
+		schema := &Schema{
+			Type:    []string{"array"},
+			Default: []interface{}{"ReadWriteOnce", "ReadOnlyMany"},
+			Items: &Schema{
+				Type: []string{"string"},
+				Enum: []interface{}{"ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany"},
+			},
+		}
+
+		// Act
+		jsonBytes, err := GenerateJsonSchema(schema, DefaultGeneratorConfig())
+
+		// Assert
+		require.NoError(t, err)
+		require.NotNil(t, jsonBytes)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(jsonBytes, &result)
+		require.NoError(t, err)
+
+		defaultVal, ok := result["default"]
+		assert.True(t, ok)
+
+		defaultArray, ok := defaultVal.([]interface{})
+		assert.True(t, ok)
+		require.Len(t, defaultArray, 2)
+		assert.Equal(t, "ReadWriteOnce", defaultArray[0])
+		assert.Equal(t, "ReadOnlyMany", defaultArray[1])
+	})
+}

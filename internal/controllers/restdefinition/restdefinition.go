@@ -409,43 +409,49 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		e.log.Debug("Configuration fields defined, generating Configuration CRD")
+		// Only generate Configuration CRD if configuration fields are defined
+		if len(configurationFields) > 0 {
+			e.log.Debug("Configuration fields defined, generating Configuration CRD")
+			e.log.Debug("Configuration fields length", "Length", len(configurationFields))
 
-		cfgGVK := schema.GroupVersionKind{
-			Group:   cr.Spec.ResourceGroup,
-			Version: resourceVersion,
-			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind) + "Configuration",
+			cfgGVK := schema.GroupVersionKind{
+				Group:   cr.Spec.ResourceGroup,
+				Version: resourceVersion,
+				Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind) + "Configuration",
+			}
+
+			e.log.Debug("Generating Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
+
+			e.log.Debug("Configuration Schema", "Schema", string(result.ConfigurationSchema))
+
+			cfgOpts := crdgen.Options{
+				Group:      cfgGVK.Group,
+				Version:    cfgGVK.Version,
+				Kind:       cfgGVK.Kind,
+				Categories: []string{strings.ToLower(cr.Spec.Resource.Kind), "restconfigs", "rc"},
+				SpecSchema: result.ConfigurationSchema,
+				Managed:    false,
+			}
+
+			cfgResource, err := crdgen.Generate(cfgOpts)
+			if err != nil {
+				return fmt.Errorf("generating configuration CRD: %w", err)
+			}
+
+			cfgCRDU, err := crd.Unmarshal(cfgResource)
+			if err != nil {
+				return fmt.Errorf("unmarshalling configuration CRD: %w", err)
+			}
+
+			e.log.Debug("Applying Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
+			err = kube.Apply(ctx, e.kube, cfgCRDU, kube.ApplyOptions{})
+			if err != nil {
+				return fmt.Errorf("installing configuration CRD: %w", err)
+			}
+			e.log.Debug("Applied Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
+		} else {
+			e.log.Debug("No configuration fields defined (No authentication or configurationFields specified), skipping Configuration CRD generation")
 		}
-
-		e.log.Debug("Generating Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
-
-		e.log.Debug("Configuration Schema", "Schema", string(result.ConfigurationSchema))
-
-		cfgOpts := crdgen.Options{
-			Group:      cfgGVK.Group,
-			Version:    cfgGVK.Version,
-			Kind:       cfgGVK.Kind,
-			Categories: []string{strings.ToLower(cr.Spec.Resource.Kind), "restconfigs", "rc"},
-			SpecSchema: result.ConfigurationSchema,
-			Managed:    false,
-		}
-
-		cfgResource, err := crdgen.Generate(cfgOpts)
-		if err != nil {
-			return fmt.Errorf("generating configuration CRD: %w", err)
-		}
-
-		cfgCRDU, err := crd.Unmarshal(cfgResource)
-		if err != nil {
-			return fmt.Errorf("unmarshalling configuration CRD: %w", err)
-		}
-
-		e.log.Debug("Applying Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
-		err = kube.Apply(ctx, e.kube, cfgCRDU, kube.ApplyOptions{})
-		if err != nil {
-			return fmt.Errorf("installing configuration CRD: %w", err)
-		}
-		e.log.Debug("Applied Configuration CRD", "Kind", cfgGVK.Kind, "Group", cfgGVK.Group)
 
 		cr.SetConditions(rtv1.Creating())
 		err = e.kube.Status().Update(ctx, cr)
@@ -483,10 +489,14 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
 	}
-	cfgGVK := getConfigurationGVK(cr)
-	cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
-		Kind:       cfgGVK.Kind,
-		APIVersion: cfgGVK.GroupVersion().String(),
+	// Only set Configuration status if configuration fields are defined
+	if len(cr.Spec.Resource.ConfigurationFields) > 0 {
+		e.log.Debug("Configuration fields defined, setting Configuration status in RestDefinition status")
+		cfgGVK := getConfigurationGVK(cr)
+		cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
+			Kind:       cfgGVK.Kind,
+			APIVersion: cfgGVK.GroupVersion().String(),
+		}
 	}
 	cr.Status.OASPath = cr.Spec.OASPath
 	cr.Status.Digest = dig
@@ -546,10 +556,13 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
 	}
-	cfgGVK := getConfigurationGVK(cr)
-	cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
-		Kind:       cfgGVK.Kind,
-		APIVersion: cfgGVK.GroupVersion().String(),
+	// Only set Configuration status if configuration fields are defined
+	if len(cr.Spec.Resource.ConfigurationFields) > 0 {
+		cfgGVK := getConfigurationGVK(cr)
+		cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
+			Kind:       cfgGVK.Kind,
+			APIVersion: cfgGVK.GroupVersion().String(),
+		}
 	}
 	cr.Status.OASPath = cr.Spec.OASPath
 	cr.Status.Digest = dig
@@ -621,6 +634,10 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 }
 
 func getConfigurationGVR(cr *definitionv1alpha1.RestDefinition) schema.GroupVersionResource {
+	// Return empty GVR if no configuration fields are defined
+	if len(cr.Spec.Resource.ConfigurationFields) == 0 {
+		return schema.GroupVersionResource{}
+	}
 	cfgGVK := getConfigurationGVK(cr)
 	return plurals.ToGroupVersionResource(cfgGVK)
 }
