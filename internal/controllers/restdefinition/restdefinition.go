@@ -167,6 +167,12 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 	}
 
 	configurationGVR := getConfigurationGVR(cr)
+	if configurationGVR != (schema.GroupVersionResource{}) {
+		e.log.Debug("Configuration GVR", "configurationGVR", configurationGVR.String())
+	} else {
+		// empty GVR, means no configuration fields are defined
+		e.log.Debug("No Configuration GVR, skipping configuration CRD lookup")
+	}
 
 	gvr := plurals.ToGroupVersionResource(gvk)
 	e.log.Debug("Observing RestDefinition", "gvr", gvr.String())
@@ -315,6 +321,17 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("getting document model from CR: %w", err)
 		}
 
+		// check if doc has authentication defined, if so log it
+		hasSecuritySchemes := doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+		if hasSecuritySchemes {
+			e.log.Debug("Security schemes found in OAS document", "Count", len(doc.SecuritySchemes()))
+			for _, ss := range doc.SecuritySchemes() {
+				e.log.Debug("Security scheme found in OAS document", "Name", ss.Name, "Type", ss.Type)
+			}
+		} else {
+			e.log.Debug("No security schemes found in OAS document")
+		}
+
 		// Shim needed to convert definitionv1alpha1.VerbsDescription to oas2jsonschema.Verbs
 		// Verbs is a type defined within the oas2jsonschema package
 		// and so it's not tied with the RestDefinition CRD
@@ -409,10 +426,11 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			return fmt.Errorf("installing CRD: %w", err)
 		}
 
-		// Only generate Configuration CRD if configuration fields are defined
-		if len(configurationFields) > 0 {
-			e.log.Debug("Configuration fields defined, generating Configuration CRD")
-			e.log.Debug("Configuration fields length", "Length", len(configurationFields))
+		// Only generate Configuration CRD if configuration fields are defined or if security schemes are defined
+		if len(configurationFields) > 0 || hasSecuritySchemes {
+			e.log.Debug("Configuration fields or security schemes defined, generating Configuration CRD")
+			e.log.Debug("Configuration fields length", "Length: ", len(configurationFields))
+			e.log.Debug("Has security schemes: ", "HasSecuritySchemes", hasSecuritySchemes)
 
 			cfgGVK := schema.GroupVersionKind{
 				Group:   cr.Spec.ResourceGroup,
