@@ -148,6 +148,14 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		return reconciler.ExternalObservation{}, errors.New(errNotRestDefinition)
 	}
 
+	doc, err := e.getDocumentModelFromCR(ctx, cr)
+	if err != nil {
+		return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
+	}
+
+	// check if doc has authentication defined, if so log it
+	hasSecuritySchemes := doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
 		Version: resourceVersion,
@@ -166,7 +174,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, e.Delete(ctx, cr)
 	}
 
-	configurationGVR := getConfigurationGVR(cr)
+	configurationGVR := getConfigurationGVR(cr, hasSecuritySchemes)
 	if configurationGVR != (schema.GroupVersionResource{}) {
 		e.log.Debug("Configuration GVR", "configurationGVR", configurationGVR.String())
 	} else {
@@ -292,6 +300,8 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 
 func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
+	hasSecuritySchemes := false
+
 	if !ok {
 		return errors.New(errNotRestDefinition)
 	}
@@ -322,7 +332,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 
 		// check if doc has authentication defined, if so log it
-		hasSecuritySchemes := doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+		hasSecuritySchemes = doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+		e.log.Debug("Checking for security schemes in OAS document", "HasSecuritySchemes: ", hasSecuritySchemes)
 		if hasSecuritySchemes {
 			e.log.Debug("Security schemes found in OAS document", "Count", len(doc.SecuritySchemes()))
 			for _, ss := range doc.SecuritySchemes() {
@@ -483,7 +494,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return nil
 	}
 
-	configurationGVR := getConfigurationGVR(cr)
+	configurationGVR := getConfigurationGVR(cr, hasSecuritySchemes)
 	opts := deploy.DeployOptions{
 		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
@@ -507,7 +518,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
 	}
-	// Only set Configuration status if configuration fields are defined
+	// Only set Configuration status if configuration fields or security schemes are defined
 	if len(cr.Spec.Resource.ConfigurationFields) > 0 {
 		e.log.Debug("Configuration fields defined, setting Configuration status in RestDefinition status")
 		cfgGVK := getConfigurationGVK(cr)
@@ -536,6 +547,13 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotRestDefinition)
 	}
 
+	doc, err := e.getDocumentModelFromCR(ctx, cr)
+	if err != nil {
+		return fmt.Errorf("getting document model from CR: %w", err)
+	}
+
+	hasSecuritySchemes := doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+
 	if !meta.IsActionAllowed(cr, meta.ActionUpdate) {
 		e.log.Debug("External resource should not be updated by provider, skip updating.")
 		return nil
@@ -550,7 +568,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	}
 	gvr := plurals.ToGroupVersionResource(gvk)
 
-	configurationGVR := getConfigurationGVR(cr)
+	configurationGVR := getConfigurationGVR(cr, hasSecuritySchemes)
 	opts := deploy.DeployOptions{
 		ConfigurationGVR:       configurationGVR,
 		RBACFolderPath:         RDCrbacConfigFolder,
@@ -574,8 +592,9 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
 	}
-	// Only set Configuration status if configuration fields are defined
-	if len(cr.Spec.Resource.ConfigurationFields) > 0 {
+	// Only set Configuration status if configuration fields or security schemes are defined
+	if len(cr.Spec.Resource.ConfigurationFields) > 0 || hasSecuritySchemes {
+		e.log.Debug("Configuration fields or security schemes defined, setting Configuration status in RestDefinition status")
 		cfgGVK := getConfigurationGVK(cr)
 		cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
 			Kind:       cfgGVK.Kind,
@@ -602,6 +621,13 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotRestDefinition)
 	}
 
+	doc, err := e.getDocumentModelFromCR(ctx, cr)
+	if err != nil {
+		return fmt.Errorf("getting document model from CR: %w", err)
+	}
+
+	hasSecuritySchemes := doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+
 	if !meta.IsActionAllowed(cr, meta.ActionDelete) {
 		e.log.Debug("External resource should not be deleted by provider, skip deleting.")
 		return nil
@@ -617,7 +643,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 
 	skipDeploy := meta.FinalizerExists(cr, restresourcesStillExistFinalizer)
 
-	configurationGVR := getConfigurationGVR(cr)
+	configurationGVR := getConfigurationGVR(cr, hasSecuritySchemes)
 	opts := deploy.UndeployOptions{
 		ConfigurationGVR: configurationGVR,
 		SkipCRD:          false,
@@ -634,7 +660,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		ConfigmapTemplatePath:  RDCtemplateConfigmapPath,
 	}
 
-	err := deploy.Undeploy(ctx, e.kube, opts)
+	err = deploy.Undeploy(ctx, e.kube, opts)
 	if err != nil {
 		return fmt.Errorf("uninstalling controller: %w", err)
 	}
@@ -651,9 +677,9 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	return err
 }
 
-func getConfigurationGVR(cr *definitionv1alpha1.RestDefinition) schema.GroupVersionResource {
-	// Return empty GVR if no configuration fields are defined
-	if len(cr.Spec.Resource.ConfigurationFields) == 0 {
+func getConfigurationGVR(cr *definitionv1alpha1.RestDefinition, hasSecuritySchemes bool) schema.GroupVersionResource {
+	// Return empty GVR if no configuration fields or security schemes are defined, as we don't want to create a configuration CRD in this case
+	if len(cr.Spec.Resource.ConfigurationFields) == 0 && !hasSecuritySchemes {
 		return schema.GroupVersionResource{}
 	}
 	cfgGVK := getConfigurationGVK(cr)
