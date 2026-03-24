@@ -176,14 +176,14 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		hasSecuritySchemes = *cr.Status.HasSecuritySchemes
 		e.log.Debug("Using saved HasSecuritySchemes from status", "HasSecuritySchemes", hasSecuritySchemes)
 	} else {
-		hasSecuritySchemes = true
+		hasSecuritySchemes = true // Safe default to true
 		doc, err := e.getDocumentModelFromCR(ctx, cr)
 		if err != nil {
 			e.log.Debug("Failed to get document model from CR, defaulting HasSecuritySchemes to true", "error", err)
 		} else {
 			hasSecuritySchemes = doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
 		}
-		e.log.Debug("HasSecuritySchemes not yet saved in status, resolved from OAS document", "HasSecuritySchemes", hasSecuritySchemes)
+		e.log.Debug("HasSecuritySchemes not yet saved in status, resolved from OAS document (or defaulted to true if failed to get document model from CR)", "HasSecuritySchemes", hasSecuritySchemes)
 	}
 
 	configurationGVR := getConfigurationGVR(cr, hasSecuritySchemes)
