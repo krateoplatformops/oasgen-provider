@@ -736,6 +736,229 @@ func TestLifecycle_ArubaCloudSubnet(t *testing.T) {
 	testenv.Test(t, f)
 }
 
+func TestLifecycle_ArrayDefaults(t *testing.T) {
+	os.Setenv("DEBUG", "1")
+
+	var handler reconciler.ExternalClient
+	mg := definitionv1alpha1.RestDefinition{}
+	f := features.New("Setup").
+		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			kube, err := client.New(cfg.Client().RESTConfig(), client.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			r, err := resources.New(cfg.Client().RESTConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			os.Setenv("RDC_TEMPLATE_DEPLOYMENT_PATH", filepath.Join(testdataPath, "setup/rdc", "deployment.yaml"))
+			os.Setenv("RDC_TEMPLATE_CONFIGMAP_PATH", filepath.Join(testdataPath, "setup/rdc", "configmap.yaml"))
+			os.Setenv("RDC_RBAC_CONFIG_FOLDER", filepath.Join(testdataPath, "setup/rdc", "rbac"))
+
+			scenarioDir := filepath.Join(testdataPath, "array_defaults")
+			err = decoder.DecodeEachFile(ctx, os.DirFS(scenarioDir),
+				"*.yaml",
+				decoder.CreateIgnoreAlreadyExists(r))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = decoder.DecodeFile(os.DirFS(scenarioDir), "restdefinition.yaml", &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			disc := discovery.NewDiscoveryClientForConfigOrDie(cfg.Client().RESTConfig())
+			apis.AddToScheme(r.GetScheme())
+			conn := connector{
+				kube:     kube,
+				log:      &fakelogger{},
+				recorder: record.NewFakeRecorder(100),
+				disc:     disc,
+				parser:   oas2jsonschema.NewLibOASParser(),
+			}
+
+			handler, err = conn.Connect(ctx, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			return ctx
+		}).Assess("Create", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		r, err := resources.New(cfg.Client().RESTConfig())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = handler.Create(ctx, &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		time.Sleep(5 * time.Second)
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		obs, err := handler.Observe(ctx, &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if obs.ResourceExists == false && obs.ResourceUpToDate == true {
+			err = handler.Create(ctx, &mg)
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			t.Fatal("Unexpected state", obs)
+		}
+
+		time.Sleep(50 * time.Second)
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		obs, err = handler.Observe(ctx, &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ctx, err = handleObservation(t, ctx, handler, obs, &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		obs, err = handler.Observe(ctx, &mg)
+
+		if obs.ResourceExists == true && obs.ResourceUpToDate == true {
+			gvr := plurals.ToGroupVersionResource(schema.GroupVersionKind{
+				Group:   mg.Spec.ResourceGroup,
+				Version: resourceVersion,
+				Kind:    mg.Spec.Resource.Kind,
+			})
+
+			// Check if the CRD is generated correctly
+			crd := apiextensionsv1.CustomResourceDefinition{}
+			err := r.Get(ctx, gvr.Resource+"."+gvr.Group, "", &crd)
+			assert.Nil(t, err, "expecting nil error getting generated crd")
+
+			schema := crd.Spec.Versions[0].Schema.OpenAPIV3Schema
+			assert.NotNil(t, schema, "expecting schema to be not nil")
+
+			// Print entire schema for debugging
+			schemaBytes, _ := json.MarshalIndent(schema, "", "  ")
+			t.Logf("CRD Schema: %s", string(schemaBytes))
+
+			specProps := schema.Properties["spec"].Properties
+			_, ok := specProps["name"]
+			assert.True(t, ok, "expecting spec to have 'name' property")
+			_, ok = specProps["capacity"]
+			assert.True(t, ok, "expecting spec to have 'capacity' property")
+			_, ok = specProps["storageClassName"]
+			assert.True(t, ok, "expecting spec to have 'storageClassName' property")
+
+			// Check if accessModes property exists and has array default
+			accessModesSchema, ok := specProps["accessModes"]
+			assert.True(t, ok, "expecting spec to have 'accessModes' property")
+			assert.NotNil(t, accessModesSchema, "expecting accessModes schema to be not nil")
+
+			// Verify it's an array type
+			assert.Equal(t, "array", accessModesSchema.Type, "expecting accessModes to be of type 'array'")
+
+			// Verify the default value exists and is correct
+			assert.NotNil(t, accessModesSchema.Default, "expecting accessModes to have a default value")
+
+			// The default value is stored as JSON in the CRD, need to unmarshal it
+			var defaultValue []interface{}
+			err = json.Unmarshal(accessModesSchema.Default.Raw, &defaultValue)
+			assert.NoError(t, err, "expecting to unmarshal default value")
+			assert.Len(t, defaultValue, 1, "expecting default array to have exactly 1 element")
+			assert.Equal(t, "ReadWriteOnce", defaultValue[0], "expecting default value to be 'ReadWriteOnce'")
+
+			// Verify items schema has enum
+			assert.NotNil(t, accessModesSchema.Items, "expecting accessModes to have items schema")
+
+			// Items can be a schema or an array of schemas, we need to check which
+			if accessModesSchema.Items.Schema != nil {
+				itemSchema := accessModesSchema.Items.Schema
+				assert.Equal(t, "string", itemSchema.Type, "expecting accessModes items to be of type 'string'")
+				assert.NotNil(t, itemSchema.Enum, "expecting accessModes items to have enum")
+				assert.Len(t, itemSchema.Enum, 3, "expecting accessModes enum to have 3 values")
+			}
+
+			t.Logf("Array default test passed successfully!")
+
+			return ctx
+		}
+
+		return ctx
+	}).Assess("Delete", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		r, err := resources.New(cfg.Client().RESTConfig())
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = r.Get(ctx, mg.GetName(), mg.GetNamespace(), &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = handler.Delete(ctx, &mg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gvk := schema.GroupVersionKind{
+			Group:   mg.Spec.ResourceGroup,
+			Version: resourceVersion,
+			Kind:    mg.Spec.Resource.Kind,
+		}
+
+		gvr := plurals.ToGroupVersionResource(gvk)
+
+		depl := appsv1.Deployment{}
+		err = objects.CreateK8sObject(&depl, gvr, types.NamespacedName{
+			Namespace: mg.GetNamespace(),
+			Name:      mg.GetName(),
+		}, filepath.Join(testdataPath, "setup/rdc", "deployment.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = wait.For(
+			conditions.New(r).ResourceDeleted(&depl),
+			wait.WithTimeout(time.Second*30),
+			wait.WithInterval(time.Second*1),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return ctx
+	}).Feature()
+
+	testenv.Test(t, f)
+}
+
 func handleObservation(t *testing.T, ctx context.Context, handler reconciler.ExternalClient, observation reconciler.ExternalObservation, u *definitionv1alpha1.RestDefinition) (context.Context, error) {
 	var err error
 	if observation.ResourceExists == true && observation.ResourceUpToDate == true {

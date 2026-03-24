@@ -77,12 +77,12 @@ func (g *OASSchemaGenerator) Generate() (*GenerationResult, error) {
 	//log.Print(string(specSchema))
 	//log.Print("======= End Spec Schema =======")
 
-	////// TODO: consider to log the generated status schema for debugging purposes (we need the logger setup)
+	// TODO: consider to log the generated status schema for debugging purposes (we need the logger setup)
 	//log.Print("======= Final Status Schema  =======")
 	//log.Print(string(statusSchema))
 	//log.Print("======= End Status Schema =======")
 
-	////// TODO: consider to log the generated configuration schema for debugging purposes (we need the logger setup)
+	// TODO: consider to log the generated configuration schema for debugging purposes (we need the logger setup)
 	//log.Print("Final configuration schema")
 	//if configurationSchema != nil {
 	//	log.Print(string(configurationSchema))

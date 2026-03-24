@@ -375,6 +375,11 @@ spec:
               digest:
                 description: 'Digest: the digest of the managed resources'
                 type: string
+              hasSecuritySchemes:
+                description: |-
+                  HasSecuritySchemes: whether the OAS document defines security schemes.
+                  Cached here so Observe does not need to re-fetch the OAS document on every reconcile.
+                type: boolean
               oasPath:
                 description: 'OASPath: the path to the OAS Specification file.'
                 type: string
