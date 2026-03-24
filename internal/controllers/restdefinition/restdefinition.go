@@ -148,18 +148,10 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		return reconciler.ExternalObservation{}, errors.New(errNotRestDefinition)
 	}
 
-	doc, err := e.getDocumentModelFromCR(ctx, cr)
-	if err != nil {
-		return reconciler.ExternalObservation{}, fmt.Errorf("getting document model from CR: %w", err)
-	}
-
-	// check if doc has authentication defined, if so log it
-	hasSecuritySchemes := doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
-
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
 		Version: resourceVersion,
-		Kind:    cr.Spec.Resource.Kind,
+		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
 	}
 
 	if meta.WasDeleted(cr) {
@@ -174,11 +166,31 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 		}, e.Delete(ctx, cr)
 	}
 
+	// Read hasSecuritySchemes from status (saved by Create/Update) to avoid
+	// re-fetching and parsing the OAS document on every Observe cycle.
+	// If the status field is not yet set (nil), fetch the OAS document once to
+	// determine the correct value. This only happens on the first Observe before
+	// Create has had a chance to populate the status field.
+	var hasSecuritySchemes bool
+	if cr.Status.HasSecuritySchemes != nil {
+		hasSecuritySchemes = *cr.Status.HasSecuritySchemes
+		e.log.Debug("Using saved HasSecuritySchemes from status", "HasSecuritySchemes", hasSecuritySchemes)
+	} else {
+		hasSecuritySchemes = true
+		doc, err := e.getDocumentModelFromCR(ctx, cr)
+		if err != nil {
+			e.log.Debug("Failed to get document model from CR, defaulting HasSecuritySchemes to true", "error", err)
+		} else {
+			hasSecuritySchemes = doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+		}
+		e.log.Debug("HasSecuritySchemes not yet saved in status, resolved from OAS document", "HasSecuritySchemes", hasSecuritySchemes)
+	}
+
 	configurationGVR := getConfigurationGVR(cr, hasSecuritySchemes)
 	if configurationGVR != (schema.GroupVersionResource{}) {
 		e.log.Debug("Configuration GVR", "configurationGVR", configurationGVR.String())
 	} else {
-		// empty GVR, means no configuration fields are defined
+		// empty GVR, means no configuration fields or security schemes, so we can skip looking for the configuration CRD
 		e.log.Debug("No Configuration GVR, skipping configuration CRD lookup")
 	}
 
@@ -300,8 +312,6 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (reconciler
 
 func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	cr, ok := mg.(*definitionv1alpha1.RestDefinition)
-	hasSecuritySchemes := false
-
 	if !ok {
 		return errors.New(errNotRestDefinition)
 	}
@@ -312,6 +322,23 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	e.log.Info("Creating RestDefinition", "Kind:", cr.Spec.Resource.Kind, "Group:", cr.Spec.ResourceGroup)
+
+	doc, err := e.getDocumentModelFromCR(ctx, cr)
+	if err != nil {
+		return fmt.Errorf("getting document model from CR: %w", err)
+	}
+
+	// check if doc has authentication defined, if so log it
+	hasSecuritySchemes := doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+	e.log.Debug("Checking for security schemes in OAS document", "HasSecuritySchemes: ", hasSecuritySchemes)
+	if hasSecuritySchemes {
+		e.log.Debug("Security schemes found in OAS document", "Count", len(doc.SecuritySchemes()))
+		for _, ss := range doc.SecuritySchemes() {
+			e.log.Debug("Security scheme found in OAS document", "Name", ss.Name, "Type", ss.Type)
+		}
+	} else {
+		e.log.Debug("No security schemes found in OAS document")
+	}
 
 	gvk := schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
@@ -326,23 +353,6 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	if !crdOk {
-		doc, err := e.getDocumentModelFromCR(ctx, cr)
-		if err != nil {
-			return fmt.Errorf("getting document model from CR: %w", err)
-		}
-
-		// check if doc has authentication defined, if so log it
-		hasSecuritySchemes = doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
-		e.log.Debug("Checking for security schemes in OAS document", "HasSecuritySchemes: ", hasSecuritySchemes)
-		if hasSecuritySchemes {
-			e.log.Debug("Security schemes found in OAS document", "Count", len(doc.SecuritySchemes()))
-			for _, ss := range doc.SecuritySchemes() {
-				e.log.Debug("Security scheme found in OAS document", "Name", ss.Name, "Type", ss.Type)
-			}
-		} else {
-			e.log.Debug("No security schemes found in OAS document")
-		}
-
 		// Shim needed to convert definitionv1alpha1.VerbsDescription to oas2jsonschema.Verbs
 		// Verbs is a type defined within the oas2jsonschema package
 		// and so it's not tied with the RestDefinition CRD
@@ -483,6 +493,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 
 		cr.SetConditions(rtv1.Creating())
+		cr.Status.HasSecuritySchemes = &hasSecuritySchemes
 		err = e.kube.Status().Update(ctx, cr)
 		if err != nil {
 			return fmt.Errorf("updating status: %w", err)
@@ -519,8 +530,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		APIVersion: gvk.GroupVersion().String(),
 	}
 	// Only set Configuration status if configuration fields or security schemes are defined
-	if len(cr.Spec.Resource.ConfigurationFields) > 0 {
-		e.log.Debug("Configuration fields defined, setting Configuration status in RestDefinition status")
+	if len(cr.Spec.Resource.ConfigurationFields) > 0 || hasSecuritySchemes {
+		e.log.Debug("Configuration fields or security schemes defined, setting Configuration status in RestDefinition status")
 		cfgGVK := getConfigurationGVK(cr)
 		cr.Status.Configuration = definitionv1alpha1.KindApiVersion{
 			Kind:       cfgGVK.Kind,
@@ -529,6 +540,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 	cr.Status.OASPath = cr.Spec.OASPath
 	cr.Status.Digest = dig
+	cr.Status.HasSecuritySchemes = &hasSecuritySchemes
 
 	err = e.kube.Status().Update(ctx, cr)
 	if err != nil {
@@ -603,6 +615,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 	}
 	cr.Status.OASPath = cr.Spec.OASPath
 	cr.Status.Digest = dig
+	cr.Status.HasSecuritySchemes = &hasSecuritySchemes
 
 	err = e.kube.Status().Update(ctx, cr)
 	if err != nil {
@@ -621,12 +634,19 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotRestDefinition)
 	}
 
+	// Set to true by default to avoid issues in case of errors when getting the document model from the CR.
+	// During a helm uninstall of a provider, the ConfigMap containing the OAS document might already be deleted
+	// when the RestDefinition is being deleted, causing an error when trying to get the document model from the CR.
+	hasSecuritySchemes := true
 	doc, err := e.getDocumentModelFromCR(ctx, cr)
 	if err != nil {
-		return fmt.Errorf("getting document model from CR: %w", err)
+		e.log.Debug("Failed to get document model from CR", "error", err)
+		// Probably ConfigMap with OAS document is already deleted during a helm uninstall
 	}
-
-	hasSecuritySchemes := doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+	if doc != nil {
+		hasSecuritySchemes = doc.SecuritySchemes() != nil && len(doc.SecuritySchemes()) > 0
+		e.log.Debug("Checked for security schemes in OAS document", "HasSecuritySchemes", hasSecuritySchemes)
+	}
 
 	if !meta.IsActionAllowed(cr, meta.ActionDelete) {
 		e.log.Debug("External resource should not be deleted by provider, skip deleting.")
@@ -638,7 +658,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	gvr := plurals.ToGroupVersionResource(schema.GroupVersionKind{
 		Group:   cr.Spec.ResourceGroup,
 		Version: resourceVersion,
-		Kind:    cr.Spec.Resource.Kind,
+		Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
 	})
 
 	skipDeploy := meta.FinalizerExists(cr, restresourcesStillExistFinalizer)

@@ -213,6 +213,11 @@ type RestDefinitionStatus struct {
 	// Digest: the digest of the managed resources
 	// +optional
 	Digest string `json:"digest,omitempty"`
+
+	// HasSecuritySchemes: whether the OAS document defines security schemes.
+	// Cached here so Observe does not need to re-fetch the OAS document on every reconcile.
+	// +optional
+	HasSecuritySchemes *bool `json:"hasSecuritySchemes,omitempty"`
 }
 
 // +kubebuilder:object:root=true
