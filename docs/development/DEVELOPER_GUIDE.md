@@ -1,11 +1,8 @@
 # Developer Guide
 
-This guide is for people **working on** the OASGen Provider codebase (not just using it). It explains the
-architecture, the OAS → CRD generation pipeline, the reconciliation model, how the code is organized, and how to
-build, run, test, and extend the provider locally.
+This guide is for people **working on** the OASGen Provider codebase (not just using it). It explains the architecture, the OAS → CRD generation pipeline, the reconciliation model, how the code is organized, and how to build, run, test, and extend the provider locally.
 
-If you are a *user* (writing `RestDefinition`s, not Go code), start with the
-[README](../../README.md) and the [Usage Guide](../USAGE_GUIDE.md) instead.
+If you are a *user* (writing `RestDefinition`s, not Go code), start with the [README](../../README.md) and the [Usage Guide](../USAGE_GUIDE.md) instead.
 
 ## Table of contents
 
@@ -27,17 +24,12 @@ If you are a *user* (writing `RestDefinition`s, not Go code), start with the
 
 ## Mental model: what this provider actually does
 
-OASGen Provider is a **meta-controller**: it does not talk to any external API itself. Given a `RestDefinition`
-custom resource that points at an OpenAPI 3.0/3.1 document, it does two things:
+OASGen Provider is a **meta-controller**: it does not talk to any external API itself. Given a `RestDefinition` custom resource that points at an OpenAPI 3.0/3.1 document, it does two things:
 
-1. **Generates CRDs.** It parses the OAS, builds JSON schemas for the resource's `spec` and `status` (and an
-   optional Configuration CRD for parameters/authentication), and applies the resulting CRD(s) to the cluster.
-2. **Deploys a controller for those CRDs.** It deploys an instance of the generic
-   **rest-dynamic-controller (RDC)** — a separate program — configured to reconcile instances of the new CRD
-   against the REST API described by the OAS, plus all the RBAC/ConfigMap it needs.
+1. **Generates CRDs.** It parses the OAS, builds JSON schemas for the resource's `spec` and `status` (and an optional Configuration CRD for parameters/authentication), and applies the resulting CRD(s) to the cluster.
+2. **Deploys a controller for those CRDs.** It deploys an instance of the generic **rest-dynamic-controller (RDC)** — a separate program — configured to reconcile instances of the new CRD against the REST API described by the OAS, plus all the RBAC/ConfigMap it needs.
 
-> In short: *OASGen is "an operator that writes operators from OpenAPI."* The CRD instances a user later
-> creates (the "RestResources") are reconciled by RDC, **not** by this provider.
+> In short: *OASGen is "an operator that writes operators from OpenAPI."* The CRD instances a user later creates (the "RestResources") are reconciled by RDC, **not** by this provider.
 
 ```
                  ┌────────────────────────────────────────────────────────┐
@@ -92,16 +84,13 @@ scripts/                         # local dev helpers (kind, ko build, reload, te
 hack/boilerplate.go.txt          # license header injected into generated code
 ```
 
-The single most important package to understand is **`internal/tools/oas2jsonschema`**. The single most
-important file is **`internal/controllers/restdefinition/restdefinition.go`**.
+The single most important package to understand is **`internal/tools/oas2jsonschema`**. The single most important file is **`internal/controllers/restdefinition/restdefinition.go`**.
 
 ---
 
 ## The reconciliation lifecycle
 
-The controller is built on `provider-runtime`'s managed-reconciler model. The reconciler calls
-`Observe`, and based on the returned `ExternalObservation` decides whether to call `Create`, `Update`, or
-`Delete`. The "external resource" being managed is, conceptually, *"the generated CRD + the deployed RDC"*.
+The controller is built on `provider-runtime`'s managed-reconciler model. The reconciler calls `Observe`, and based on the returned `ExternalObservation` decides whether to call `Create`, `Update`, or `Delete`. The "external resource" being managed is, conceptually, *"the generated CRD + the deployed RDC"*.
 
 `Observe` (in `restdefinition.go`) walks a chain of existence/readiness checks and returns early at each step:
 
@@ -118,22 +107,15 @@ Observe(restDefinition):
 ```
 
 - **`Create`** has two modes, branching on *whether the generated CRD already exists*:
-  - **CRD missing** → run the OAS → schema pipeline, `crdgen.Generate`, and apply the CRD (and the Configuration
-    CRD if there are configuration fields or security schemes). It then returns; a later reconcile deploys RDC.
-  - **CRD present** → call `deploy.Deploy(...)` to render+apply the RDC Deployment/ConfigMap/RBAC, and store the
-    resulting digest in `status.digest`.
-- **`Update`** re-runs `deploy.Deploy(...)` and refreshes the digest. (It does **not**
-  regenerate the CRD — the CRD's `kind`, group, identifiers, etc. are immutable; see [Conventions](#conventions--gotchas).)
+  - **CRD missing** → run the OAS → schema pipeline, `crdgen.Generate`, and apply the CRD (and the Configuration CRD if there are configuration fields or security schemes). It then returns; a later reconcile deploys RDC.
+  - **CRD present** → call `deploy.Deploy(...)` to render+apply the RDC Deployment/ConfigMap/RBAC, and store the resulting digest in `status.digest`.
+- **`Update`** re-runs `deploy.Deploy(...)` and refreshes the digest. (It does **not** regenerate the CRD — the CRD's `kind`, group, identifiers, etc. are immutable; see [Conventions](#conventions--gotchas).)
 - **`Delete`** undeploys RDC. Two finalizers are involved:
-  - `composition.krateo.io/restresources-still-exist-finalizer` — blocks deletion while instances of the
-    generated CRD still exist (managed in `manageFinalizers`).
+  - `composition.krateo.io/restresources-still-exist-finalizer` — blocks deletion while instances of the generated CRD still exist (managed in `manageFinalizers`).
 
 ### Status caching of `hasSecuritySchemes`
 
-To avoid fetching and parsing the OAS on *every* `Observe`, the controller caches whether the OAS has security
-schemes in `status.hasSecuritySchemes` (a `*bool`). On the first `Observe` (before `Create` has populated it) it
-falls back to fetching the document once, defaulting to `true` on error. See the `hasSecuritySchemes` resolution
-near the top of `Observe`.
+To avoid fetching and parsing the OAS on *every* `Observe`, the controller caches whether the OAS has security schemes in `status.hasSecuritySchemes` (a `*bool`). On the first `Observe` (before `Create` has populated it) it falls back to fetching the document once, defaulting to `true` on error. See the `hasSecuritySchemes` resolution near the top of `Observe`.
 
 ---
 
@@ -160,21 +142,15 @@ OASDocument (library-agnostic interface)
   ▼  crd.Unmarshal + kube.Apply        the CRD (and Configuration CRD) are applied to the cluster
 ```
 
-Internally each builder produces a library-agnostic `Schema` (`types.go`), which is then post-processed by
-`prepareSchemaForCRD` (number/allOf normalization) and serialized to JSON by `schemaToMap`/`GenerateJsonSchema`
-(`helpers.go`) before being handed to `crdgen`.
+Internally each builder produces a library-agnostic `Schema` (`types.go`), which is then post-processed by `prepareSchemaForCRD` (number/allOf normalization) and serialized to JSON by `schemaToMap`/`GenerateJsonSchema` (`helpers.go`) before being handed to `crdgen`.
 
-The mapping from a `RestDefinition` to the generator's inputs happens in `Create`,
-where the CRD-facing `VerbsDescription`/`ConfigurationField` types are
-"shimmed" into the package-local `oas2jsonschema.Verb`/`ConfigurationField` types so that the schema package has
-**no dependency on the CRD API types**.
+The mapping from a `RestDefinition` to the generator's inputs happens in `Create`, where the CRD-facing `VerbsDescription`/`ConfigurationField` types are "shimmed" into the package-local `oas2jsonschema.Verb`/`ConfigurationField` types so that the schema package has **no dependency on the CRD API types**.
 
 ---
 
 ## The `oas2jsonschema` package in depth
 
-This package is deliberately decoupled from the OpenAPI parsing library behind interfaces, which is what makes it
-unit-testable without real OAS parsing.
+This package is deliberately decoupled from the OpenAPI parsing library behind interfaces, which is what makes it unit-testable without real OAS parsing.
 
 | File | Responsibility |
 |---|---|
@@ -194,19 +170,13 @@ unit-testable without real OAS parsing.
 
 ### Key domain types
 
-- **`Schema`** is the library-agnostic JSON-Schema-ish node. Note `Properties` is a **`[]Property` slice, not a
-  map** — this is intentional, to preserve field ordering. Keep that invariant in mind when adding logic that
-  iterates properties (don't introduce map-driven ordering, or generated CRDs become non-deterministic).
-- **`GeneratorConfig`** holds defaults like `AcceptedMIMETypes` (`application/json`), `SuccessCodes`
-  (`{200, 201}`), and recursion limits. `DefaultGeneratorConfig()` is the production config.
-- **`ResourceConfig`** carries the per-RestDefinition inputs: verbs, identifiers, additional status fields,
-  configuration fields, excluded spec fields.
+- **`Schema`** is the library-agnostic JSON-Schema-ish node. Note `Properties` is a **`[]Property` slice, not a map** — this is intentional, to preserve field ordering. Keep that invariant in mind when adding logic that iterates properties (don't introduce map-driven ordering, or generated CRDs become non-deterministic).
+- **`GeneratorConfig`** holds defaults like `AcceptedMIMETypes` (`application/json`), `SuccessCodes` (`{200, 201}`), and recursion limits. `DefaultGeneratorConfig()` is the production config.
+- **`ResourceConfig`** carries the per-RestDefinition inputs: verbs, identifiers, additional status fields, configuration fields, excluded spec fields.
 
 ### Recursion safety
 
-OAS documents can be deeply nested or circular. Schema-walking functions use a `safety.RecursionGuard`
-(depth + node-count + timeout) and a `visited` map for cycle detection. When you add a new recursive traversal,
-follow the existing pattern (`NewRecursionGuard` → `WithContext` → `defer cancel` → `…Rec` with a `visited` map).
+OAS documents can be deeply nested or circular. Schema-walking functions use a `safety.RecursionGuard` (depth + node-count + timeout) and a `visited` map for cycle detection. When you add a new recursive traversal, follow the existing pattern (`NewRecursionGuard` → `WithContext` → `defer cancel` → `…Rec` with a `visited` map).
 
 ---
 
@@ -214,26 +184,15 @@ follow the existing pattern (`NewRecursionGuard` → `WithContext` → `defer ca
 
 When the CRD exists, `Create`/`Update` call `deploy.Deploy(...)` (`internal/tools/deploy/deploy.go`), which:
 
-1. Renders 7 objects from on-disk YAML templates: `ServiceAccount`, `ClusterRole`, `ClusterRoleBinding`,
-   `Role`, `RoleBinding`, `ConfigMap`, `Deployment`.
+1. Renders 7 objects from on-disk YAML templates: `ServiceAccount`, `ClusterRole`, `ClusterRoleBinding`, `Role`, `RoleBinding`, `ConfigMap`, `Deployment`.
 2. Applies them to the cluster.
-3. Computes a cumulative **FNV-64 digest** (`internal/tools/hash`) over the applied objects, stored in
-   `status.digest`.
+3. Computes a cumulative **FNV-64 digest** (`internal/tools/hash`) over the applied objects, stored in `status.digest`.
 
-On every `Observe`, the controller recomputes the digest two ways — `deploy.Deploy(DryRunServer:true)` and
-`deploy.Lookup(...)` — and compares both against `status.digest` to decide whether RDC needs re-applying /
-restarting.
+On every `Observe`, the controller recomputes the digest two ways — `deploy.Deploy(DryRunServer:true)` and `deploy.Lookup(...)` — and compares both against `status.digest` to decide whether RDC needs re-applying / restarting.
 
-> ⚠️ **The templates are not compiled into the image.** They are mounted from ConfigMaps
-> (`manifests/rdc/{cm,depl,rbac}.yaml`) into the provider pod at `/tmp/assets/...`. The paths are overridable
-> via the env vars `RDC_TEMPLATE_DEPLOYMENT_PATH`, `RDC_TEMPLATE_CONFIGMAP_PATH`, and `RDC_RBAC_CONFIG_FOLDER`
-> (the integration tests use these to point at `testdata/setup/rdc/`).
+> ⚠️ **The templates are not compiled into the image.** They are mounted from ConfigMaps (`manifests/rdc/{cm,depl,rbac}.yaml`) into the provider pod at `/tmp/assets/...`. The paths are overridable via the env vars `RDC_TEMPLATE_DEPLOYMENT_PATH`, `RDC_TEMPLATE_CONFIGMAP_PATH`, and `RDC_RBAC_CONFIG_FOLDER` (the integration tests use these to point at `testdata/setup/rdc/`).
 
-> ⚠️ **The digest is order-dependent.** It is accumulated by a sequence of `SumHash` calls
-> (RBAC → ConfigMap → Deployment). If you change what is rendered, applied, or the order of hashing in `Deploy`,
-> you must make the identical change in `Lookup`, or drift detection will flap and cause reconcile/restart loops.
-> Note that `Deploy` and `Lookup` currently re-implement this sequence independently, so the two paths must be
-> kept byte-for-byte in sync by hand.
+> ⚠️ **The digest is order-dependent.** It is accumulated by a sequence of `SumHash` calls (RBAC → ConfigMap → Deployment). If you change what is rendered, applied, or the order of hashing in `Deploy`, you must make the identical change in `Lookup`, or drift detection will flap and cause reconcile/restart loops. Note that `Deploy` and `Lookup` currently re-implement this sequence independently, so the two paths must be kept byte-for-byte in sync by hand.
 
 ---
 
@@ -241,23 +200,15 @@ restarting.
 
 These are two repositories that form one product:
 
-- **oasgen-provider** (this repo) — generates the CRD and deploys RDC. Compile-time dependency on `crdgen` and
-  the parsed OAS.
-- **rest-dynamic-controller (RDC)** — the generic runtime controller that reconciles instances of the generated
-  CRD against the REST API. Deployed *by* this provider, one instance per `RestDefinition`, configured via
-  `REST_CONTROLLER_*` env vars (group/version/resource/namespace).
+- **oasgen-provider** (this repo) — generates the CRD and deploys RDC. Compile-time dependency on `crdgen` and the parsed OAS.
+- **rest-dynamic-controller (RDC)** — the generic runtime controller that reconciles instances of the generated CRD against the REST API. Deployed *by* this provider, one instance per `RestDefinition`, configured via `REST_CONTROLLER_*` env vars (group/version/resource/namespace).
 
 Some behaviors are **shared contracts that must agree on both sides**, so when you change one, check the other:
 
-- **Success codes / response shapes.** OASGen validates schemas against `SuccessCodes = {200, 201}`; RDC accepts
-  only spec-declared 2xx at call time. An API that returns `202` or a `200` with an empty body can fall between
-  the two. If you touch success-code handling, change both repos together.
-- **Response codes as map keys.** Both sides currently key responses by integer code, so OAS `default`/`2XX`
-  range responses are not handled. Same caveat.
-- **Identifiers / status contract.** OASGen decides which response fields become `status`; RDC populates and
-  compares them. Their notion of the status shape must match.
-- **libopenapi fork.** Both repos `replace` `pb33f/libopenapi` with the Krateo fork. Keep the fork version in
-  sync so OAS parsing is identical at generation time and runtime.
+- **Success codes / response shapes.** OASGen validates schemas against `SuccessCodes = {200, 201}`; RDC accepts only spec-declared 2xx at call time. An API that returns `202` or a `200` with an empty body can fall between the two. If you touch success-code handling, change both repos together.
+- **Response codes as map keys.** Both sides currently key responses by integer code, so OAS `default`/`2XX` range responses are not handled. Same caveat.
+- **Identifiers / status contract.** OASGen decides which response fields become `status`; RDC populates and compares them. Their notion of the status shape must match.
+- **libopenapi fork.** Both repos `replace` `pb33f/libopenapi` with the Krateo fork. Keep the fork version in sync so OAS parsing is identical at generation time and runtime.
 
 ---
 
@@ -279,16 +230,13 @@ The `scripts/` helpers wrap the common loop:
 ./scripts/kind-down.sh   # tear the cluster down
 ```
 
-`reload.sh` is the inner loop: it rebuilds the image and re-applies the CRD, the RDC asset ConfigMaps
-(`manifests/rdc/`), and the provider Deployment (`manifests/`). After it runs, apply a sample to exercise it:
+`reload.sh` is the inner loop: it rebuilds the image and re-applies the CRD, the RDC asset ConfigMaps (`manifests/rdc/`), and the provider Deployment (`manifests/`). After it runs, apply a sample to exercise it:
 
 ```sh
 kubectl apply -f samples/<example>/...
 ```
 
-> Note: `manifests/deploy.yaml` is a **dev** manifest (`kind.local/oasgen-provider:latest`,
-> `imagePullPolicy: Never`, namespace `demo-system`). Production install is via the Krateo Helm chart, not these
-> manifests.
+> Note: `manifests/deploy.yaml` is a **dev** manifest (`kind.local/oasgen-provider:latest`, `imagePullPolicy: Never`, namespace `demo-system`). Production install is via the Krateo Helm chart, not these manifests.
 
 ### Running with debug logging
 
@@ -303,8 +251,7 @@ The provider takes flags (also settable via `OASGEN_PROVIDER_*` env vars) — se
 
 ## Code generation
 
-The API types in `apis/restdefinitions/v1alpha1/types.go` are the **source of truth**. The deepcopy code and the
-`RestDefinition` CRD YAML are generated from them via `controller-gen` (driven by `apis/generate.go`):
+The API types in `apis/restdefinitions/v1alpha1/types.go` are the **source of truth**. The deepcopy code and the `RestDefinition` CRD YAML are generated from them via `controller-gen` (driven by `apis/generate.go`):
 
 ```sh
 ./scripts/generate.sh    # runs: go mod tidy && go generate ./...
@@ -312,12 +259,11 @@ The API types in `apis/restdefinitions/v1alpha1/types.go` are the **source of tr
 
 This regenerates `apis/.../zz_generated.deepcopy.go` and rewrites `crds/`. **Never hand-edit those files.**
 
-When you change `types.go` (add a field, a `+kubebuilder` marker, a validation rule), always re-run generation
-and commit the regenerated `crds/` and `zz_generated.deepcopy.go` alongside it.
+When you change `types.go` (add a field, a `+kubebuilder` marker, a validation rule), always re-run generation and commit the regenerated `crds/` and `zz_generated.deepcopy.go` alongside it.
 
 Kubebuilder markers already in use that are worth knowing:
-- `+kubebuilder:validation:XValidation` (CEL) — e.g. immutability rules (`self == oldSelf`) on `kind`,
-  `identifiers`, `resourceGroup`, etc.
+
+- `+kubebuilder:validation:XValidation` (CEL) — e.g. immutability rules (`self == oldSelf`) on `kind`, `identifiers`, `resourceGroup`, etc.
 - `+kubebuilder:validation:Enum`, `+kubebuilder:validation:Pattern`, `+required`/`+optional`.
 
 ---
@@ -330,11 +276,7 @@ Kubebuilder markers already in use that are worth knowing:
 go test -cover -v ./...
 ```
 
-The unit tests live next to the code. The richest suite is `internal/tools/oas2jsonschema/*_test.go`: it uses
-behavioral `t.Run` subtests, table-driven validator cases, interface mocks (`mocks_test.go`), and OAS fixtures
-under `internal/tools/oas2jsonschema/testdata/`. **When you add or change schema-generation logic, add a
-behavioral test with a small OAS fixture** — that is the established pattern and the fastest way to lock in
-behavior.
+The unit tests live next to the code. The richest suite is `internal/tools/oas2jsonschema/*_test.go`: it uses behavioral `t.Run` subtests, table-driven validator cases, interface mocks (`mocks_test.go`), and OAS fixtures under `internal/tools/oas2jsonschema/testdata/`. **When you add or change schema-generation logic, add a behavioral test with a small OAS fixture** — that is the established pattern and the fastest way to lock in behavior.
 
 ### Integration tests
 
@@ -342,14 +284,9 @@ behavior.
 go test -tags=integration -cover -v ./...
 ```
 
-Integration tests (gated by the `integration` build tag) use `sigs.k8s.io/e2e-framework` and provision a **real
-kind cluster** in `TestMain` (create cluster, install the CRD from `crds/`, create namespaces, tear down). They
-drive the actual `connector`/`ExternalClient` and assert on the generated CRD's OpenAPI schema. They point the
-`RDC_TEMPLATE_*` env vars at `testdata/setup/rdc/`.
+Integration tests (gated by the `integration` build tag) use `sigs.k8s.io/e2e-framework` and provision a **real kind cluster** in `TestMain` (create cluster, install the CRD from `crds/`, create namespaces, tear down). They drive the actual `connector`/`ExternalClient` and assert on the generated CRD's OpenAPI schema. They point the `RDC_TEMPLATE_*` env vars at `testdata/setup/rdc/`.
 
-> Requirements: Docker + kind must be available; these tests are slow. If you add lifecycle scenarios, prefer
-> `wait.For(conditions...)` polling over fixed `time.Sleep` (the create path currently uses sleeps — don't copy
-> that pattern).
+> Requirements: Docker + kind must be available; these tests are slow. If you add lifecycle scenarios, prefer `wait.For(conditions...)` polling over fixed `time.Sleep` (the create path currently uses sleeps — don't copy that pattern).
 
 ### Coverage helper
 
@@ -364,53 +301,40 @@ drive the actual `connector`/`ExternalClient` and assert on the generated CRD's 
 A few common tasks and where they touch:
 
 ### Add a field to the RestDefinition API
-1. Edit `apis/restdefinitions/v1alpha1/types.go`; add `+kubebuilder` markers (and immutability `XValidation` if
-   the field must not change after CRD generation).
-2. If the field influences schema generation, thread it through the shim in `Create`
-   into `oas2jsonschema.ResourceConfig`, and consume it in the relevant builder.
+
+1. Edit `apis/restdefinitions/v1alpha1/types.go`; add `+kubebuilder` markers (and immutability `XValidation` if the field must not change after CRD generation).
+2. If the field influences schema generation, thread it through the shim in `Create` into `oas2jsonschema.ResourceConfig`, and consume it in the relevant builder.
 3. `./scripts/generate.sh`; commit the regenerated `crds/` + deepcopy.
 4. Add unit tests (schema builders) and, if it affects lifecycle, an integration scenario.
 
 ### Change how the spec/status/configuration schema is built
+
 - Work in the relevant builder (`spec_builder.go` / `status_builder.go` / `configuration_builder.go`).
-- Remember `Schema.Properties` is an **ordered slice** — preserve ordering; do not introduce map iteration into
-  emitted output (it makes CRDs non-deterministic).
-- Surface problems as **warnings** on `GenerationResult` (and an error code in `errors.go`) rather than dropping
-  them silently — see the silent-failure caveat below.
+- Remember `Schema.Properties` is an **ordered slice** — preserve ordering; do not introduce map iteration into emitted output (it makes CRDs non-deterministic).
+- Surface problems as **warnings** on `GenerationResult` (and an error code in `errors.go`) rather than dropping them silently — see the silent-failure caveat below.
 - Add a `testdata` OAS fixture + behavioral test.
 
 ### Support a new authentication scheme
-- Add a `SecuritySchemeType` constant in `types.go`, handle it in `configuration_builder.go`
-  (`createSchemaForSecurityScheme`), and add a corresponding auth struct if needed
-  (`schema_reflection.go` generates schemas for `BasicAuth`/`BearerAuth` today).
+
+- Add a `SecuritySchemeType` constant in `types.go`, handle it in `configuration_builder.go` (`createSchemaForSecurityScheme`), and add a corresponding auth struct if needed (`schema_reflection.go` generates schemas for `BasicAuth`/`BearerAuth` today).
 - Coordinate with RDC: RDC must know how to inject the new scheme into requests.
 
 ### Change what gets deployed for RDC
+
 - Edit the templates in `manifests/rdc/{depl,cm,rbac}.yaml` (and the matching `testdata/setup/rdc/` fixtures).
-- If you change *which* objects are rendered/applied or the hashing order, update **both** `deploy.Deploy` and
-  `deploy.Lookup` to keep the digest consistent.
+- If you change *which* objects are rendered/applied or the hashing order, update **both** `deploy.Deploy` and `deploy.Lookup` to keep the digest consistent.
 
 ---
 
 ## Conventions & gotchas
 
-- **Generated files are off-limits.** `crds/`, `apis/**/zz_generated.deepcopy.go` are produced by
-  `controller-gen`. Edit `types.go` and regenerate.
-- **Immutability matters.** `kind`, `resourceGroup`, `identifiers`, `additionalStatusFields`,
-  `configurationFields`, `excludedSpecFields` carry `self == oldSelf` CEL rules — the generated CRD's identity
-  can't change after creation. `Update` deliberately does *not* regenerate the CRD.
-- **Ordering is load-bearing.** `Schema.Properties` is a slice precisely so generated schemas are deterministic.
-  Avoid emitting output from Go map iteration.
-- **Prefer warnings over silent drops.** The codebase has a tendency to swallow edge cases behind commented-out
-  logs. New code should append to `GenerationResult.GenerationWarnings`/`ValidationWarnings` (with a code from
-  `errors.go`) so misconfigurations are visible at debug level.
-- **The digest must stay symmetric.** `deploy.Deploy` and `deploy.Lookup` must hash the same objects in the same
-  order; the two paths re-implement the sequence independently, so changing one without the other causes drift
-  detection to flap.
-- **The OAS is untrusted input.** It comes from a user-controlled `oasPath`. Be mindful when touching
-  `filegetter` / template rendering — consider SSRF, response size limits, and cross-namespace reads.
-- **Two repos, one contract.** Behaviors around success codes, response shapes, identifiers, and the libopenapi
-  fork must stay aligned with rest-dynamic-controller.
+- **Generated files are off-limits.** `crds/`, `apis/**/zz_generated.deepcopy.go` are produced by `controller-gen`. Edit `types.go` and regenerate.
+- **Immutability matters.** `kind`, `resourceGroup`, `identifiers`, `additionalStatusFields`, `configurationFields`, `excludedSpecFields` carry `self == oldSelf` CEL rules — the generated CRD's identity can't change after creation. `Update` deliberately does *not* regenerate the CRD.
+- **Ordering is load-bearing.** `Schema.Properties` is a slice precisely so generated schemas are deterministic. Avoid emitting output from Go map iteration.
+- **Prefer warnings over silent drops.** The codebase has a tendency to swallow edge cases behind commented-out logs. New code should append to `GenerationResult.GenerationWarnings`/`ValidationWarnings` (with a code from `errors.go`) so misconfigurations are visible at debug level.
+- **The digest must stay symmetric.** `deploy.Deploy` and `deploy.Lookup` must hash the same objects in the same order; the two paths re-implement the sequence independently, so changing one without the other causes drift detection to flap.
+- **The OAS is untrusted input.** It comes from a user-controlled `oasPath`. Be mindful when touching `filegetter` / template rendering — consider SSRF, response size limits, and cross-namespace reads.
+- **Two repos, one contract.** Behaviors around success codes, response shapes, identifiers, and the libopenapi fork must stay aligned with rest-dynamic-controller.
 
 ---
 
@@ -427,6 +351,4 @@ A few common tasks and where they touch:
 
 ---
 
-*This developer guide describes how the provider is intended to work. For user-facing documentation, see the
-[README](../../README.md), the [Usage Guide](../USAGE_GUIDE.md), and the
-[RestDefinition CRD reference](../restdefinition-crd-reference.md).*
+*This developer guide describes how the provider is intended to work. For user-facing documentation, see the [README](../../README.md), the [Usage Guide](../USAGE_GUIDE.md), and the [RestDefinition CRD reference](../restdefinition-crd-reference.md).*
